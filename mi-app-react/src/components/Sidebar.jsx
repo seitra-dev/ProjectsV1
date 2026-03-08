@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Home, Briefcase, Check, Calendar, PieChart, BarChart2, Star, MessageSquare } from 'lucide-react';
 import { DESIGN_TOKENS } from '/src/styles/tokens';
 import WorkspaceList from './Enviroments/WorkspaceList';
@@ -6,15 +7,16 @@ import CreateWorkspaceModal from './Enviroments/CreateWorkspaceModal';
 import CreateListModal from './Enviroments/CreateListModal';
 
 const sidebarStyle = {
-  background: 'rgba(255, 255, 255, 0.9)',
+  background: 'var(--bg-sidebar)',
   backdropFilter: 'blur(25px)',
   WebkitBackdropFilter: 'blur(25px)',
   display: 'flex',
   flexDirection: 'column',
-  borderRight: '1px solid rgba(0, 0, 0, 0.04)', 
+  borderRight: '1px solid var(--border)',
   boxShadow: '10px 0 40px rgba(0, 0, 0, 0.03)',
   borderTopRightRadius: '24px',
   borderBottomRightRadius: '24px',
+  transition: 'background 0.4s ease, border-color 0.4s ease',
 };
 
 const sidebarLogoStyle = {
@@ -30,7 +32,7 @@ const Divider = () => (
     height: '1px',
     width: '80%',
     margin: '8px auto',
-    background: 'linear-gradient(90deg, transparent 0%, rgba(0, 0, 0, 0.25) 50%, transparent 100%)'
+    background: 'var(--divider)'
   }} />
 );
 
@@ -39,8 +41,8 @@ const sidebarFooterStyle = {
   alignItems: 'center',
   gap: '0.85rem',
   padding: '20px 24px',
-  borderTop: '1px solid rgba(0, 0, 0, 0.04)',
-  background: 'rgba(255, 255, 255, 0.5)',
+  borderTop: '1px solid var(--border)',
+  background: 'var(--bg-surface)',
   borderBottomRightRadius: '24px',
 };
 
@@ -113,10 +115,10 @@ function Sidebar({ isOpen, activeView, onViewChange, projects, onProjectSelect, 
           </div>
           {(!collapsed || isMobile) && (
             <div style={{ animation: 'fadeIn 0.4s ease' }}>
-              <h3 style={{ margin: 0, fontSize: '20px', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.5px' }}>
+              <h3 style={{ margin: 0, fontSize: '20px', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.5px' }}>
                 SEITRA
               </h3>
-              <div style={{ fontSize: '11px', fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-subtle)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                 Enterprise
               </div>
             </div>
@@ -132,7 +134,7 @@ function Sidebar({ isOpen, activeView, onViewChange, projects, onProjectSelect, 
               <div style={{
                 fontSize: '11px',
                 fontWeight: 700,
-                color: '#cbd5e1',
+                color: 'var(--text-subtle)',
                 textTransform: 'uppercase',
                 marginBottom: '12px',
                 paddingLeft: '14px',
@@ -163,7 +165,7 @@ function Sidebar({ isOpen, activeView, onViewChange, projects, onProjectSelect, 
                     background: isActive 
                       ? 'linear-gradient(135deg, rgba(15, 23, 42, 0.06) 0%, rgba(2, 6, 23, 0.1) 100%)' 
                       : 'transparent',
-                    color: isActive ? '#0f172a' : '#64748b',
+                    color: isActive ? 'var(--text-primary)' : 'var(--text-muted)',
                     border: isActive ? '1px solid rgba(15, 23, 42, 0.05)' : '1px solid transparent',
                     borderRadius: '12px',
                     cursor: 'pointer',
@@ -174,13 +176,13 @@ function Sidebar({ isOpen, activeView, onViewChange, projects, onProjectSelect, 
                   onMouseEnter={(e) => {
                     if (!isActive) {
                       e.currentTarget.style.background = 'rgba(0, 0, 0, 0.02)';
-                      e.currentTarget.style.color = '#0f172a';
+                      e.currentTarget.style.color = 'var(--text-primary)';
                     }
                   }}
                   onMouseLeave={(e) => {
                     if (!isActive) {
                       e.currentTarget.style.background = 'transparent';
-                      e.currentTarget.style.color = '#64748b';
+                      e.currentTarget.style.color = 'var(--text-muted)';
                     }
                   }}
                 >
@@ -194,10 +196,10 @@ function Sidebar({ isOpen, activeView, onViewChange, projects, onProjectSelect, 
                       borderRadius: '0 4px 4px 0',
                     }} />
                   )}
-                  <span style={{ 
-                    flexShrink: 0, 
-                    display: 'flex', 
-                    color: isActive ? '#0f172a' : 'inherit',
+                  <span style={{
+                    flexShrink: 0,
+                    display: 'flex',
+                    color: isActive ? 'var(--text-primary)' : 'inherit',
                   }}>{item.icon}</span>
                   {(!collapsed || isMobile) && <span>{item.label}</span>}
                 </button>
@@ -224,8 +226,8 @@ function Sidebar({ isOpen, activeView, onViewChange, projects, onProjectSelect, 
         <div style={{ padding: '12px' }}>
             <div style={{
                 ...sidebarFooterStyle,
-                background: 'rgba(15, 23, 42, 0.03)',
-                border: '1px solid rgba(15, 23, 42, 0.05)',
+                background: 'var(--bg-input)',
+                border: '1px solid var(--border)',
                 borderRadius: '16px',
                 padding: '12px',
                 justifyContent: collapsed && !isMobile ? 'center' : 'flex-start',
@@ -243,15 +245,15 @@ function Sidebar({ isOpen, activeView, onViewChange, projects, onProjectSelect, 
                     fontSize: '14px',
                     flexShrink: 0,
                 }}>
-                    {user.name.charAt(0).toUpperCase()}
+                    {(user?.name || user?.email || 'U').charAt(0).toUpperCase()}
                 </div>
                 {(!collapsed || isMobile) && (
                     <div style={{ overflow: 'hidden' }}>
-                        <div style={{ fontSize: '14px', fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
-                            {user.name}
+                        <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                            {user?.name || user?.email || 'Usuario'}
                         </div>
-                        <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 500 }}>
-                            {user.role === 'admin' ? 'Project Manager' : 'Analista'}
+                        <div style={{ fontSize: '11px', color: 'var(--text-subtle)', fontWeight: 500 }}>
+                            {user?.role === 'admin' ? 'Project Manager' : 'Analista'}
                         </div>
                     </div>
                 )}
@@ -259,20 +261,24 @@ function Sidebar({ isOpen, activeView, onViewChange, projects, onProjectSelect, 
         </div>
       </div>
 
-      <CreateWorkspaceModal 
-        isOpen={showCreateWorkspace}
-        onClose={() => setShowCreateWorkspace(false)}
-      />
-      <CreateListModal 
-        isOpen={showCreateList}
-        onClose={() => setShowCreateList(false)}
-        onSave={(listData) => {
-          console.log('Nueva lista:', listData);
-          setShowCreateList(false);
-          // Aquí luego se guardará en el context
-          onViewChange('list', listData.name);
-        }}
-      />
+      {createPortal(
+        <CreateWorkspaceModal
+          isOpen={showCreateWorkspace}
+          onClose={() => setShowCreateWorkspace(false)}
+        />,
+        document.body
+      )}
+      {createPortal(
+        <CreateListModal
+          isOpen={showCreateList}
+          onClose={() => setShowCreateList(false)}
+          onSave={(listData) => {
+            setShowCreateList(false);
+            onViewChange('list', listData.name);
+          }}
+        />,
+        document.body
+      )}
     </>
   );
 }

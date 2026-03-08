@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   Plus, MoreVertical, ChevronRight, GripVertical, Pencil, Trash2,
   MessageSquare, ListTodo, Folder, FileText, Trello,
@@ -26,10 +27,10 @@ import { CSS } from '@dnd-kit/utilities';
 // ============================================================================
 // SORTABLE WORKSPACE ITEM
 // ============================================================================
-const SortableWorkspaceItem = ({ 
-  workspace, 
-  isActive, 
-  isEditing, 
+const SortableWorkspaceItem = ({
+  workspace,
+  isActive,
+  isEditing,
   isExpanded,
   onToggleExpand,
   onSelect,
@@ -38,7 +39,8 @@ const SortableWorkspaceItem = ({
   onEndEdit,
   onSelectList,
   onRenameList,
-  onDeleteList
+  onDeleteList,
+  onAddToFolder
 }) => {
   const {
     attributes,
@@ -50,6 +52,8 @@ const SortableWorkspaceItem = ({
   } = useSortable({ id: workspace.id });
 
   const [showListMenu, setShowListMenu] = useState(null);
+  const [folderAddingItem, setFolderAddingItem] = useState(false);
+  const [newItemName, setNewItemName] = useState('');
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -113,7 +117,7 @@ const SortableWorkspaceItem = ({
         </div>
 
         {/* EXPAND BUTTON */}
-        {lists.length > 0 && (
+        {(lists.length > 0 || workspace.type === 'folder') && (
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -129,8 +133,8 @@ const SortableWorkspaceItem = ({
               transition: `transform ${DESIGN_TOKENS.transition.normal}`
             }}
           >
-            <ChevronRight 
-              size={14} 
+            <ChevronRight
+              size={14}
               style={{
                 transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
                 transition: `transform ${DESIGN_TOKENS.transition.normal}`
@@ -140,14 +144,22 @@ const SortableWorkspaceItem = ({
         )}
 
         {/* ICON */}
-        <div style={{
-          width: '6px',
-          height: '6px',
-          borderRadius: '50%',
-          background: workspace.settings?.color || DESIGN_TOKENS.primary.base,
-          flexShrink: 0,
-          marginLeft: lists.length > 0 ? 0 : '18px'
-        }} />
+        {workspace.type === 'folder' ? (
+          <Folder
+            size={14}
+            color={DESIGN_TOKENS.neutral[500]}
+            style={{ flexShrink: 0, marginLeft: lists.length > 0 ? 0 : '18px' }}
+          />
+        ) : (
+          <div style={{
+            width: '6px',
+            height: '6px',
+            borderRadius: '50%',
+            background: workspace.settings?.color || DESIGN_TOKENS.primary.base,
+            flexShrink: 0,
+            marginLeft: lists.length > 0 ? 0 : '18px'
+          }} />
+        )}
 
         {/* NAME */}
         {isEditing ? (
@@ -345,6 +357,118 @@ const SortableWorkspaceItem = ({
           ))}
         </div>
       )}
+
+      {/* FOLDER EXPANDED — add item area */}
+      {isExpanded && workspace.type === 'folder' && (
+        <div style={{ paddingLeft: '36px', marginTop: '2px', paddingBottom: '4px' }}>
+          {folderAddingItem ? (
+            <div style={{ padding: '4px 8px 8px' }}>
+              {/* Type selector */}
+              <div style={{ display: 'flex', gap: '4px', marginBottom: '6px', flexWrap: 'wrap' }}>
+                {[
+                  { type: 'list', label: 'Lista', color: '#0095FF' },
+                  { type: 'doc', label: 'Doc', color: '#10b981' },
+                  { type: 'panel', label: 'Panel', color: '#9333EA' },
+                  { type: 'whiteboard', label: 'Pizarra', color: '#f59e0b' },
+                  { type: 'form', label: 'Form', color: '#ef4444' },
+                ].map(({ type, label, color }) => (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => setFolderAddingItem(type)}
+                    style={{
+                      padding: '2px 8px',
+                      borderRadius: '6px',
+                      border: `1px solid ${folderAddingItem === type ? color : DESIGN_TOKENS.border.color.subtle}`,
+                      background: folderAddingItem === type ? `${color}15` : 'transparent',
+                      color: folderAddingItem === type ? color : DESIGN_TOKENS.neutral[600],
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <input
+                type="text"
+                autoFocus
+                placeholder="Nombre..."
+                value={newItemName}
+                onChange={(e) => setNewItemName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && newItemName.trim()) {
+                    onAddToFolder(workspace.id, typeof folderAddingItem === 'string' ? folderAddingItem : 'list', newItemName.trim());
+                    setNewItemName('');
+                    setFolderAddingItem(false);
+                  }
+                  if (e.key === 'Escape') {
+                    setFolderAddingItem(false);
+                    setNewItemName('');
+                  }
+                }}
+                onBlur={() => {
+                  if (newItemName.trim()) {
+                    onAddToFolder(workspace.id, typeof folderAddingItem === 'string' ? folderAddingItem : 'list', newItemName.trim());
+                  }
+                  setFolderAddingItem(false);
+                  setNewItemName('');
+                }}
+                style={{
+                  width: '100%',
+                  padding: '6px 10px',
+                  border: `1px solid ${DESIGN_TOKENS.primary.base}`,
+                  borderRadius: '8px',
+                  fontSize: '13px',
+                  outline: 'none',
+                  fontFamily: 'inherit',
+                  boxSizing: 'border-box',
+                }}
+              />
+              <div style={{ fontSize: '11px', color: DESIGN_TOKENS.neutral[400], marginTop: '4px' }}>
+                Enter para guardar · Esc para cancelar
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setFolderAddingItem('list');
+                setNewItemName('');
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 10px',
+                background: 'none',
+                border: `1px dashed ${DESIGN_TOKENS.border.color.subtle}`,
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontSize: '12px',
+                fontWeight: 500,
+                color: DESIGN_TOKENS.neutral[500],
+                width: '100%',
+                transition: 'all 0.15s',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(0, 102, 255, 0.04)';
+                e.currentTarget.style.borderColor = DESIGN_TOKENS.primary.base;
+                e.currentTarget.style.color = DESIGN_TOKENS.primary.base;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'none';
+                e.currentTarget.style.borderColor = DESIGN_TOKENS.border.color.subtle;
+                e.currentTarget.style.color = DESIGN_TOKENS.neutral[500];
+              }}
+            >
+              <Plus size={12} />
+              Agregar elemento
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 };
@@ -360,6 +484,31 @@ const WorkspaceList = ({ onCreateWorkspace, onSelectWorkspace, onOpenChat, onOpe
   const [contextMenu, setContextMenu] = useState(null);
   const [showAddMenu, setShowAddMenu] = useState(false);
   const addMenuRef = useRef(null);
+  const addButtonRef = useRef(null);
+  const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
+  const dragState = useRef(null);
+
+  const handleMenuDragStart = useCallback((e) => {
+    e.preventDefault();
+    dragState.current = {
+      startX: e.clientX - menuPos.left,
+      startY: e.clientY - menuPos.top,
+    };
+    const onMove = (ev) => {
+      if (!dragState.current) return;
+      setMenuPos({
+        left: ev.clientX - dragState.current.startX,
+        top: ev.clientY - dragState.current.startY,
+      });
+    };
+    const onUp = () => {
+      dragState.current = null;
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }, [menuPos]);
 
   // Sincronizar workspaces del entorno
   useEffect(() => {
@@ -391,7 +540,10 @@ const WorkspaceList = ({ onCreateWorkspace, onSelectWorkspace, onOpenChat, onOpe
   // Cerrar menú al hacer clic fuera
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (addMenuRef.current && !addMenuRef.current.contains(event.target)) {
+      if (
+        addButtonRef.current && !addButtonRef.current.contains(event.target) &&
+        addMenuRef.current && !addMenuRef.current.contains(event.target)
+      ) {
         setShowAddMenu(false);
       }
     };
@@ -436,19 +588,31 @@ const WorkspaceList = ({ onCreateWorkspace, onSelectWorkspace, onOpenChat, onOpe
   };
 
 const handleAddOption = (type) => {
-    setShowAddMenu(false);
-    if (type === 'space') {
-        onCreateWorkspace();
-    } else if (type === 'chat') {
-        onOpenChat && onOpenChat();
-    } else if (type === 'backlog') {
-        onOpenBacklog && onOpenBacklog();
-    } else if (type === 'list') {
-        onCreateList && onCreateList();  
-    } else {
-        console.log(`Crear ${type}`);
-    }
+  setShowAddMenu(false);
+  if (type === 'space') {
+    onCreateWorkspace();
+  } else if (type === 'chat') {
+    onOpenChat && onOpenChat();
+  } else if (type === 'backlog') {
+    onOpenBacklog && onOpenBacklog();
+  } else if (type === 'list') {
+    onCreateList && onCreateList();
+  } else if (type === 'folder') {
+    const newFolder = {
+      id: `folder-${Date.now()}`,
+      name: 'Nueva carpeta',
+      type: 'folder',
+      lists: [],
+      settings: { color: DESIGN_TOKENS.neutral[400] },
+      createdAt: new Date().toISOString(),
     };
+    setWorkspaces(prev => [...prev, newFolder]);
+    setExpandedWorkspaces(prev => ({ ...prev, [newFolder.id]: true }));
+    setTimeout(() => setEditingWorkspace(newFolder.id), 50);
+  } else {
+    console.log(`Crear ${type}: pendiente de implementación`);
+  }
+};
 
   const handleDeleteList = (list) => {
     if (confirm(`¿Eliminar la lista "${list.name}"?`)) {
@@ -468,6 +632,20 @@ const handleAddOption = (type) => {
   const handleSelectList = (list) => {
     console.log('Abrir lista:', list);
     // Aquí se abrirá la ListView con esta lista
+  };
+
+  const addItemToFolder = (folderId, itemType, itemName) => {
+    const newItem = {
+      id: `item-${Date.now()}`,
+      name: itemName,
+      type: itemType,
+      createdAt: new Date().toISOString(),
+    };
+    setWorkspaces(prev => prev.map(ws =>
+      ws.id === folderId
+        ? { ...ws, lists: [...(ws.lists || []), newItem] }
+        : ws
+    ));
   };
 
   // Cerrar menú contextual
@@ -510,9 +688,23 @@ const handleAddOption = (type) => {
         letterSpacing: '0.6px'
       }}>
         Espacios
-        <div ref={addMenuRef} style={{ position: 'relative' }}>
+        <div style={{ position: 'relative' }}>
           <button
-            onClick={() => setShowAddMenu(!showAddMenu)}
+            ref={addButtonRef}
+            onClick={() => {
+              if (!showAddMenu && addButtonRef.current) {
+                const rect = addButtonRef.current.getBoundingClientRect();
+                const menuW = 288;
+                const menuH = 440;
+                const vp = window.innerHeight;
+                // Aparece a la derecha del sidebar, alineado con el botón
+                const left = rect.right + 10;
+                // Ajusta verticalmente para que no se salga del viewport
+                const top = Math.min(rect.top, vp - menuH - 16);
+                setMenuPos({ top: Math.max(16, top), left });
+              }
+              setShowAddMenu(v => !v);
+            }}
             style={{
               background: 'none',
               border: 'none',
@@ -539,32 +731,49 @@ const handleAddOption = (type) => {
             <Plus size={16} />
           </button>
 
-          {/* ADD MENU */}
-          {showAddMenu && (
-            <div style={{
-              position: 'absolute',
-              top: '100%',
-              right: 0,
-              marginTop: '4px',
-              background: 'white',
-              border: `0.5px solid ${DESIGN_TOKENS.border.color.subtle}`,
-              borderRadius: DESIGN_TOKENS.border.radius.md,
-              boxShadow: `0 8px 24px rgba(0, 0, 0, 0.12)`,
-              padding: '6px',
-              minWidth: '260px',
-              zIndex: 1000,
-              animation: 'menuFadeIn 0.15s ease'
-            }}>
-              {/* HEADER */}
-              <div style={{
-                padding: '8px 12px',
-                fontSize: '11px',
-                fontWeight: 600,
-                color: DESIGN_TOKENS.neutral[500],
-                textTransform: 'uppercase',
-                letterSpacing: '0.5px'
+          {/* ADD MENU — portal para salir del stacking context del sidebar */}
+          {showAddMenu && createPortal(
+            <div
+              ref={addMenuRef}
+              style={{
+                position: 'fixed',
+                top: `${menuPos.top}px`,
+                left: `${Math.max(8, menuPos.left)}px`,
+                background: 'white',
+                border: `1px solid var(--border, ${DESIGN_TOKENS.border.color.subtle})`,
+                borderRadius: '16px',
+                boxShadow: '0 16px 48px rgba(0, 0, 0, 0.18)',
+                padding: '8px',
+                minWidth: '280px',
+                zIndex: 9999,
+                animation: 'menuFadeIn 0.18s cubic-bezier(0.4,0,0.2,1)'
               }}>
-                Crea
+              {/* HEADER — drag handle */}
+              <div
+                onMouseDown={handleMenuDragStart}
+                style={{
+                  padding: '8px 12px 10px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  cursor: 'grab',
+                  userSelect: 'none',
+                  borderBottom: `1px solid var(--border, ${DESIGN_TOKENS.border.color.subtle})`,
+                  marginBottom: '6px',
+                }}
+              >
+                <span style={{
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  color: DESIGN_TOKENS.neutral[500],
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px',
+                }}>
+                  Crea
+                </span>
+                <span style={{ fontSize: '13px', color: DESIGN_TOKENS.neutral[300], letterSpacing: '2px', lineHeight: 1 }}>
+                  ⠿
+                </span>
               </div>
 
               {/* LISTA */}
@@ -825,7 +1034,8 @@ const handleAddOption = (type) => {
                   Plantillas
                 </span>
               </button>
-            </div>
+            </div>,
+            document.body
           )}
         </div>
       </div>
@@ -857,6 +1067,7 @@ const handleAddOption = (type) => {
                   onSelectList={handleSelectList}
                   onRenameList={handleRenameList}
                   onDeleteList={handleDeleteList}
+                  onAddToFolder={addItemToFolder}
                 />
               ))}
             </div>

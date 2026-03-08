@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { dbEnvironments, dbUsers } from './lib/database';
 
 import { 
-  Plus, Search, Filter, Calendar, Users, ChevronDown, ChevronRight, 
+  Plus, Search, Filter, Calendar, Users, ChevronDown, ChevronUp, ChevronRight,
   MoreVertical, Edit, Trash2, Check, X, Eye, EyeOff, LogOut, 
   FolderPlus, ListPlus, Grid, List, BarChart2, Save, Download,
   Upload, Settings, Clock, Tag, AlertCircle, CheckCircle2,
@@ -11,7 +11,8 @@ import {
   ChevronLeft, Paperclip, Send, MoreHorizontal, TrendingUp, Target,
   Maximize2, Minimize2, Share2, Link as LinkIcon, ExternalLink, RefreshCw,
   AlertTriangle, Info, CheckCircle, XCircle, Loader, Moon, Sun,
-  Command, HelpCircle, Keyboard, BookOpen, Gift, Sparkles, Zap as ZapIcon
+  Command, HelpCircle, Keyboard, BookOpen, Gift, Sparkles, Zap as ZapIcon,
+  ShieldCheck, Globe, Layout, BarChart, Rocket
 } from 'lucide-react';
 
 import Sidebar from './components/Sidebar';
@@ -20,7 +21,7 @@ import ProjectRoadmap from './components/ProjectRoadmap';
 import EnvironmentSelector from "./components/Enviroments/EnvironmentSelector";
 import CreateEnvironmentModal from "./components/Enviroments/CreateEnvironmentModal";
 import EnvironmentSettings from "./components/Enviroments/EnvironmentSettings";
-import { AppProvider } from './context/AppContext';
+import { AppProvider, useApp } from './context/AppContext';
 import TeamChatView from './components/TeamChatView';
 import ListView from './components/ListView';
 import LandingPage from './components/LandingPage';
@@ -277,10 +278,18 @@ function AppContent() {
     }, 1000); // Duración de la transición
   };
 
-  const handleLogin = (user) => {
-    setCurrentUser(user);
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light');
+  }, [darkMode]);
+
+  const handleLogin = (user, isNew = false) => {
+    setCurrentUser({ ...user, isNew });
     storageSet(STORAGE_KEYS.CURRENT_USER, user);
-    addToast(`¡Bienvenido, ${user.name}!`, 'success');
+    const nombre = (user.name || user.email).split(' ')[0];
+    addToast(
+      isNew ? `¡Bienvenido, ${nombre}! Tu cuenta ha sido creada.` : `¡Bienvenido de vuelta, ${nombre}!`,
+      'success'
+    );
   };
 
   const handleLogout = () => {
@@ -323,47 +332,85 @@ function AppContent() {
     );
   }
 
-  // Pantalla de transición
+// Pantalla de transición optimizada
 if (isTransitioning) {
   return (
     <div style={{
-      minHeight: '100vh',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      background: 'linear-gradient(135deg, #0c2546a6 0%, #3466f08a 100%)',
-      fontFamily: DESIGN_TOKENS.typography.fontFamily,
-      animation: 'fadeIn 0.5s ease'
+      minHeight: '100vh', width: '100vw', display: 'flex', alignItems: 'center', justifyContent: 'center',
+      backgroundColor: '#0a0f1e', fontFamily: 'Inter, system-ui, sans-serif', overflow: 'hidden', position: 'relative'
     }}>
       <style>{`
-        @keyframes spin { to { transform: rotate(360deg); }}
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; }}
-        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); }}
+        @keyframes orbit-sync {
+          0% { transform: rotate(0deg) scale(1); filter: blur(60px); }
+          50% { transform: rotate(180deg) scale(1.2); filter: blur(40px); }
+          100% { transform: rotate(360deg) scale(1); filter: blur(60px); }
+        }
+        @keyframes reveal-brand {
+          0% { opacity: 0; transform: scale(0.9); letter-spacing: 0.2em; }
+          100% { opacity: 1; transform: scale(1); letter-spacing: -0.02em; }
+        }
+        @keyframes progress-bar {
+          0% { width: 0%; }
+          100% { width: 100%; }
+        }
+        .loading-shape {
+          position: absolute; width: 600px; height: 600px;
+          border-radius: 50%; background: radial-gradient(circle, rgba(79, 70, 229, 0.2) 0%, transparent 70%);
+          animation: orbit-sync 8s infinite linear;
+        }
       `}</style>
-      <div style={{ textAlign: 'center', color: 'black' }}>
-        <div style={{
-          width: 60, 
-          height: 60,
-          border: '5px solid rgba(255, 255, 255, 0.99)',
-          borderTopColor: 'white',
-          borderRadius: '50%',
-          margin: '0 auto 1.5rem',
-          animation: 'spin 0.8s linear infinite'
-        }} />
+
+      {/* FONDO AMBIENTAL (Consistente con el Login) */}
+      <div className="loading-shape" style={{ top: '-10%', right: '-5%' }} />
+      <div className="loading-shape" style={{ bottom: '-10%', left: '-5%', animationDelay: '-4s', background: 'radial-gradient(circle, rgba(124, 205, 243, 0.15) 0%, transparent 70%)' }} />
+
+      <div style={{ textAlign: 'center', zIndex: 10, width: '100%', maxWidth: '400px', padding: '0 2rem' }}>
+        
+        {/* LOGO ANIMADO */}
         <div style={{ 
-          fontSize: '1.5rem', 
-          fontWeight: 700,
-          marginBottom: '0.5rem',
-          animation: 'slideUp 0.6s ease 0.2s backwards'
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '15px', 
+          marginBottom: '2.5rem', animation: 'reveal-brand 1.2s cubic-bezier(0.2, 0.8, 0.2, 1)' 
         }}>
-          Preparando tu experiencia...
+          <div style={{ 
+            background: 'white', padding: '12px', borderRadius: '16px',
+            boxShadow: '0 0 30px rgba(79, 70, 229, 0.3)'
+          }}>
+            <Layout size={38} color="#0a0f1e" strokeWidth={2.5} />
+          </div>
+          <h1 style={{ fontSize: '2.2rem', fontWeight: 900, color: 'white', margin: 0 }}>SEITRA</h1>
         </div>
-        <div style={{
-          fontSize: '1rem',
-          opacity: 0.8,
-          animation: 'slideUp 0.6s ease 0.4s backwards'
+
+        {/* MENSAJE DE ESTADO */}
+        <div style={{ marginBottom: '1.5rem' }}>
+          <div style={{ 
+            fontSize: '1rem', color: 'white', fontWeight: 600, 
+            letterSpacing: '0.1em', textTransform: 'uppercase', opacity: 0.9 
+          }}>
+            Sincronizando Entorno
+          </div>
+          <div style={{ fontSize: '0.9rem', color: '#64748b', marginTop: '0.5rem' }}>
+            Configurando tus proyectos y metas...
+          </div>
+        </div>
+
+        {/* BARRA DE PROGRESO MINIMALISTA */}
+        <div style={{ 
+          width: '100%', height: '4px', background: 'rgba(255,255,255,0.05)', 
+          borderRadius: '10px', overflow: 'hidden', position: 'relative' 
         }}>
-          Un momento por favor
+          <div style={{ 
+            height: '100%', background: 'linear-gradient(90deg, #4f46e5, #7ccdf3)',
+            borderRadius: '10px', animation: 'progress-bar 2.5s ease-in-out forwards'
+          }} />
+        </div>
+
+        {/* INDICADOR DE RED (Toque Pro) */}
+        <div style={{ 
+          marginTop: '2rem', display: 'flex', alignItems: 'center', justifyContent: 'center', 
+          gap: '8px', color: '#475569', fontSize: '0.75rem', fontWeight: 600 
+        }}>
+          <div style={{ width: 6, height: 6, borderRadius: '10%', background: '#0c0c0c' }} />
+          CONEXIÓN CIFRADA ESTABLECIDA
         </div>
       </div>
     </div>
@@ -382,28 +429,17 @@ if (isTransitioning) {
 function LoginScreen({ onLogin }) {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const { addToast } = useToast();
-  const [showLanding, setShowLanding] = useState(true);
 
-  const [windowWidth, setWindowWidth] = useState(window.innerWidth);
-  useEffect(() => {
-    const handleResize = () => setWindowWidth(window.innerWidth);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  const isMobile = windowWidth < 768;
-
-  // FUNCIÓN PARA CAMBIAR ENTRE TABS
-  const toggleTab = (loginState) => {
-    setIsLogin(loginState);
+  const switchMode = (toLogin) => {
+    setIsLogin(toLogin);
     setError('');
+    setName('');
+    setEmail('');
     setPassword('');
   };
 
@@ -412,177 +448,317 @@ function LoginScreen({ onLogin }) {
     setError('');
     setIsLoading(true);
     await new Promise(r => setTimeout(r, 800));
-    
+
     const users = storageGet(STORAGE_KEYS.USERS) || [];
-    
+
     if (isLogin) {
-      const user = users.find(u => u.email.toLowerCase() === email.toLowerCase() && u.password === password);
-      if (user) {
-        onLogin(user);
-      } else {
-        setError('Credenciales inválidas');
-        setIsLoading(false);
-      }
-    } else {
-      // SOLUCIÓN AL REGISTRO:
-      if (users.find(u => u.email.toLowerCase() === email.toLowerCase())) {
-        setError('El usuario ya existe');
+      // — INICIO DE SESIÓN —
+      const found = users.find(u => u.email.toLowerCase() === email.trim().toLowerCase());
+      if (!found) {
+        setError('No existe ninguna cuenta con ese correo. ¿Deseas registrarte?');
         setIsLoading(false);
         return;
       }
-
+      onLogin(found, false);
+    } else {
+      // — REGISTRO —
+      if (!name.trim()) {
+        setError('El nombre completo es requerido.');
+        setIsLoading(false);
+        return;
+      }
+      if (users.find(u => u.email.toLowerCase() === email.trim().toLowerCase())) {
+        setError('Ya existe una cuenta con ese correo. Inicia sesión.');
+        setIsLoading(false);
+        return;
+      }
       const newUser = {
         id: Date.now(),
-        name: name || 'Usuario Nuevo',
-        email: email.toLowerCase(),
-        password: password,
-        role: 'user',
-        avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(email)}&background=10b981&color=fff`
+        name: name.trim(),
+        email: email.trim().toLowerCase(),
+        role: users.length === 0 ? 'admin' : 'user',
+        createdAt: new Date().toISOString()
       };
-
       storageSet(STORAGE_KEYS.USERS, [...users, newUser]);
-      addToast('¡Registro exitoso! Ahora puedes ingresar.', 'success');
-      
-      // Cambiar a login automáticamente
-      setIsLogin(true);
-      setPassword('');
-      setIsLoading(false);
+      onLogin(newUser, true);
     }
   };
 
   return (
     <div style={{
-      minHeight: '100vh',
-      width: '100vw',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      position: 'relative',
-      overflow: 'hidden',
-      fontFamily: DESIGN_TOKENS.typography.fontFamily,
-      padding: isMobile ? '1rem' : 0,
-      backgroundImage: `
-        radial-gradient(at 0% 0%, rgb(221, 237, 255) 0px, transparent 50%), 
-        radial-gradient(at 100% 0%, ${DESIGN_TOKENS.primary.light} 0px, transparent 50%), 
-        radial-gradient(at 100% 100%, #fff 0px, transparent 50%), 
-        radial-gradient(at 0% 100%, rgb(240, 255, 250) 0px, transparent 50%)
-      `,
+      minHeight: '100vh', width: '100vw', display: 'flex', alignItems: 'center', justifyContent: 'center',
+      backgroundColor: '#0a0f1e', fontFamily: 'Inter, system-ui, sans-serif', overflow: 'hidden', position: 'relative',
+      padding: '2rem'
     }}>
+      {/* --- FONDO CINEMÁTICO --- */}
+      <div style={{
+        position: 'absolute', inset: 0,
+        backgroundImage: 'url(https://images.unsplash.com/photo-1497215728101-856f4ea42174?q=80&w=2070&auto=format&fit=crop)',
+        backgroundSize: 'cover', backgroundPosition: 'center', zIndex: 0, opacity: 0.6
+      }}>
+        <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at 30% 50%, rgba(15, 23, 42, 0.4) 0%, rgba(10, 15, 30, 0.95) 100%)' }} />
+      </div>
+
+      {/* --- FIGURAS ANIMADAS INTERACTIVAS --- */}
+      <div style={{ position: 'absolute', inset: 0, zIndex: 1, pointerEvents: 'none' }}>
+        <div className="shape-1" />
+        <div className="shape-2" />
+      </div>
+
       <style>{`
-        @keyframes float { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-10px); } }
-        @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-        .login-input:focus { border-color: ${DESIGN_TOKENS.primary.base} !important; box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.1) !important; }
-        .social-btn:hover { background: #f8fafc !important; transform: translateY(-1px); border-color: #cbd5e1 !important; }
-        .submit-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: ${DESIGN_TOKENS.shadows.md} !important; }
+        @keyframes float-complex { 
+          0%, 100% { transform: translate(0, 0) rotate(0deg); } 
+          33% { transform: translate(30px, -50px) rotate(5deg); }
+          66% { transform: translate(-20px, 20px) rotate(-5deg); }
+        }
+        .shape-1 { 
+          position: absolute; top: 15%; right: 25%; width: 350px; height: 350px; 
+          background: linear-gradient(135deg, rgba(79, 70, 229, 0.4) 0%, transparent 80%);
+          border-radius: 30% 70% 70% 30% / 30% 30% 70% 70%; filter: blur(60px); animation: float-complex 20s infinite linear;
+        }
+        .shape-2 { 
+          position: absolute; bottom: 10%; left: 20%; width: 450px; height: 450px; 
+          background: linear-gradient(135deg, rgba(124, 205, 243, 0.3) 0%, transparent 80%);
+          border-radius: 50%; filter: blur(80px); animation: float-complex 25s infinite linear reverse;
+        }
+        .main-container {
+          display: flex; width: 100%; max-width: 1280px; min-height: 750px;
+          background: rgba(255, 255, 255, 0.02); backdrop-filter: blur(10px);
+          border-radius: 40px; border: 1px solid rgba(255, 255, 255, 0.1);
+          overflow: hidden; z-index: 2; box-shadow: 0 50px 100px -20px rgba(0,0,0,0.5);
+        }
+        .input-pro { 
+          width: 100%; padding: 1.1rem 1.4rem; border-radius: 16px; border: 1px solid #e2e8f0; 
+          background: #f8fafc; font-size: 1rem; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+          box-sizing: border-box;
+        }
+        .input-pro:focus { 
+          border-color: #0f172a; background: white; 
+          box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); outline: none;
+        }
+        @media (max-width: 1024px) { .branding-section { display: none !important; } }
       `}</style>
 
-      <div style={{
-        display: 'flex',
-        flexDirection: isMobile ? 'column' : 'row',
-        width: isMobile ? '100%' : '90vw',
-        maxWidth: isMobile ? '450px' : '1000px', 
-        minHeight: isMobile ? 'auto' : '620px',
-        borderRadius: '28px',
-        overflow: 'hidden',
-        background: 'rgba(255, 255, 255, 0.7)',
-        backdropFilter: 'blur(15px)',
-        WebkitBackdropFilter: 'blur(15px)',
-        boxShadow: '0 20px 40px rgba(0,0,0,0.08)',
-        border: '1px solid rgba(255, 255, 255, 0.5)'
-      }}>
+      {/* --- CONTENEDOR MAESTRO --- */}
+      <div className="main-container">
         
-        <div style={{
-          flex: isMobile ? 'none' : 1,
-          background: `linear-gradient(135deg, ${DESIGN_TOKENS.neutral[900]} 0%, ${DESIGN_TOKENS.primary.base} 100%)`,
-          display: isMobile ? 'none' : 'flex',
-          flexDirection: 'column',
-          justifyContent: 'center',
-          alignItems: 'center',
-          padding: '4rem',
-          position: 'relative',
-          animation: 'fadeInUp 0.6s ease'
+        {/* SECCIÓN BRANDING (Izquierda) */}
+        <div className="branding-section" style={{
+          flex: '1.2', padding: '5rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+          borderRight: '1px solid rgba(255,255,255,0.05)', position: 'relative'
         }}>
-          <div style={{ position: 'absolute', inset: 0, opacity: 0.1, backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)', backgroundSize: '24px 24px' }} />
-          <div style={{ position: 'relative', zIndex: 1, textAlign: 'center' }}>
-            <div style={{ animation: 'float 5s ease-in-out infinite', marginBottom: '2.5rem', display: 'flex', justifyContent: 'center' }}>
-               <BarChart2 size={70} color="#7ccdf3" strokeWidth={2} />
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '4rem' }}>
+              <div style={{ background: '#fff', padding: '10px', borderRadius: '14px' }}>
+                <Layout size={32} color="#0a0f1e" strokeWidth={2.5} />
+              </div>
+              <h1 style={{ fontSize: '1.8rem', fontWeight: 900, color: 'white', margin: 0, letterSpacing: '-0.02em' }}>SEITRA</h1>
             </div>
-            <h1 style={{ fontSize: '4rem', fontWeight: 900, color: 'white', margin: '0', letterSpacing: '-0.02em', lineHeight: 1 }}>
-              SEITRA
-            </h1>
-            <p style={{ fontSize: '1.25rem', color: 'rgba(255,255,255,0.8)', marginTop: '1.25rem', fontWeight: 500, letterSpacing: '0.1em' }}>MANAGEMENT SYSTEM</p>
+
+            <h2 style={{ fontSize: '2.2rem', fontWeight: 600, color: 'white', lineHeight: 1, margin: 0, letterSpacing: '-0.04em' }}>
+               ¡Bienvenido al Centro de Mando!
+            </h2>
+            <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '1.2rem', marginTop: '2rem', maxWidth: '500px', lineHeight: 1.6 }}>
+              Menos caos, más resultados. Accede para sincronizar tus objetivos y llevar tus proyectos al siguiente nivel.
+            </p>
+          </div>
+
+          <div style={{ display: 'flex', gap: '2rem' }}>
+             <div style={{ color: 'white' }}>
+               <h4 style={{ margin: 0, fontSize: '1.5rem' }}>+500</h4>
+               <p style={{ margin: 0, opacity: 0.5, fontSize: '0.8rem' }}>Proyectos Activos</p>
+             </div>
+             <div style={{ color: 'white' }}>
+               <h4 style={{ margin: 0, fontSize: '1.5rem' }}>99.9%</h4>
+               <p style={{ margin: 0, opacity: 0.5, fontSize: '0.8rem' }}>Productividad</p>
+             </div>
           </div>
         </div>
 
+        {/* SECCIÓN LOGIN (Derecha - Más ancha y limpia) */}
         <div style={{
-          flex: 1.1,
-          padding: isMobile ? '2rem 1.5rem' : '3rem 3.5rem',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center'
+          flex: '1', backgroundColor: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: '4rem'
         }}>
-          <div style={{ width: '100%', maxWidth: '420px', animation: 'fadeInUp 0.8s ease' }}>
-            <div style={{ display: 'flex', gap: '2rem', marginBottom: '2.5rem', borderBottom: `2px solid ${DESIGN_TOKENS.neutral[200]}` }}>
-              {['Ingresar', 'Registrarse'].map((label, idx) => (
-                <button key={label} onClick={() => toggleTab(idx === 0)}
+          <div style={{ width: '100%', maxWidth: '460px' }}>
+
+            {/* ── BIENVENIDA CON GATITO ── */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '2rem' }}>
+              <svg width="52" height="62" viewBox="0 0 52 62" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
+                {/* orejas */}
+                <polygon points="6,18 2,4 14,12" fill="#1e1e1e"/>
+                <polygon points="30,18 38,4 26,12" fill="#1e1e1e"/>
+                <polygon points="7,17 4,8 13,13" fill="#f87171"/>
+                <polygon points="29,17 35,8 27,13" fill="#f87171"/>
+                {/* cabeza */}
+                <ellipse cx="18" cy="26" rx="16" ry="14" fill="#1e1e1e"/>
+                {/* ojos */}
+                <ellipse cx="12" cy="24" rx="3" ry="3.5" fill="white"/>
+                <ellipse cx="24" cy="24" rx="3" ry="3.5" fill="white"/>
+                <circle cx="12.5" cy="24.5" r="1.8" fill="#111"/>
+                <circle cx="24.5" cy="24.5" r="1.8" fill="#111"/>
+                <circle cx="13.2" cy="23.8" r="0.6" fill="white"/>
+                <circle cx="25.2" cy="23.8" r="0.6" fill="white"/>
+                {/* nariz */}
+                <polygon points="18,29 16.5,27.5 19.5,27.5" fill="#f87171"/>
+                {/* boca */}
+                <path d="M16.5 29.5 Q18 31.5 19.5 29.5" stroke="#f87171" strokeWidth="0.8" fill="none" strokeLinecap="round"/>
+                {/* bigotes */}
+                <line x1="2" y1="27" x2="11" y2="28.5" stroke="#555" strokeWidth="0.8" strokeLinecap="round"/>
+                <line x1="2" y1="30" x2="11" y2="29.5" stroke="#555" strokeWidth="0.8" strokeLinecap="round"/>
+                <line x1="34" y1="27" x2="25" y2="28.5" stroke="#555" strokeWidth="0.8" strokeLinecap="round"/>
+                <line x1="34" y1="30" x2="25" y2="29.5" stroke="#555" strokeWidth="0.8" strokeLinecap="round"/>
+                {/* cuerpo */}
+                <ellipse cx="18" cy="49" rx="13" ry="10" fill="#1e1e1e"/>
+                {/* brazo izquierdo (descansando) */}
+                <ellipse cx="6" cy="46" rx="4" ry="3" fill="#1e1e1e" transform="rotate(20 6 46)"/>
+                {/* brazo derecho levantado */}
+                <path d="M28 38 Q34 28 40 22" stroke="#1e1e1e" strokeWidth="5" fill="none" strokeLinecap="round"/>
+                {/* manita levantada */}
+                <circle cx="41" cy="20" r="4.5" fill="#1e1e1e"/>
+                <circle cx="38" cy="16" r="2.2" fill="#1e1e1e"/>
+                <circle cx="41" cy="15" r="2.2" fill="#1e1e1e"/>
+                <circle cx="44" cy="16" r="2.2" fill="#1e1e1e"/>
+                {/* patitas */}
+                <ellipse cx="11" cy="58" rx="5" ry="3" fill="#1e1e1e"/>
+                <ellipse cx="24" cy="58" rx="5" ry="3" fill="#1e1e1e"/>
+                {/* cola */}
+                <path d="M31 54 Q44 50 42 39" stroke="#1e1e1e" strokeWidth="4" fill="none" strokeLinecap="round"/>
+              </svg>
+              <div>
+                <h2 style={{ margin: 0, fontSize: '1.6rem', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.5px', lineHeight: 1.1 }}>
+                  {isLogin ? 'Bienvenido de vuelta' : 'Bienvenido'}
+                </h2>
+                <p style={{ margin: '4px 0 0', fontSize: '0.875rem', color: '#94a3b8', fontWeight: 500 }}>
+                  {isLogin ? 'Nos alegra verte de nuevo por aquí.' : 'Crea tu cuenta y empieza hoy.'}
+                </p>
+              </div>
+            </div>
+            {/* ── TAB SWITCHER ── */}
+            <div style={{
+              display: 'flex', background: '#f1f5f9', borderRadius: '18px',
+              padding: '5px', marginBottom: '2.5rem',
+              boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.06)'
+            }}>
+              {[
+                { label: 'Iniciar sesión', mode: true },
+                { label: 'Registrarse', mode: false }
+              ].map(({ label, mode }) => (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={() => switchMode(mode)}
                   style={{
-                    background: 'none', border: 'none', paddingBottom: '0.75rem', fontSize: '0.95rem', fontWeight: 700, cursor: 'pointer',
-                    color: (idx === 0 ? isLogin : !isLogin) ? '#1e293b' : DESIGN_TOKENS.neutral[400],
-                    borderBottom: `2px solid ${(idx === 0 ? isLogin : !isLogin) ? DESIGN_TOKENS.primary.base : 'transparent'}`,
-                    transition: 'all 0.3s', marginBottom: '-2px'
+                    flex: 1, padding: '0.8rem 1rem', borderRadius: '14px', border: 'none',
+                    background: isLogin === mode ? 'white' : 'transparent',
+                    color: isLogin === mode ? '#0f172a' : '#94a3b8',
+                    fontWeight: isLogin === mode ? 700 : 500,
+                    fontSize: '0.95rem', cursor: 'pointer',
+                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                    boxShadow: isLogin === mode ? '0 2px 12px rgba(15,23,42,0.1)' : 'none',
+                    letterSpacing: isLogin === mode ? '-0.2px' : '0'
                   }}
-                >{label}</button>
+                >
+                  {label}
+                </button>
               ))}
             </div>
 
-            <h2 style={{ fontSize: '1.75rem', fontWeight: 800, color: '#0f172a', marginBottom: '0.5rem' }}>{isLogin ? 'Bienvenido' : 'Crea tu cuenta'}</h2>
-            <p style={{ color: DESIGN_TOKENS.neutral[600], marginBottom: '2.25rem', fontSize: '0.95rem' }}>
-              {isLogin ? 'Ingresa tus credenciales para continuar.' : 'Únete a SEITRA hoy mismo.'}
-            </p>
+            {/* ── FORMULARIO ── */}
+            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
 
-            {error && <div style={{ color: DESIGN_TOKENS.danger.dark, fontSize: '0.8rem', marginBottom: '1rem' }}>{error}</div>}
-
-            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
               {!isLogin && (
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: DESIGN_TOKENS.neutral[700], marginBottom: '0.5rem' }}>Nombre</label>
-                  <input type="text" required value={name} onChange={(e) => setName(e.target.value)} className="login-input" style={{ width: '100%', padding: '0.8rem 1rem', borderRadius: '12px', border: '1px solid #e2e8f0', background: 'white', outline: 'none', boxSizing: 'border-box' }} placeholder="Tu nombre" />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  <label style={{ color: '#475569', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Nombre completo</label>
+                  <input type="text" required={!isLogin} value={name} onChange={(e) => setName(e.target.value)} className="input-pro" placeholder="Ej. María González" />
                 </div>
               )}
-              <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: DESIGN_TOKENS.neutral[700], marginBottom: '0.5rem' }}>Email</label>
-                <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="login-input" style={{ width: '100%', padding: '0.8rem 1rem', borderRadius: '12px', border: '1px solid #e2e8f0', background: 'white', outline: 'none', boxSizing: 'border-box' }} placeholder="leonela.alvarez@corbeta.com.co" />
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <label style={{ color: '#475569', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Correo corporativo</label>
+                <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="input-pro" placeholder="admin@seitra.com" />
               </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: DESIGN_TOKENS.neutral[700], marginBottom: '0.5rem' }}>Contraseña</label>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <label style={{ color: '#475569', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Contraseña</label>
                 <div style={{ position: 'relative' }}>
-                  <input type={showPassword ? 'text' : 'password'} required value={password} onChange={(e) => setPassword(e.target.value)} className="login-input" style={{ width: '100%', padding: '0.8rem 1rem', borderRadius: '12px', border: '1px solid #e2e8f0', background: 'white', outline: 'none', boxSizing: 'border-box' }} placeholder="••••••••" />
-                  <button type="button" onClick={() => setShowPassword(!showPassword)} style={{ position: 'absolute', right: '1rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: DESIGN_TOKENS.neutral[400] }}>{showPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button>
+                  <input type={showPassword ? 'text' : 'password'} required value={password} onChange={(e) => setPassword(e.target.value)} className="input-pro" style={{ paddingRight: '4rem' }} placeholder="••••••••" />
+                  <button type="button" onClick={() => setShowPassword(!showPassword)} style={{ position: 'absolute', right: '1.2rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>
+                    {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                  </button>
                 </div>
               </div>
 
-              {isLogin && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', color: DESIGN_TOKENS.neutral[600], cursor: 'pointer' }}><input type="checkbox" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} style={{ accentColor: DESIGN_TOKENS.primary.base }} /> Recuérdame</label>
-                  <button type="button" style={{ background: 'none', border: 'none', color: DESIGN_TOKENS.primary.base, fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer' }}>¿Olvidaste tu contraseña?</button>
+              {error && (
+                <div style={{ padding: '0.8rem 1rem', borderRadius: '12px', background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626', fontSize: '0.875rem', fontWeight: 500 }}>
+                  {error}
                 </div>
               )}
 
-              <button type="submit" disabled={isLoading} className="submit-btn" style={{ width: '100%', padding: '1rem', background: '#0f172a', color: 'white', border: 'none', borderRadius: '12px', fontSize: '1rem', fontWeight: 700, cursor: isLoading ? 'not-allowed' : 'pointer', transition: 'all 0.3s', marginTop: '0.5rem' }}>
-                {isLoading ? 'Cargando...' : (isLogin ? 'Ingresar' : 'Registrar')}
+              <button disabled={isLoading} style={{
+                width: '100%', padding: '1.05rem', border: 'none', borderRadius: '16px',
+                background: isLoading ? '#94a3b8' : 'linear-gradient(135deg, #15066c 0%, #0455c7 100%)',
+                color: 'white', fontSize: '1rem', fontWeight: 700,
+                cursor: isLoading ? 'not-allowed' : 'pointer', transition: 'all 0.3s ease',
+                boxShadow: isLoading ? 'none' : '0 8px 24px rgba(15,23,42,0.25)', marginTop: '0.2rem'
+              }}>
+                {isLoading ? 'Verificando...' : isLogin ? 'Iniciar sesión' : 'Crear mi cuenta'}
               </button>
             </form>
 
-            <div style={{ display: 'flex', alignItems: 'center', margin: '2rem 0', gap: '1rem' }}>
-              <div style={{ flex: 1, height: '1px', background: DESIGN_TOKENS.neutral[200] }} />
-              <span style={{ fontSize: '0.75rem', color: DESIGN_TOKENS.neutral[400], fontWeight: 600, textTransform: 'uppercase' }}>O continúa con</span>
-              <div style={{ flex: 1, height: '1px', background: DESIGN_TOKENS.neutral[200] }} />
+            {/* ── DIVISOR ── */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', margin: '1.75rem 0' }}>
+              <div style={{ flex: 1, height: '1px', background: '#e2e8f0' }} />
+              <span style={{ fontSize: '0.78rem', color: '#cbd5e1', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>
+                o continuar con
+              </span>
+              <div style={{ flex: 1, height: '1px', background: '#e2e8f0' }} />
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem' }}>
-              {['Google', 'Facebook', 'Microsoft'].map(social => (
-                <button key={social} type="button" className="social-btn" style={{ padding: '0.7rem', border: `1px solid ${DESIGN_TOKENS.neutral[300]}`, borderRadius: '10px', background: 'white', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600, color: DESIGN_TOKENS.neutral[700], transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{social}</button>
-              ))}
+            {/* ── SOCIAL LOGIN ── */}
+            <div style={{ display: 'flex', gap: '0.75rem' }}>
+
+              {/* Google */}
+              <button
+                type="button"
+                style={{
+                  flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
+                  padding: '0.85rem 1rem', borderRadius: '14px',
+                  border: '1.5px solid #e2e8f0', background: 'white',
+                  color: '#1e293b', fontWeight: 600, fontSize: '0.9rem',
+                  cursor: 'pointer', transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = '#cbd5e1'; e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.08)'; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = 'none'; }}
+              >
+                <svg width="18" height="18" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z" fill="#FFC107"/>
+                  <path d="M6.306 14.691l6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 16.318 4 9.656 8.337 6.306 14.691z" fill="#FF3D00"/>
+                  <path d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238A11.91 11.91 0 0 1 24 36c-5.202 0-9.619-3.317-11.283-7.946l-6.522 5.025C9.505 39.556 16.227 44 24 44z" fill="#4CAF50"/>
+                  <path d="M43.611 20.083H42V20H24v8h11.303a12.04 12.04 0 0 1-4.087 5.571l.003-.002 6.19 5.238C36.971 39.205 44 34 44 24c0-1.341-.138-2.65-.389-3.917z" fill="#1976D2"/>
+                </svg>
+                Google
+              </button>
+
+              {/* Facebook */}
+              <button
+                type="button"
+                style={{
+                  flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
+                  padding: '0.85rem 1rem', borderRadius: '14px',
+                  border: 'none', background: '#1877F2',
+                  color: 'white', fontWeight: 600, fontSize: '0.9rem',
+                  cursor: 'pointer', transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = '#1565d8'; e.currentTarget.style.boxShadow = '0 4px 16px rgba(24,119,242,0.35)'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = '#1877F2'; e.currentTarget.style.boxShadow = 'none'; }}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="white" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                </svg>
+                Facebook
+              </button>
+
             </div>
           </div>
         </div>
@@ -1062,7 +1238,7 @@ function TopBar({ user, onLogout, onMenuClick, searchQuery, onSearchChange, dark
             </div>
           ) : (
             <div style={searchBarStyle}>
-              <Search size={16} color="#6B9FFF" />
+              <Search size={16} color="#94a3b8" />
               <input
                 type="text"
                 placeholder="Buscar... (Ctrl+K)"
@@ -1081,16 +1257,57 @@ function TopBar({ user, onLogout, onMenuClick, searchQuery, onSearchChange, dark
             onOpenSettings={() => setShowEnvSettings(true)}
           />
 
-          <button onClick={onExportReport} style={iconButtonStyle} title="Exportar reporte completo">
-            <Download size={18} />
+          <button onClick={onExportReport} style={iconButtonStyle} title="Exportar reporte completo"
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(15,23,42,0.05)'; e.currentTarget.style.color = '#0f172a'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = '#64748b'; }}>
+            <Download size={17} />
           </button>
 
-          <button onClick={toggleDarkMode} style={iconButtonStyle} title="Cambiar tema">
-            {darkMode ? <Sun size={18} /> : <Moon size={18} />}
-          </button>
-          
-          <button onClick={onLogout} style={iconButtonStyle} title="Cerrar sesión">
-            <LogOut size={18} />
+          {/* ── DARK MODE SWITCH ── */}
+          <div
+            onClick={toggleDarkMode}
+            title={darkMode ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              cursor: 'pointer',
+              userSelect: 'none',
+              padding: '4px 2px',
+            }}
+          >
+            <Sun size={13} style={{ color: darkMode ? '#64748b' : '#f59e0b', transition: 'color 0.3s', flexShrink: 0 }} />
+            <div style={{
+              width: '40px',
+              height: '22px',
+              borderRadius: '11px',
+              background: darkMode
+                ? 'linear-gradient(135deg, #15066c 0%, #0455c7 100%)'
+                : 'rgba(15,23,42,0.12)',
+              position: 'relative',
+              transition: 'background 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
+              boxShadow: darkMode ? '0 0 10px rgba(4,85,199,0.4)' : 'inset 0 1px 3px rgba(0,0,0,0.1)',
+              flexShrink: 0,
+            }}>
+              <div style={{
+                position: 'absolute',
+                top: '3px',
+                left: darkMode ? '21px' : '3px',
+                width: '16px',
+                height: '16px',
+                borderRadius: '50%',
+                background: 'white',
+                transition: 'left 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
+                boxShadow: '0 1px 4px rgba(0,0,0,0.2)',
+              }} />
+            </div>
+            <Moon size={13} style={{ color: darkMode ? '#818cf8' : '#64748b', transition: 'color 0.3s', flexShrink: 0 }} />
+          </div>
+
+          <button onClick={onLogout} style={iconButtonStyle} title="Cerrar sesión"
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.07)'; e.currentTarget.style.color = '#dc2626'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = '#64748b'; }}>
+            <LogOut size={17} />
           </button>
         </div>
       </div>
@@ -1132,10 +1349,10 @@ function DashboardView({ user, tasks, projects, onTaskClick, onProjectSelect }) 
   return (
     <div style={{ padding: '2rem' }}>
       <div style={{ marginBottom: '2rem' }}>
-        <h1 style={{ fontSize: '1.75rem', fontWeight: 800, color: DESIGN_TOKENS.neutral[800], margin: '0 0 0.5rem' }}>
-          Bienvenido de nuevo, {user.name.split(' ')[0]} ⚡
+        <h1 style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 0.4rem', letterSpacing: '-0.5px' }}>
+          {user.isNew ? 'Bienvenido' : 'Bienvenido de vuelta'}, {(user.name || user.email || 'Usuario').split(' ')[0]}
         </h1>
-        <p style={{ color: DESIGN_TOKENS.neutral[600], margin: 0, fontSize: '1rem' }}>
+        <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '0.9375rem', fontWeight: 500 }}>
           Aquí está tu resumen del día
         </p>
       </div>
@@ -1194,7 +1411,7 @@ function DashboardView({ user, tasks, projects, onTaskClick, onProjectSelect }) 
       </div>
 
       <div>
-        <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '1rem', color: DESIGN_TOKENS.neutral[800] }}>
+        <h3 style={{ fontSize: '1.125rem', fontWeight: 700, marginBottom: '1rem', color: 'var(--text-primary)', letterSpacing: '-0.3px' }}>
           Proyectos Recientes
         </h3>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1.5rem' }}>
@@ -1210,21 +1427,23 @@ function DashboardView({ user, tasks, projects, onTaskClick, onProjectSelect }) 
 function StatCard({ label, value, color, icon, trend }) {
   return (
     <div style={{
-      background: 'white',
-      border: `1px solid ${DESIGN_TOKENS.neutral[200]}`,
-      borderRadius: '16px',
+      background: 'var(--bg-card)',
+      backdropFilter: 'blur(12px)',
+      WebkitBackdropFilter: 'blur(12px)',
+      border: '1px solid var(--border)',
+      borderRadius: '18px',
       padding: '1.5rem',
-      transition: 'transform 0.2s, box-shadow 0.2s',
+      transition: 'transform 0.25s ease, box-shadow 0.25s ease',
       cursor: 'pointer',
-      boxShadow: DESIGN_TOKENS.shadows.sm
+      boxShadow: 'var(--shadow-card)'
     }}
     onMouseEnter={(e) => {
       e.currentTarget.style.transform = 'translateY(-4px)';
-      e.currentTarget.style.boxShadow = DESIGN_TOKENS.shadows.lg;
+      e.currentTarget.style.boxShadow = 'var(--shadow-card-hover)';
     }}
     onMouseLeave={(e) => {
       e.currentTarget.style.transform = 'translateY(0)';
-      e.currentTarget.style.boxShadow = DESIGN_TOKENS.shadows.sm;
+      e.currentTarget.style.boxShadow = 'var(--shadow-card)';
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '0.75rem' }}>
         <div style={{
@@ -1259,13 +1478,13 @@ function TaskSection({ title, count, tasks, onTaskClick, emptyMessage }) {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-        <h3 style={{ fontSize: '1.125rem', fontWeight: 700, margin: 0, color: DESIGN_TOKENS.neutral[800] }}>
+        <h3 style={{ fontSize: '1.125rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
           {title}
         </h3>
-        <span style={{ 
-          fontSize: '0.875rem', 
-          fontWeight: 700, 
-          color: DESIGN_TOKENS.neutral[500],
+        <span style={{
+          fontSize: '0.875rem',
+          fontWeight: 700,
+          color: 'var(--text-muted)',
           background: DESIGN_TOKENS.neutral[100],
           padding: '0.25rem 0.75rem',
           borderRadius: '12px'
@@ -1297,26 +1516,28 @@ function TaskSection({ title, count, tasks, onTaskClick, emptyMessage }) {
 function TaskCardCompact({ task, onClick }) {
   return (
     <div onClick={onClick} style={{
-      background: 'white',
-      border: `1px solid ${DESIGN_TOKENS.neutral[200]}`,
-      borderRadius: '10px',
+      background: 'var(--bg-card)',
+      backdropFilter: 'blur(10px)',
+      WebkitBackdropFilter: 'blur(10px)',
+      border: '1px solid var(--border)',
+      borderRadius: '12px',
       padding: '1rem',
       cursor: 'pointer',
-      transition: 'all 0.2s',
-      boxShadow: DESIGN_TOKENS.shadows.xs
+      transition: 'all 0.22s ease',
+      boxShadow: 'var(--shadow-card)'
     }}
     onMouseEnter={(e) => {
       e.currentTarget.style.transform = 'translateY(-2px)';
-      e.currentTarget.style.boxShadow = DESIGN_TOKENS.shadows.md;
-      e.currentTarget.style.borderColor = DESIGN_TOKENS.primary.base;
+      e.currentTarget.style.boxShadow = 'var(--shadow-card-hover)';
+      e.currentTarget.style.borderColor = 'var(--border)';
     }}
     onMouseLeave={(e) => {
       e.currentTarget.style.transform = 'translateY(0)';
-      e.currentTarget.style.boxShadow = DESIGN_TOKENS.shadows.xs;
-      e.currentTarget.style.borderColor = DESIGN_TOKENS.neutral[200];
+      e.currentTarget.style.boxShadow = 'var(--shadow-card)';
+      e.currentTarget.style.borderColor = 'var(--border)';
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', gap: '0.5rem', marginBottom: '0.5rem' }}>
-        <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 600, color: DESIGN_TOKENS.neutral[800], flex: 1 }}>
+        <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)', flex: 1 }}>
           {task.title}
         </h4>
         <span style={{
@@ -1354,28 +1575,30 @@ function ProjectCard({ project, onClick, index = 0 }) {
   const progress = 75; // Placeholder
 
   return (
-    <div 
-      onClick={onClick} 
+    <div
+      onClick={onClick}
       style={{
-        background: 'white',
-        border: `1px solid ${DESIGN_TOKENS.border.color.subtle}`,
-        borderRadius: DESIGN_TOKENS.border.radius.md,
+        background: 'var(--bg-card)',
+        backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
+        border: '1px solid var(--border)',
+        borderRadius: '18px',
         padding: '1.5rem',
         cursor: 'pointer',
-        transition: `all ${DESIGN_TOKENS.transition.normal}`,
-        boxShadow: DESIGN_TOKENS.shadows.sm,
+        transition: 'all 0.25s ease',
+        boxShadow: 'var(--shadow-card)',
         animation: `cardFadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1) ${index * 0.05}s backwards`,
         transformOrigin: 'center'
       }}
       onMouseEnter={(e) => {
-        e.currentTarget.style.transform = 'translateY(-6px) scale(1.01)';
-        e.currentTarget.style.boxShadow = DESIGN_TOKENS.shadows.lg;
-        e.currentTarget.style.borderColor = DESIGN_TOKENS.border.color.primary;
+        e.currentTarget.style.transform = 'translateY(-5px)';
+        e.currentTarget.style.boxShadow = 'var(--shadow-card-hover)';
+        e.currentTarget.style.borderColor = 'var(--border)';
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.transform = 'translateY(0) scale(1)';
-        e.currentTarget.style.boxShadow = DESIGN_TOKENS.shadows.sm;
-        e.currentTarget.style.borderColor = DESIGN_TOKENS.border.color.subtle;
+        e.currentTarget.style.transform = 'translateY(0)';
+        e.currentTarget.style.boxShadow = 'var(--shadow-card)';
+        e.currentTarget.style.borderColor = 'var(--border)';
       }}
     >
       <div style={{
@@ -1386,37 +1609,37 @@ function ProjectCard({ project, onClick, index = 0 }) {
         marginBottom: '1rem',
         boxShadow: `0 2px 8px ${project.color}40`
       }} />
-      
-      <h4 style={{ 
-        fontSize: DESIGN_TOKENS.typography.size.xl, 
-        fontWeight: DESIGN_TOKENS.typography.weight.bold, 
-        margin: '0 0 0.5rem', 
-        color: DESIGN_TOKENS.neutral[800],
+
+      <h4 style={{
+        fontSize: DESIGN_TOKENS.typography.size.xl,
+        fontWeight: DESIGN_TOKENS.typography.weight.bold,
+        margin: '0 0 0.5rem',
+        color: 'var(--text-primary)',
         letterSpacing: DESIGN_TOKENS.typography.letterSpacing.tight
       }}>
         {project.name}
       </h4>
       
-      <p style={{ 
-        fontSize: DESIGN_TOKENS.typography.size.sm, 
-        color: DESIGN_TOKENS.neutral[500], 
-        margin: '0 0 1rem', 
-        lineHeight: DESIGN_TOKENS.typography.lineHeight.normal 
+      <p style={{
+        fontSize: DESIGN_TOKENS.typography.size.sm,
+        color: 'var(--text-muted)',
+        margin: '0 0 1rem',
+        lineHeight: DESIGN_TOKENS.typography.lineHeight.normal
       }}>
         {project.description}
       </p>
-      
+
       <div style={{ marginBottom: '1rem' }}>
-        <div style={{ 
-          display: 'flex', 
-          justifyContent: 'space-between', 
-          fontSize: DESIGN_TOKENS.typography.size.xs, 
-          color: DESIGN_TOKENS.neutral[500], 
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          fontSize: DESIGN_TOKENS.typography.size.xs,
+          color: 'var(--text-muted)',
           marginBottom: '0.5rem',
           fontWeight: DESIGN_TOKENS.typography.weight.medium
         }}>
           <span>Progreso</span>
-          <span style={{ fontWeight: DESIGN_TOKENS.typography.weight.bold, color: DESIGN_TOKENS.neutral[700] }}>
+          <span style={{ fontWeight: DESIGN_TOKENS.typography.weight.bold, color: 'var(--text-primary)' }}>
             {progress}%
           </span>
         </div>
@@ -1437,12 +1660,12 @@ function ProjectCard({ project, onClick, index = 0 }) {
         </div>
       </div>
       
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        alignItems: 'center', 
-        fontSize: DESIGN_TOKENS.typography.size.xs, 
-        color: DESIGN_TOKENS.neutral[400],
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        fontSize: DESIGN_TOKENS.typography.size.xs,
+        color: 'var(--text-subtle)',
         fontWeight: DESIGN_TOKENS.typography.weight.medium
       }}>
         <span>
@@ -1506,10 +1729,10 @@ function ProjectsView({ projects, onProjectsChange, users, onSelectProject, togg
     <div style={{ padding: '2rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
         <div>
-          <h2 style={{ fontSize: '1.75rem', fontWeight: 800, margin: '0 0 0.5rem', color: DESIGN_TOKENS.neutral[800] }}>
+          <h2 style={{ fontSize: '1.625rem', fontWeight: 800, margin: '0 0 0.4rem', color: '#0f172a', letterSpacing: '-0.5px' }}>
             Proyectos
           </h2>
-          <p style={{ color: DESIGN_TOKENS.neutral[600], margin: 0 }}>
+          <p style={{ color: '#64748b', margin: 0, fontSize: '0.9375rem', fontWeight: 500 }}>
             {environmentProjects.length} proyecto{environmentProjects.length !== 1 ? 's' : ''} en total
           </p>
         </div>
@@ -1609,25 +1832,27 @@ function ProjectCardExtended({ project, onClick, onToggleFavorite, onDuplicate, 
 
   return (
     <div style={{
-      background: 'white',
-      border: `1px solid ${DESIGN_TOKENS.border.color.subtle}`,
-      borderRadius: DESIGN_TOKENS.border.radius.md,
+      background: 'rgba(255, 255, 255, 0.85)',
+      backdropFilter: 'blur(12px)',
+      WebkitBackdropFilter: 'blur(12px)',
+      border: '1px solid rgba(15, 23, 42, 0.06)',
+      borderRadius: '18px',
       padding: '1.5rem',
       cursor: 'pointer',
-      transition: `all ${DESIGN_TOKENS.transition.normal}`,
-      boxShadow: DESIGN_TOKENS.shadows.sm,
+      transition: 'all 0.25s ease',
+      boxShadow: '0 1px 8px rgba(15, 23, 42, 0.06)',
       position: 'relative',
       animation: `cardFadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1) ${index * 0.05}s backwards`
     }}
     onMouseEnter={(e) => {
-      e.currentTarget.style.transform = 'translateY(-6px) scale(1.01)';
-      e.currentTarget.style.boxShadow = DESIGN_TOKENS.shadows.lg;
-      e.currentTarget.style.borderColor = DESIGN_TOKENS.border.color.primary;
+      e.currentTarget.style.transform = 'translateY(-5px)';
+      e.currentTarget.style.boxShadow = '0 16px 48px rgba(15, 23, 42, 0.12)';
+      e.currentTarget.style.borderColor = 'rgba(15, 23, 42, 0.12)';
     }}
     onMouseLeave={(e) => {
-      e.currentTarget.style.transform = 'translateY(0) scale(1)';
-      e.currentTarget.style.boxShadow = DESIGN_TOKENS.shadows.sm;
-      e.currentTarget.style.borderColor = DESIGN_TOKENS.border.color.subtle;
+      e.currentTarget.style.transform = 'translateY(0)';
+      e.currentTarget.style.boxShadow = '0 1px 8px rgba(15, 23, 42, 0.06)';
+      e.currentTarget.style.borderColor = 'rgba(15, 23, 42, 0.06)';
     }}>
       <div onClick={onClick}>
         <div style={{
@@ -1783,7 +2008,13 @@ function ProjectDetailView({ project, tasks, onTasksChange, users, comments, onC
   const [expandedTasks, setExpandedTasks] = useState({});
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterAssignee, setFilterAssignee] = useState('all');
+  const [headerCollapsed, setHeaderCollapsed] = useState(false);
   const { addToast } = useToast();
+
+  const handleViewMode = (mode) => {
+    setViewMode(mode);
+    if (mode === 'roadmap') setHeaderCollapsed(true);
+  };
 
   const projectTasks = tasks.filter(t => t.projectId === project.id);
   const rootTasks = projectTasks.filter(t => !t.parentId);
@@ -1833,55 +2064,119 @@ function ProjectDetailView({ project, tasks, onTasksChange, users, comments, onC
     <div style={{ padding: '2rem' }}>
       {/* CARD DE INFORMACIÓN SUPERIOR */}
       <div style={{
-        background: 'white',
-        borderRadius: '12px',
-        border: `1px solid ${DESIGN_TOKENS.neutral[200]}`,
-        padding: '2rem',
-        marginBottom: '2rem',
-        boxShadow: DESIGN_TOKENS.shadows.sm
+        background: 'var(--bg-card, rgba(255,255,255,0.88))',
+        backdropFilter: 'blur(16px)',
+        WebkitBackdropFilter: 'blur(16px)',
+        borderRadius: '20px',
+        border: '1px solid var(--border, rgba(15,23,42,0.06))',
+        marginBottom: '1.25rem',
+        boxShadow: '0 2px 12px rgba(15, 23, 42, 0.07)',
+        overflow: 'hidden',
+        transition: 'all 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
       }}>
+        {/* Franja de color superior (siempre visible) */}
+        <div style={{ height: '4px', background: project.color, borderRadius: '20px 20px 0 0' }} />
+
+        {/* Header minimizado — visible solo cuando está colapsado */}
+        {headerCollapsed && (
+          <div
+            onClick={() => setHeaderCollapsed(false)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '0.85rem 1.5rem',
+              cursor: 'pointer',
+              gap: '1.5rem',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+              <div style={{
+                width: '10px', height: '10px', borderRadius: '50%',
+                background: project.color, flexShrink: 0
+              }} />
+              <span style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary, #0f172a)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {project.name}
+              </span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexShrink: 0 }}>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted, #64748b)', fontWeight: 500 }}>
+                <span style={{ fontWeight: 700, color: 'var(--text-primary, #0f172a)' }}>{projectTasks.length}</span> tareas
+              </span>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted, #64748b)', fontWeight: 500 }}>
+                {new Date(project.startDate).toLocaleDateString('es-ES')} → {new Date(project.endDate).toLocaleDateString('es-ES')}
+              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-subtle, #94a3b8)' }}>
+                <ChevronDown size={14} /> Ver más
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Botón minimizar — visible solo cuando está expandido */}
+        {!headerCollapsed && (
+          <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '1rem 1.5rem 0' }}>
+            <button
+              onClick={() => setHeaderCollapsed(true)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '5px',
+                background: 'none', border: 'none', cursor: 'pointer',
+                fontSize: '0.78rem', fontWeight: 600,
+                color: 'var(--text-subtle, #94a3b8)',
+                padding: '2px 6px', borderRadius: '6px',
+                transition: 'color 0.2s',
+              }}
+              onMouseEnter={e => e.currentTarget.style.color = 'var(--text-muted, #64748b)'}
+              onMouseLeave={e => e.currentTarget.style.color = 'var(--text-subtle, #94a3b8)'}
+            >
+              <ChevronUp size={13} /> Minimizar
+            </button>
+          </div>
+        )}
+
+        {/* Contenido colapsable */}
         <div style={{
-          width: '100%',
-          height: '6px',
-          background: project.color,
-          borderRadius: '3px',
-          marginBottom: '1.5rem'
-        }} />
-        
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '1rem' }}>
-          <div>
-            <h2 style={{ fontSize: '1.75rem', fontWeight: 800, margin: '0 0 0.5rem', color: DESIGN_TOKENS.neutral[800] }}>
-              {project.name}
-            </h2>
-            <p style={{ color: DESIGN_TOKENS.neutral[600], margin: 0 }}>
-              {project.description}
-            </p>
-          </div>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: '2rem', fontWeight: 800, color: project.color }}>
-              {projectProgress}%
+          maxHeight: headerCollapsed ? '0' : '300px',
+          opacity: headerCollapsed ? 0 : 1,
+          overflow: 'hidden',
+          transition: 'max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease',
+          padding: headerCollapsed ? '0 2rem' : '1rem 2rem 2rem',
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '1rem' }}>
+            <div>
+              <h2 style={{ fontSize: '1.75rem', fontWeight: 800, margin: '0 0 0.5rem', color: 'var(--text-primary, #1e293b)' }}>
+                {project.name}
+              </h2>
+              <p style={{ color: 'var(--text-muted, #64748b)', margin: 0 }}>
+                {project.description}
+              </p>
             </div>
-            <div style={{ fontSize: '0.75rem', color: DESIGN_TOKENS.neutral[500] }}>
-              Progreso total
+            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+              <div style={{ fontSize: '2rem', fontWeight: 800, color: project.color }}>
+                {projectProgress}%
+              </div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-subtle, #94a3b8)' }}>
+                Progreso total
+              </div>
             </div>
           </div>
-        </div>
-        
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', marginTop: '1.5rem' }}>
-          <InfoItem label="Fecha inicio" value={new Date(project.startDate).toLocaleDateString('es-ES')} />
-          <InfoItem label="Fecha fin" value={new Date(project.endDate).toLocaleDateString('es-ES')} />
-          <InfoItem label="Tareas totales" value={projectTasks.length} />
-          <InfoItem label="Completadas" value={projectTasks.filter(t => t.status === 'completed').length} />
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', marginTop: '1rem' }}>
+            <InfoItem label="Fecha inicio" value={new Date(project.startDate).toLocaleDateString('es-ES')} />
+            <InfoItem label="Fecha fin" value={new Date(project.endDate).toLocaleDateString('es-ES')} />
+            <InfoItem label="Tareas totales" value={projectTasks.length} />
+            <InfoItem label="Completadas" value={projectTasks.filter(t => t.status === 'completed').length} />
+          </div>
         </div>
       </div>
 
       {/* SELECTOR DE VISTAS Y BOTONES */}
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem', gap: '1rem' }}>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <ViewButton label="Lista" icon={<List size={16} />} active={viewMode === 'list'} onClick={() => setViewMode('list')} />
-          <ViewButton label="Tabla" icon={<Grid size={16} />} active={viewMode === 'table'} onClick={() => setViewMode('table')} />
-          <ViewButton label="Gantt" icon={<BarChart2 size={16} />} active={viewMode === 'gantt'} onClick={() => setViewMode('gantt')} />
-          <ViewButton label="Roadmap" icon={<Layers size={16} />} active={viewMode === 'roadmap'} onClick={() => setViewMode('roadmap')} />
+          <ViewButton label="Lista" icon={<List size={16} />} active={viewMode === 'list'} onClick={() => handleViewMode('list')} />
+          <ViewButton label="Tabla" icon={<Grid size={16} />} active={viewMode === 'table'} onClick={() => handleViewMode('table')} />
+          <ViewButton label="Gantt" icon={<BarChart2 size={16} />} active={viewMode === 'gantt'} onClick={() => handleViewMode('gantt')} />
+          <ViewButton label="Roadmap" icon={<Layers size={16} />} active={viewMode === 'roadmap'} onClick={() => handleViewMode('roadmap')} />
         </div>
 
         <div style={{ display: 'flex', gap: '0.75rem' }}>
@@ -3392,9 +3687,16 @@ function ProjectFormModal({ users, onSave, onClose }) {
                   }))}
                   style={checkboxStyle}
                 />
-                <span style={{ fontSize: '1.25rem' }}>{u.avatar}</span>
+                <div style={{
+                  width: '28px', height: '28px', borderRadius: '8px',
+                  background: 'linear-gradient(135deg, #15066c 0%, #0455c7 100%)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: 'white', fontWeight: 700, fontSize: '12px', flexShrink: 0
+                }}>
+                  {(u.name || u.email || '?').charAt(0).toUpperCase()}
+                </div>
                 <span style={{ fontSize: '0.875rem', fontWeight: 500, color: DESIGN_TOKENS.neutral[800] }}>
-                  {u.name}
+                  {u.name || u.email}
                 </span>
               </label>
             ))}
@@ -3996,8 +4298,9 @@ const dashboardContainerStyle = {
   width: '100vw',
   display: 'flex',
   overflow: 'hidden',
-  background: DESIGN_TOKENS.neutral[50],
-  fontFamily: DESIGN_TOKENS.typography.fontFamily
+  background: 'var(--bg-base)',
+  fontFamily: DESIGN_TOKENS.typography.fontFamily,
+  transition: 'background 0.4s ease'
 };
 
 const mainContentWrapperStyle = {
@@ -4008,26 +4311,31 @@ const mainContentWrapperStyle = {
 };
 
 const topBarStyle = {
-  background: 'white',
-  borderBottom: `1px solid ${DESIGN_TOKENS.neutral[200]}`,
+  background: 'var(--bg-topbar)',
+  backdropFilter: 'blur(20px)',
+  WebkitBackdropFilter: 'blur(20px)',
+  borderBottom: '1px solid var(--border)',
   padding: '0 2rem',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'space-between',
-  height: '70px',
-  boxShadow: DESIGN_TOKENS.shadows.sm,
-  gap: '1.5rem'
+  height: '62px',
+  boxShadow: 'var(--shadow-topbar)',
+  gap: '1.5rem',
+  position: 'relative',
+  zIndex: 10,
+  transition: 'background 0.4s ease, border-color 0.4s ease'
 };
 
 const searchBarStyle = {
   flex: 1,
-  maxWidth: '500px',
+  maxWidth: '460px',
   display: 'flex',
   alignItems: 'center',
-  background: '#F0F5FF',
-  border: '1.5px solid #D0E2FF',
-  borderRadius: '999px',
-  padding: '0.625rem 1rem',
+  background: 'var(--bg-input)',
+  border: '1px solid var(--border-input)',
+  borderRadius: '12px',
+  padding: '0.5rem 1rem',
   gap: '0.75rem',
   transition: 'all 0.2s'
 };
@@ -4037,20 +4345,20 @@ const searchInputStyle = {
   outline: 'none',
   background: 'transparent',
   fontSize: '0.875rem',
-  color: DESIGN_TOKENS.neutral[700],
+  color: 'var(--text-primary)',
   width: '100%',
   fontFamily: DESIGN_TOKENS.typography.fontFamily
 };
 
 const iconButtonStyle = {
   background: 'none',
-  border: 'none',
-  fontSize: '0.95rem',
+  border: '1px solid transparent',
+  fontSize: '0.875rem',
   fontWeight: 600,
-  color: DESIGN_TOKENS.neutral[600],
+  color: '#64748b',
   cursor: 'pointer',
-  padding: '0.5rem',
-  borderRadius: '8px',
+  padding: '7px',
+  borderRadius: '10px',
   display: 'flex',
   alignItems: 'center',
   transition: 'all 0.2s'
@@ -4059,7 +4367,8 @@ const iconButtonStyle = {
 const contentAreaStyle = {
   flex: 1,
   overflow: 'auto',
-  background: DESIGN_TOKENS.neutral[50]
+  background: 'var(--bg-base)',
+  transition: 'background 0.4s ease'
 };
 
 const inputStyle = {
@@ -4094,16 +4403,16 @@ const primaryButtonStyle = {
   alignItems: 'center',
   gap: '0.5rem',
   padding: '10px 20px',
-  background: DESIGN_TOKENS.primary.base,
+  background: 'linear-gradient(135deg, #15066c 0%, #0455c7 100%)',
   color: 'white',
   border: 'none',
-  borderRadius: DESIGN_TOKENS.border.radius.md,
-  fontSize: DESIGN_TOKENS.typography.size.base,
-  fontWeight: DESIGN_TOKENS.typography.weight.semibold,
+  borderRadius: '12px',
+  fontSize: '0.875rem',
+  fontWeight: 700,
   cursor: 'pointer',
-  transition: `all ${DESIGN_TOKENS.transition.normal}`,
-  boxShadow: DESIGN_TOKENS.shadows.sm,
-  letterSpacing: DESIGN_TOKENS.typography.letterSpacing.normal
+  transition: 'all 0.2s',
+  boxShadow: '0 4px 14px rgba(15, 23, 42, 0.2)',
+  letterSpacing: '-0.1px'
 };
 
 const secondaryButtonStyle = {
@@ -4111,15 +4420,16 @@ const secondaryButtonStyle = {
   alignItems: 'center',
   gap: '0.5rem',
   padding: '10px 20px',
-  background: DESIGN_TOKENS.neutral[100],
-  color: DESIGN_TOKENS.neutral[800],
-  border: `1px solid ${DESIGN_TOKENS.border.color.normal}`,
-  borderRadius: DESIGN_TOKENS.border.radius.md,
-  fontSize: DESIGN_TOKENS.typography.size.base,
-  fontWeight: DESIGN_TOKENS.typography.weight.semibold,
+  background: 'white',
+  color: '#0f172a',
+  border: '1px solid rgba(15, 23, 42, 0.1)',
+  borderRadius: '12px',
+  fontSize: '0.875rem',
+  fontWeight: 600,
   cursor: 'pointer',
-  transition: `all ${DESIGN_TOKENS.transition.normal}`,
-  letterSpacing: DESIGN_TOKENS.typography.letterSpacing.normal
+  transition: 'all 0.2s',
+  boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+  letterSpacing: '-0.1px'
 };
 
 const menuItemStyle = {
@@ -4131,7 +4441,7 @@ const menuItemStyle = {
   alignItems: 'center',
   gap: '0.75rem',
   fontSize: '0.875rem',
-  color: DESIGN_TOKENS.neutral[700],
+  color: '#475569',
   cursor: 'pointer',
   transition: 'background 0.2s',
   textAlign: 'left'

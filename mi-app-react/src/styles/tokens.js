@@ -152,7 +152,8 @@ export const STORAGE_KEYS = {
   TAGS: 'taskflow_tags',
   CURRENT_USER: 'taskflow_current_user',
   PREFERENCES: 'taskflow_preferences',
-  WORKSPACES: 'taskflow_workspaces' 
+  WORKSPACES: 'taskflow_workspaces',
+  ACTIVITY_LOG: 'taskflow_activity_log'
 };
 
 // Funciones de utilidad de Storage (sin cambios, funcionan bien)
