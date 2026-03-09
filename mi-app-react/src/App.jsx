@@ -68,7 +68,7 @@ function ToastContainer({ toasts, removeToast }) {
       display: 'flex',
       flexDirection: 'column',
       gap: '0.5rem',
-      maxWidth: '400px'
+      maxWidth: 'min(400px, 90vw)'
     }}>
       {toasts.map(toast => (
         <Toast key={toast.id} toast={toast} onClose={() => removeToast(toast.id)} />
@@ -106,7 +106,7 @@ function Toast({ toast, onClose }) {
       gap: '0.75rem',
       boxShadow: DESIGN_TOKENS.shadows.lg,
       animation: 'slideInRight 0.3s ease',
-      minWidth: '300px'
+      minWidth: 'min(300px, 90vw)'
     }}>
       <div style={{ color: style.text, display: 'flex', flexShrink: 0 }}>
         {icons[toast.type]}
@@ -352,7 +352,7 @@ if (isTransitioning) {
           100% { width: 100%; }
         }
         .loading-shape {
-          position: absolute; width: 600px; height: 600px;
+          position: absolute; width: clamp(220px, 40vw, 600px); height: clamp(220px, 40vw, 600px);
           border-radius: 50%; background: radial-gradient(circle, rgba(79, 70, 229, 0.2) 0%, transparent 70%);
           animation: orbit-sync 8s infinite linear;
         }
@@ -510,20 +510,25 @@ function LoginScreen({ onLogin }) {
           66% { transform: translate(-20px, 20px) rotate(-5deg); }
         }
         .shape-1 { 
-          position: absolute; top: 15%; right: 25%; width: 350px; height: 350px; 
+          position: absolute; top: 15%; right: 25%;
+          width: clamp(250px, 25vw, 350px); height: clamp(250px, 25vw, 350px);
           background: linear-gradient(135deg, rgba(79, 70, 229, 0.4) 0%, transparent 80%);
           border-radius: 30% 70% 70% 30% / 30% 30% 70% 70%; filter: blur(60px); animation: float-complex 20s infinite linear;
         }
         .shape-2 { 
-          position: absolute; bottom: 10%; left: 20%; width: 450px; height: 450px; 
+          position: absolute; bottom: 10%; left: 20%;
+          width: clamp(280px, 30vw, 450px); height: clamp(280px, 30vw, 450px);
           background: linear-gradient(135deg, rgba(124, 205, 243, 0.3) 0%, transparent 80%);
           border-radius: 50%; filter: blur(80px); animation: float-complex 25s infinite linear reverse;
         }
         .main-container {
-          display: flex; width: 100%; max-width: 1280px; min-height: 750px;
+          display: flex;
+          width: min(95vw, 1280px);
+          max-height: min(85vh, 750px);
+          min-height: min(65vh, 520px);
           background: rgba(255, 255, 255, 0.02); backdrop-filter: blur(10px);
           border-radius: 40px; border: 1px solid rgba(255, 255, 255, 0.1);
-          overflow: hidden; z-index: 2; box-shadow: 0 50px 100px -20px rgba(0,0,0,0.5);
+          overflow: auto; z-index: 2; box-shadow: 0 50px 100px -20px rgba(0,0,0,0.5);
         }
         .input-pro { 
           width: 100%; padding: 1.1rem 1.4rem; border-radius: 16px; border: 1px solid #e2e8f0; 
@@ -1345,17 +1350,17 @@ function DashboardView({ user, tasks, projects, onTaskClick, onProjectSelect }) 
   const activeProjects = projects.filter(p => p.status === 'active');
 
   return (
-    <div style={{ padding: '2rem' }}>
-      <div style={{ marginBottom: '2rem' }}>
-        <h1 style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 0.4rem', letterSpacing: '-0.5px' }}>
+    <div style={{ padding: 'clamp(1rem, 2.5vw, 2rem)' }}>
+      <div style={{ marginBottom: 'clamp(1.25rem, 2.5vw, 2rem)' }}>
+        <h1 style={{ fontSize: 'clamp(1.4rem, 2.6vw, 1.75rem)', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 0.4rem', letterSpacing: '-0.5px' }}>
           {user.isNew ? 'Bienvenido' : 'Bienvenido de vuelta'}, {(user.name || user.email || 'Usuario').split(' ')[0]}
         </h1>
-        <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '0.9375rem', fontWeight: 500 }}>
+        <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: 'clamp(0.85rem, 1.6vw, 0.9375rem)', fontWeight: 500 }}>
           Aquí está tu resumen del día
         </p>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.5rem', marginBottom: '3rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 'clamp(1rem, 2vw, 1.5rem)', marginBottom: '3rem' }}>
         <StatCard 
           label="  Vencidas HOY" 
           value={todayTasks.length} 
@@ -1944,7 +1949,7 @@ function ProjectCardExtended({ project, onClick, onToggleFavorite, onDuplicate, 
           borderRadius: DESIGN_TOKENS.border.radius.sm,
           boxShadow: DESIGN_TOKENS.shadows.xl,
           zIndex: 10,
-          minWidth: '180px',
+          minWidth: 'min(220px, 80vw)',
           overflow: 'hidden',
           animation: 'menuFadeIn 0.15s ease'
         }}>
@@ -2677,7 +2682,7 @@ function GanttView({ tasks, project }) {
       overflow: 'auto',
       boxShadow: DESIGN_TOKENS.shadows.sm
     }}>
-      <div style={{ minWidth: '800px' }}>
+      <div style={{ minWidth: '100%' }}>
         {tasks.filter(t => !t.parentId).map(task => {
           const pos = getTaskPosition(task);
           return (
@@ -2691,8 +2696,8 @@ function GanttView({ tasks, project }) {
               }}
             >
               <div style={{
-                minWidth: '250px',
-                padding: '1rem',
+                minWidth: 'clamp(180px, 20vw, 250px)',
+                padding: 'clamp(0.75rem, 1.5vw, 1rem)',
                 borderRight: `1px solid ${DESIGN_TOKENS.neutral[200]}`,
                 background: DESIGN_TOKENS.neutral[50]
               }}>
@@ -3056,17 +3061,17 @@ function AnalyticsView({ tasks, projects, users }) {
     : 0;
 
   return (
-    <div style={{ padding: '2rem' }}>
-      <div style={{ marginBottom: '2rem' }}>
-        <h2 style={{ fontSize: '1.75rem', fontWeight: 800, margin: '0 0 0.5rem', color: DESIGN_TOKENS.neutral[800] }}>
+    <div style={{ padding: 'clamp(1rem, 2.5vw, 2rem)' }}>
+      <div style={{ marginBottom: 'clamp(1.25rem, 2.5vw, 2rem)' }}>
+        <h2 style={{ fontSize: 'clamp(1.4rem, 2.6vw, 1.75rem)', fontWeight: 800, margin: '0 0 0.5rem', color: DESIGN_TOKENS.neutral[800] }}>
           Analítica y Reportes
         </h2>
-        <p style={{ color: DESIGN_TOKENS.neutral[600], margin: 0 }}>
+        <p style={{ color: DESIGN_TOKENS.neutral[600], margin: 0, fontSize: 'clamp(0.85rem, 1.6vw, 0.9375rem)' }}>
           Resumen general del rendimiento
         </p>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.5rem', marginBottom: '3rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 'clamp(1rem, 2vw, 1.5rem)', marginBottom: '3rem' }}>
         <AnalyticsCard
           label="Total de Tareas"
           value={tasks.length}
@@ -3138,14 +3143,14 @@ function AnalyticsCard({ label, value, subtitle, icon, color }) {
           {icon}
         </div>
       </div>
-      <div style={{ fontSize: '2.5rem', fontWeight: 800, color, marginBottom: '0.5rem' }}>
+      <div style={{ fontSize: 'clamp(1.8rem, 3vw, 2.5rem)', fontWeight: 800, color, marginBottom: '0.5rem' }}>
         {value}
       </div>
-      <div style={{ fontSize: '0.875rem', color: DESIGN_TOKENS.neutral[600], fontWeight: 600, marginBottom: '0.25rem' }}>
+      <div style={{ fontSize: 'clamp(0.8rem, 1.6vw, 0.875rem)', color: DESIGN_TOKENS.neutral[600], fontWeight: 600, marginBottom: '0.25rem' }}>
         {label}
       </div>
       {subtitle && (
-        <div style={{ fontSize: '0.75rem', color: DESIGN_TOKENS.neutral[500] }}>
+        <div style={{ fontSize: 'clamp(0.7rem, 1.4vw, 0.75rem)', color: DESIGN_TOKENS.neutral[500] }}>
           {subtitle}
         </div>
       )}
@@ -4143,12 +4148,12 @@ const brandingSectionStyle = {
   flexDirection: 'column',
   justifyContent: 'center',
   alignItems: 'center',
-  padding: '4rem 3rem',
+  padding: 'clamp(2rem, 5vw, 4rem) clamp(1.5rem, 4vw, 3rem)',
   color: 'white'
 };
 
 const brandingContentStyle = {
-  maxWidth: '500px',
+  maxWidth: 'min(500px, 90vw)',
   animation: 'fadeInUp 0.8s ease forwards'
 };
 
@@ -4157,7 +4162,7 @@ const logoStyle = {
 };
 
 const brandingTitleStyle = {
-  fontSize: '3.5rem',
+  fontSize: 'clamp(2.2rem, 4vw, 3.5rem)',
   fontWeight: 800,
   margin: '0 0 1rem',
   letterSpacing: '-0.03em',
@@ -4166,7 +4171,7 @@ const brandingTitleStyle = {
 };
 
 const brandingDescStyle = {
-  fontSize: '1.125rem',
+  fontSize: 'clamp(1rem, 1.7vw, 1.125rem)',
   opacity: 0.9,
   lineHeight: 1.8,
   marginBottom: '2.5rem',
@@ -4180,19 +4185,19 @@ const featureListStyle = {
 
 const formSectionStyle = {
   width: '100%',
-  maxWidth: '480px',
+  maxWidth: 'min(480px, 90vw)',
   background: DESIGN_TOKENS.neutral[50],
   display: 'flex',
   flexDirection: 'column',
   justifyContent: 'center',
   alignItems: 'center',
-  padding: '3rem',
+  padding: 'clamp(2rem, 4vw, 3rem)',
   boxShadow: DESIGN_TOKENS.shadows.xl
 };
 
 const formContentStyle = {
   width: '100%',
-  maxWidth: '400px'
+  maxWidth: 'min(400px, 90vw)'
 };
 
 const tabsContainerStyle = {
@@ -4294,8 +4299,9 @@ const passwordToggleStyle = {
 const dashboardContainerStyle = {
   minHeight: '100vh',
   width: '100%',
-  maxWidth: '1440px',
+  maxWidth: 'min(1200px, 100vw)',
   margin: '0 auto',
+  padding: '0 1rem',
   display: 'flex',
   overflow: 'hidden',
   background: 'var(--bg-base)',
@@ -4305,6 +4311,7 @@ const dashboardContainerStyle = {
 
 const mainContentWrapperStyle = {
   flex: 1,
+  minWidth: 0,
   display: 'flex',
   flexDirection: 'column',
   overflow: 'hidden'
@@ -4315,7 +4322,7 @@ const topBarStyle = {
   backdropFilter: 'blur(20px)',
   WebkitBackdropFilter: 'blur(20px)',
   borderBottom: '1px solid var(--border)',
-  padding: '0 2rem',
+  padding: '0 clamp(1rem, 2.5vw, 2rem)',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'space-between',
@@ -4329,7 +4336,7 @@ const topBarStyle = {
 
 const searchBarStyle = {
   flex: 1,
-  maxWidth: '460px',
+  maxWidth: 'min(460px, 100%)',
   display: 'flex',
   alignItems: 'center',
   background: 'var(--bg-input)',
@@ -4366,6 +4373,7 @@ const iconButtonStyle = {
 
 const contentAreaStyle = {
   flex: 1,
+  minWidth: 0,
   overflow: 'auto',
   background: 'var(--bg-base)',
   transition: 'background 0.4s ease'
