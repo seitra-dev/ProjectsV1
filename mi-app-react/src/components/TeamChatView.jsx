@@ -41,7 +41,7 @@ const INITIAL_CHAT_MESSAGES = [
   }
 ];
 
-function TeamChatView({ user }) {
+function TeamChatView({ user, isMobile = false }) {
   const [messages, setMessages] = useState(INITIAL_CHAT_MESSAGES);
   const [newMessage, setNewMessage] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -111,15 +111,17 @@ function TeamChatView({ user }) {
         background: 'rgba(255, 255, 255, 0.95)',
         backdropFilter: 'blur(10px)',
         borderBottom: `1px solid ${DESIGN_TOKENS.border.color.subtle}`,
-        padding: '16px 24px',
+        padding: isMobile ? '12px 14px' : '16px 24px',
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
+        gap: '10px',
+        flexWrap: 'wrap',
         boxShadow: '0 2px 8px rgba(0,0,0,0.05)'
       }}>
         <div>
           <h2 style={{
-            fontSize: '18px',
+            fontSize: isMobile ? '16px' : '18px',
             fontWeight: 800,
             margin: 0,
             color: DESIGN_TOKENS.neutral[900]
@@ -138,7 +140,7 @@ function TeamChatView({ user }) {
         <button
           onClick={() => setShowBackgroundSelector(!showBackgroundSelector)}
           style={{
-            padding: '8px 16px',
+            padding: isMobile ? '8px 10px' : '8px 16px',
             background: 'white',
             border: `1px solid ${DESIGN_TOKENS.border.color.normal}`,
             borderRadius: '8px',
@@ -169,15 +171,15 @@ function TeamChatView({ user }) {
       {showBackgroundSelector && (
         <div style={{
           position: 'absolute',
-          top: '80px',
-          right: '24px',
+          top: isMobile ? '72px' : '80px',
+          right: isMobile ? '12px' : '24px',
           background: 'white',
           borderRadius: '12px',
           padding: '16px',
           boxShadow: DESIGN_TOKENS.shadows.xl,
           border: `1px solid ${DESIGN_TOKENS.border.color.subtle}`,
           zIndex: 100,
-          minWidth: '280px',
+          minWidth: isMobile ? 'min(280px, calc(100vw - 24px))' : '280px',
           animation: 'slideDown 0.2s ease'
         }}>
           <div style={{
@@ -268,6 +270,7 @@ function TeamChatView({ user }) {
         flex: 1,
         overflowY: 'auto',
         padding: '24px',
+        paddingInline: isMobile ? '12px' : '24px',
         display: 'flex',
         flexDirection: 'column',
         gap: '16px'
@@ -319,7 +322,7 @@ function TeamChatView({ user }) {
                 <div style={{
                   display: 'flex',
                   gap: '12px',
-                  maxWidth: '70%',
+                  maxWidth: isMobile ? '92%' : '70%',
                   flexDirection: isOwnMessage ? 'row-reverse' : 'row'
                 }}>
                   {/* AVATAR */}
@@ -397,13 +400,13 @@ function TeamChatView({ user }) {
         <div style={{
           position: 'absolute',
           bottom: '90px',
-          left: '24px',
+          left: isMobile ? '12px' : '24px',
           background: 'white',
           borderRadius: '16px',
           padding: '16px',
           boxShadow: DESIGN_TOKENS.shadows.xl,
           border: `1px solid ${DESIGN_TOKENS.border.color.subtle}`,
-          maxWidth: '400px',
+          maxWidth: isMobile ? 'calc(100vw - 24px)' : '400px',
           maxHeight: '400px',
           overflowY: 'auto',
           zIndex: 100,
@@ -499,10 +502,11 @@ function TeamChatView({ user }) {
         background: 'rgba(255, 255, 255, 0.95)',
         backdropFilter: 'blur(10px)',
         borderTop: `1px solid ${DESIGN_TOKENS.border.color.subtle}`,
-        padding: '16px 24px',
+        padding: isMobile ? '12px' : '16px 24px',
         display: 'flex',
         gap: '12px',
-        alignItems: 'center'
+        alignItems: 'center',
+        flexWrap: isMobile ? 'wrap' : 'nowrap'
       }}>
         <button
           type="button"
@@ -541,6 +545,7 @@ function TeamChatView({ user }) {
           placeholder="Escribe un mensaje..."
           style={{
             flex: 1,
+            minWidth: isMobile ? '100%' : '0',
             padding: '12px 16px',
             border: `1px solid ${DESIGN_TOKENS.neutral[200]}`,
             borderRadius: '10px',
@@ -564,7 +569,7 @@ function TeamChatView({ user }) {
           type="submit"
           disabled={!newMessage.trim()}
           style={{
-            padding: '12px 24px',
+            padding: isMobile ? '10px 16px' : '12px 24px',
             background: newMessage.trim() 
               ? `linear-gradient(135deg, ${DESIGN_TOKENS.primary.base}, ${DESIGN_TOKENS.primary.dark})`
               : DESIGN_TOKENS.neutral[200],
@@ -577,6 +582,7 @@ function TeamChatView({ user }) {
             gap: '8px',
             fontSize: '14px',
             fontWeight: 600,
+            marginLeft: isMobile ? 'auto' : 0,
             transition: 'all 0.2s',
             boxShadow: newMessage.trim() ? `0 4px 12px ${DESIGN_TOKENS.primary.base}40` : 'none'
           }}

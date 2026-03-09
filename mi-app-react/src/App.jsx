@@ -64,11 +64,13 @@ function ToastContainer({ toasts, removeToast }) {
       position: 'fixed',
       top: '1rem',
       right: '1rem',
+      left: '1rem',
       zIndex: 9999,
       display: 'flex',
       flexDirection: 'column',
       gap: '0.5rem',
-      maxWidth: '400px'
+      maxWidth: '400px',
+      marginLeft: 'auto'
     }}>
       {toasts.map(toast => (
         <Toast key={toast.id} toast={toast} onClose={() => removeToast(toast.id)} />
@@ -106,7 +108,9 @@ function Toast({ toast, onClose }) {
       gap: '0.75rem',
       boxShadow: DESIGN_TOKENS.shadows.lg,
       animation: 'slideInRight 0.3s ease',
-      minWidth: '300px'
+      minWidth: '300px',
+      minWidth: 'min(300px, calc(100vw - 2rem))',
+      width: '100%'
     }}>
       <div style={{ color: style.text, display: 'flex', flexShrink: 0 }}>
         {icons[toast.type]}
@@ -1070,6 +1074,7 @@ useEffect(() => {
           breadcrumbs={breadcrumbs}
           onBreadcrumbClick={handleBreadcrumbClick}
           onExportReport={exportFullReport}
+          isMobile={isMobile}
         />
 
         <div style={contentAreaStyle}>
@@ -1133,6 +1138,7 @@ useEffect(() => {
           {activeView === 'chat' && (
             <TeamChatView 
               user={user}
+              isMobile={isMobile}
             />
           )}
 
@@ -1194,20 +1200,27 @@ useEffect(() => {
 // ============================================================================
 // TOP BAR
 // ============================================================================
-function TopBar({ user, onLogout, onMenuClick, searchQuery, onSearchChange, darkMode, toggleDarkMode, breadcrumbs, onBreadcrumbClick, onExportReport }) {
+function TopBar({ user, onLogout, onMenuClick, searchQuery, onSearchChange, darkMode, toggleDarkMode, breadcrumbs, onBreadcrumbClick, onExportReport, isMobile }) {
   const [showCreateEnv, setShowCreateEnv] = useState(false);
   const [showEnvSettings, setShowEnvSettings] = useState(false);
 
   return (
     <>
-      <div style={topBarStyle}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: 1 }}>
+        <div style={{
+          ...topBarStyle,
+          padding: isMobile ? '0.6rem 0.9rem' : topBarStyle.padding,
+          height: isMobile ? 'auto' : topBarStyle.height,
+          flexWrap: isMobile ? 'wrap' : 'nowrap',
+          alignItems: isMobile ? 'stretch' : topBarStyle.alignItems,
+          gap: isMobile ? '0.6rem' : topBarStyle.gap
+        }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1, minWidth: 0 }}>
           <button onClick={onMenuClick} style={iconButtonStyle}>
             <Menu size={18} />
           </button>
 
-          {breadcrumbs.length > 1 ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          {breadcrumbs.length > 1 && !isMobile ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0, overflowX: 'auto' }}>
               {breadcrumbs.map((crumb, i) => (
                 <React.Fragment key={i}>
                   {i > 0 && <ChevronRight size={14} color={DESIGN_TOKENS.neutral[400]} />}
@@ -1228,7 +1241,7 @@ function TopBar({ user, onLogout, onMenuClick, searchQuery, onSearchChange, dark
               ))}
             </div>
           ) : (
-            <div style={searchBarStyle}>
+            <div style={{ ...searchBarStyle, maxWidth: isMobile ? 'none' : searchBarStyle.maxWidth }}>
               <Search size={16} color="#94a3b8" />
               <input
                 type="text"
@@ -1241,8 +1254,7 @@ function TopBar({ user, onLogout, onMenuClick, searchQuery, onSearchChange, dark
           )}
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          {/* SELECTOR DE ENTORNO - MOVIDO AQUÍ */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           <EnvironmentSelector 
             onCreateEnvironment={() => setShowCreateEnv(true)}
             onOpenSettings={() => setShowEnvSettings(true)}
