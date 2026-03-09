@@ -526,19 +526,19 @@ function LoginScreen({ onLogin }) {
           border-radius: 50%; filter: blur(80px); animation: float-complex 25s infinite linear reverse;
         }
         .main-container {
-          display: flex; 
-          width: 90%; 
-          max-width: 950px; 
-          min-height: 580px;
-          background: rgba(255, 255, 255, 0.02); 
-          backdrop-filter: blur(10px);
-          border-radius: 40px; 
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          overflow: hidden; 
-          z-index: 2; 
-          box-shadow: 0 50px 100px -20px rgba(0,0,0,0.5);
-          margin: 0 auto;
-        }
+        display: flex; 
+        width: 85%; 
+        max-width: 780px; 
+        min-height: 500px;
+        background: rgba(255, 255, 255, 0.02); 
+        backdrop-filter: blur(10px);
+        border-radius: 40px; 
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        overflow: hidden; 
+        z-index: 2; 
+        box-shadow: 0 50px 100px -20px rgba(0,0,0,0.5);
+        margin: 0 auto;
+      }
         .input-pro { 
           width: 100%; padding: 1.1rem 1.4rem; border-radius: 16px; border: 1px solid #e2e8f0; 
           background: #f8fafc; font-size: 1rem; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
