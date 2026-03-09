@@ -632,7 +632,7 @@ return (
             {/* TAB SWITCHER */}
             <div style={{
               display: 'flex', background: '#f1f5f9', borderRadius: '14px',
-              padding: '3px', margin: '0 0 1.0rem 0',
+              padding: '3px', margin: '0 auto 1.0rem auto',
               boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.06)',
               maxWidth: '260px',
             }}>
