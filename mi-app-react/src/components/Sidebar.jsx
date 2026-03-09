@@ -84,8 +84,8 @@ function Sidebar({ isOpen, activeView, onViewChange, projects, onProjectSelect, 
 
       <div style={{
         ...sidebarStyle,
-        width: isMobile ? (isOpen ? 'min(90vw, 320px)' : '0') : (collapsed ? 'clamp(60px, 6vw, 72px)' : 'clamp(220px, 18vw, 280px)'),
-        minWidth: isMobile ? (isOpen ? 'min(90vw, 320px)' : '0') : (collapsed ? 'clamp(60px, 6vw, 72px)' : 'clamp(220px, 18vw, 280px)'),
+        width: isMobile ? (isOpen ? 'min(90vw, 320px)' : '0') : (collapsed ? 'clamp(60px, 6vw, 72px)' : 'clamp(200px, 16vw, 260px)'),
+        minWidth: isMobile ? (isOpen ? 'min(90vw, 320px)' : '0') : (collapsed ? 'clamp(60px, 6vw, 72px)' : 'clamp(200px, 16vw, 260px)'),
         position: isMobile ? 'fixed' : 'sticky',
         top: '0',
         zIndex: isMobile ? 999 : 1,

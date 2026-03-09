@@ -547,7 +547,7 @@ function LoginScreen({ onLogin }) {
         
         {/* SECCIÓN BRANDING (Izquierda) */}
         <div className="branding-section" style={{
-          flex: '1.2', padding: '5rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+          flex: '1.2', padding: 'clamp(2.5rem, 5vw, 5rem)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
           borderRight: '1px solid rgba(255,255,255,0.05)', position: 'relative'
         }}>
           <div>
@@ -558,22 +558,22 @@ function LoginScreen({ onLogin }) {
               <h1 style={{ fontSize: '1.8rem', fontWeight: 900, color: 'white', margin: 0, letterSpacing: '-0.02em' }}>SEITRA</h1>
             </div>
 
-            <h2 style={{ fontSize: '2.2rem', fontWeight: 600, color: 'white', lineHeight: 1, margin: 0, letterSpacing: '-0.04em' }}>
+            <h2 style={{ fontSize: 'clamp(1.5rem, 2.8vw, 2.2rem)', fontWeight: 600, color: 'white', lineHeight: 1.1, margin: 0, letterSpacing: '-0.04em' }}>
                ¡Bienvenido al Centro de Mando!
             </h2>
-            <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '1.2rem', marginTop: '2rem', maxWidth: '500px', lineHeight: 1.6 }}>
+            <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 'clamp(0.95rem, 1.7vw, 1.2rem)', marginTop: '1.5rem', maxWidth: 'min(500px, 90vw)', lineHeight: 1.6 }}>
               Menos caos, más resultados. Accede para sincronizar tus objetivos y llevar tus proyectos al siguiente nivel.
             </p>
           </div>
 
-          <div style={{ display: 'flex', gap: '2rem' }}>
+          <div style={{ display: 'flex', gap: 'clamp(1rem, 3vw, 2rem)' }}>
              <div style={{ color: 'white' }}>
-               <h4 style={{ margin: 0, fontSize: '1.5rem' }}>+500</h4>
-               <p style={{ margin: 0, opacity: 0.5, fontSize: '0.8rem' }}>Proyectos Activos</p>
+               <h4 style={{ margin: 0, fontSize: 'clamp(1.1rem, 2.5vw, 1.5rem)' }}>+500</h4>
+               <p style={{ margin: 0, opacity: 0.5, fontSize: 'clamp(0.75rem, 1.4vw, 0.8rem)' }}>Proyectos Activos</p>
              </div>
              <div style={{ color: 'white' }}>
-               <h4 style={{ margin: 0, fontSize: '1.5rem' }}>99.9%</h4>
-               <p style={{ margin: 0, opacity: 0.5, fontSize: '0.8rem' }}>Productividad</p>
+               <h4 style={{ margin: 0, fontSize: 'clamp(1.1rem, 2.5vw, 1.5rem)' }}>99.9%</h4>
+               <p style={{ margin: 0, opacity: 0.5, fontSize: 'clamp(0.75rem, 1.4vw, 0.8rem)' }}>Productividad</p>
              </div>
           </div>
         </div>
@@ -581,7 +581,7 @@ function LoginScreen({ onLogin }) {
         {/* SECCIÓN LOGIN (Derecha - Más ancha y limpia) */}
         <div style={{
           flex: '1', backgroundColor: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          padding: '4rem'
+          padding: 'clamp(2rem, 4vw, 4rem)'
         }}>
           <div style={{ width: '100%', maxWidth: '460px' }}>
 
@@ -796,22 +796,56 @@ function MainApp({ user, onLogout, darkMode, toggleDarkMode }) {
 
 useEffect(() => {
   const handleResize = () => {
-    setIsMobile(window.innerWidth < 768);
-    setIsTablet(window.innerWidth >= 768 && window.innerWidth < 1024);
-    if (window.innerWidth < 768) {
-      setSidebarOpen(false);
+    const width = window.innerWidth;
+    setIsMobile(width < 768);
+    setIsTablet(width >= 768 && width < 1024);
+
+    // Ajuste automático del sidebar según el ancho
+    if (width < 768) {
+      setSidebarOpen(false); // móvil: cerrado por defecto
+    } else if (width < 1024) {
+      setSidebarOpen(false); // tablet: colapsado por defecto (solo iconos)
+    } else {
+      setSidebarOpen(true); // desktop: abierto
     }
   };
-  
+
   window.addEventListener('resize', handleResize);
   handleResize();
-  
+
   return () => window.removeEventListener('resize', handleResize);
 }, []);
+
+  function loadData() {
+    setProjects(storageGet(STORAGE_KEYS.PROJECTS) || []);
+    setTasks(storageGet(STORAGE_KEYS.TASKS) || []);
+    setUsers(storageGet(STORAGE_KEYS.USERS) || []);
+    setComments(storageGet(STORAGE_KEYS.COMMENTS) || []);
+    setTags(storageGet(STORAGE_KEYS.TAGS) || []);
+  }
+
+  function logActivity(type, description) {
+    const log = storageGet(STORAGE_KEYS.ACTIVITY_LOG) || [];
+    log.unshift({
+      id: Date.now(),
+      type,
+      description,
+      userId: user.id,
+      timestamp: new Date().toISOString()
+    });
+    storageSet(STORAGE_KEYS.ACTIVITY_LOG, log.slice(0, 100));
+  }
+
+  function saveProjects(newProjects) {
+    setProjects(newProjects);
+    storageSet(STORAGE_KEYS.PROJECTS, newProjects);
+    logActivity('projects_updated', `Proyectos actualizados`);
+  }
 
   useEffect(() => {
     loadData();
   }, []);
+
   // Migrar proyectos existentes para agregar roadmap
   useEffect(() => {
     const migrateProjects = () => {
@@ -834,20 +868,7 @@ useEffect(() => {
     if (projects.length > 0) {
       migrateProjects();
     }
-}, [projects.length]); // Solo ejecutar cuando cambie la cantidad de proyectos
-  const loadData = () => {
-    setProjects(storageGet(STORAGE_KEYS.PROJECTS) || []);
-    setTasks(storageGet(STORAGE_KEYS.TASKS) || []);
-    setUsers(storageGet(STORAGE_KEYS.USERS) || []);
-    setComments(storageGet(STORAGE_KEYS.COMMENTS) || []);
-    setTags(storageGet(STORAGE_KEYS.TAGS) || []);
-  };
-
-  const saveProjects = (newProjects) => {
-    setProjects(newProjects);
-    storageSet(STORAGE_KEYS.PROJECTS, newProjects);
-    logActivity('projects_updated', `Proyectos actualizados`);
-  };
+  }, [projects.length]); // Solo ejecutar cuando cambie la cantidad de proyectos
 
   const saveTasks = (newTasks) => {
     setTasks(newTasks);
@@ -858,18 +879,6 @@ useEffect(() => {
   const saveComments = (newComments) => {
     setComments(newComments);
     storageSet(STORAGE_KEYS.COMMENTS, newComments);
-  };
-
-  const logActivity = (type, description) => {
-    const log = storageGet(STORAGE_KEYS.ACTIVITY_LOG) || [];
-    log.unshift({
-      id: Date.now(),
-      type,
-      description,
-      userId: user.id,
-      timestamp: new Date().toISOString()
-    });
-    storageSet(STORAGE_KEYS.ACTIVITY_LOG, log.slice(0, 100));
   };
 
   const handleViewChange = (view, label) => {
@@ -4162,7 +4171,7 @@ const logoStyle = {
 };
 
 const brandingTitleStyle = {
-  fontSize: 'clamp(2.2rem, 4vw, 3.5rem)',
+  fontSize: 'clamp(2rem, 3.2vw, 2.7rem)',
   fontWeight: 800,
   margin: '0 0 1rem',
   letterSpacing: '-0.03em',
