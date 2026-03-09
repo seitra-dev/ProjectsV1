@@ -23,7 +23,7 @@ const sidebarLogoStyle = {
   display: 'flex',
   alignItems: 'center',
   gap: '0.85rem',
-  padding: 'clamp(1.25rem, 2.5vw, 2.5rem) clamp(1rem, 2.5vw, 1.5rem) clamp(1.25rem, 2.5vw, 2rem)',
+  padding: '40px 24px 32px',
 };
 
 // LÍNEAS DIVISORIAS ELEGANTES
@@ -84,12 +84,12 @@ function Sidebar({ isOpen, activeView, onViewChange, projects, onProjectSelect, 
 
       <div style={{
         ...sidebarStyle,
-        width: isMobile ? (isOpen ? 'min(90vw, 320px)' : '0') : (collapsed ? 'clamp(60px, 6vw, 72px)' : 'clamp(200px, 16vw, 260px)'),
-        minWidth: isMobile ? (isOpen ? 'min(90vw, 320px)' : '0') : (collapsed ? 'clamp(60px, 6vw, 72px)' : 'clamp(200px, 16vw, 260px)'),
+        width: isMobile ? (isOpen ? '280px' : '0') : (collapsed ? '72px' : '270px'),
+        minWidth: isMobile ? (isOpen ? '280px' : '0') : (collapsed ? '72px' : '270px'),
         position: isMobile ? 'fixed' : 'sticky',
         top: '0',
         zIndex: isMobile ? 999 : 1,
-        left: isMobile ? (isOpen ? 0 : '-100%') : 'auto',
+        left: isMobile ? (isOpen ? 0 : '-280px') : 'auto',
         transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
         overflow: 'hidden',
         height: '100vh',

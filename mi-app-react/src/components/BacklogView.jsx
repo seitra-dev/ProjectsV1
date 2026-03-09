@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ChevronDown, ChevronRight, Plus, Calendar, User, Flag, FolderOpen, X, GripVertical } from 'lucide-react';
-import { useApp } from '../context/AppContext';
+import { useApp } from '../context/AppContext-OLD';
 import { DESIGN_TOKENS } from '../styles/tokens';
 import {
   DndContext,

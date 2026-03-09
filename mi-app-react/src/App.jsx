@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { dbEnvironments, dbUsers } from './lib/database';
 
 import { 
   Plus, Search, Filter, Calendar, Users, ChevronDown, ChevronUp, ChevronRight,
@@ -20,7 +21,7 @@ import ProjectRoadmap from './components/ProjectRoadmap';
 import EnvironmentSelector from "./components/Enviroments/EnvironmentSelector";
 import CreateEnvironmentModal from "./components/Enviroments/CreateEnvironmentModal";
 import EnvironmentSettings from "./components/Enviroments/EnvironmentSettings";
-import { useApp } from './context/AppContext';
+import { AppProvider, useApp } from './context/AppContext';
 import TeamChatView from './components/TeamChatView';
 import ListView from './components/ListView';
 import LandingPage from './components/LandingPage';
@@ -67,7 +68,7 @@ function ToastContainer({ toasts, removeToast }) {
       display: 'flex',
       flexDirection: 'column',
       gap: '0.5rem',
-      maxWidth: 'min(400px, 90vw)'
+      maxWidth: '400px'
     }}>
       {toasts.map(toast => (
         <Toast key={toast.id} toast={toast} onClose={() => removeToast(toast.id)} />
@@ -105,7 +106,7 @@ function Toast({ toast, onClose }) {
       gap: '0.75rem',
       boxShadow: DESIGN_TOKENS.shadows.lg,
       animation: 'slideInRight 0.3s ease',
-      minWidth: 'min(300px, 90vw)'
+      minWidth: '300px'
     }}>
       <div style={{ color: style.text, display: 'flex', flexShrink: 0 }}>
         {icons[toast.type]}
@@ -231,9 +232,11 @@ const PRIORITY_OPTIONS = {
 // ============================================================================
 function App() {
   return (
-    <ToastProvider>
-      <AppContent />
-    </ToastProvider>
+    <AppProvider>
+      <ToastProvider>
+        <AppContent />
+      </ToastProvider>
+    </AppProvider>
   );
 }
 
@@ -247,9 +250,9 @@ function AppContent() {
 
   useEffect(() => {
     const initApp = () => {
-      if (!storageGet(STORAGE_KEYS.USERS)) storageSet(STORAGE_KEYS.USERS, []);
-      if (!storageGet(STORAGE_KEYS.PROJECTS)) storageSet(STORAGE_KEYS.PROJECTS, []);
-      if (!storageGet(STORAGE_KEYS.TASKS)) storageSet(STORAGE_KEYS.TASKS, []);
+      const users = storageGet(STORAGE_KEYS.USERS);
+      const projects = storageGet(STORAGE_KEYS.PROJECTS);
+      const tasks = storageGet(STORAGE_KEYS.TASKS);
       const comments = storageGet(STORAGE_KEYS.COMMENTS);
       if (!comments) storageSet(STORAGE_KEYS.COMMENTS, []);
 
@@ -351,7 +354,7 @@ if (isTransitioning) {
           100% { width: 100%; }
         }
         .loading-shape {
-          position: absolute; width: clamp(220px, 40vw, 600px); height: clamp(220px, 40vw, 600px);
+          position: absolute; width: 600px; height: 600px;
           border-radius: 50%; background: radial-gradient(circle, rgba(79, 70, 229, 0.2) 0%, transparent 70%);
           animation: orbit-sync 8s infinite linear;
         }
@@ -420,7 +423,7 @@ if (isTransitioning) {
 }
 
 // ============================================================================
-// SEITRA PREMIUM LOGIN - REDISEÑO DE PROPORCIONES Y COLOR ANIMADO
+// SEITRA LOGIN 
 // ============================================================================
 
 function LoginScreen({ onLogin }) {
@@ -509,33 +512,20 @@ function LoginScreen({ onLogin }) {
           66% { transform: translate(-20px, 20px) rotate(-5deg); }
         }
         .shape-1 { 
-          position: absolute; top: 15%; right: 25%;
-          width: clamp(250px, 25vw, 350px); height: clamp(250px, 25vw, 350px);
+          position: absolute; top: 15%; right: 25%; width: 350px; height: 350px; 
           background: linear-gradient(135deg, rgba(79, 70, 229, 0.4) 0%, transparent 80%);
           border-radius: 30% 70% 70% 30% / 30% 30% 70% 70%; filter: blur(60px); animation: float-complex 20s infinite linear;
         }
         .shape-2 { 
-          position: absolute; bottom: 10%; left: 20%;
-          width: clamp(280px, 30vw, 450px); height: clamp(280px, 30vw, 450px);
+          position: absolute; bottom: 10%; left: 20%; width: 450px; height: 450px; 
           background: linear-gradient(135deg, rgba(124, 205, 243, 0.3) 0%, transparent 80%);
           border-radius: 50%; filter: blur(80px); animation: float-complex 25s infinite linear reverse;
         }
         .main-container {
-          display: flex;
-          width: min(95vw, 1080px);
-          max-width: 1080px;
-          max-height: calc(100vh - 3.5rem);
-          min-height: 420px;
-          background: rgba(255, 255, 255, 0.02);
-          backdrop-filter: blur(10px);
-          border-radius: 40px;
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          overflow: hidden;
-          z-index: 2;
-          box-shadow: 0 50px 100px -20px rgba(0,0,0,0.5);
-        }
-        .main-container > * {
-          min-width: 0;
+          display: flex; width: 100%; max-width: 1280px; min-height: 750px;
+          background: rgba(255, 255, 255, 0.02); backdrop-filter: blur(10px);
+          border-radius: 40px; border: 1px solid rgba(255, 255, 255, 0.1);
+          overflow: hidden; z-index: 2; box-shadow: 0 50px 100px -20px rgba(0,0,0,0.5);
         }
         .input-pro { 
           width: 100%; padding: 1.1rem 1.4rem; border-radius: 16px; border: 1px solid #e2e8f0; 
@@ -546,22 +536,7 @@ function LoginScreen({ onLogin }) {
           border-color: #0f172a; background: white; 
           box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); outline: none;
         }
-        @media (max-width: 1024px) {
-          .main-container {
-            width: min(92vw, 680px);
-            max-height: calc(100vh - 3rem);
-          }
-        }
-        @media (max-width: 900px) {
-          .main-container {
-            flex-direction: column;
-            width: min(94vw, 520px);
-            max-height: calc(100vh - 2.5rem);
-          }
-          .branding-section {
-            display: none;
-          }
-        }
+        @media (max-width: 1024px) { .branding-section { display: none !important; } }
       `}</style>
 
       {/* --- CONTENEDOR MAESTRO --- */}
@@ -569,8 +544,8 @@ function LoginScreen({ onLogin }) {
         
         {/* SECCIÓN BRANDING (Izquierda) */}
         <div className="branding-section" style={{
-          flex: '1.2', padding: 'clamp(2rem, 5vw, 4rem)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
-          borderRight: '1px solid rgba(255,255,255,0.05)', position: 'relative', minWidth: 0
+          flex: '1.2', padding: '5rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+          borderRight: '1px solid rgba(255,255,255,0.05)', position: 'relative'
         }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '4rem' }}>
@@ -580,22 +555,22 @@ function LoginScreen({ onLogin }) {
               <h1 style={{ fontSize: '1.8rem', fontWeight: 900, color: 'white', margin: 0, letterSpacing: '-0.02em' }}>SEITRA</h1>
             </div>
 
-            <h2 style={{ fontSize: 'clamp(1.5rem, 2.8vw, 2.2rem)', fontWeight: 600, color: 'white', lineHeight: 1.1, margin: 0, letterSpacing: '-0.04em' }}>
+            <h2 style={{ fontSize: '2.2rem', fontWeight: 600, color: 'white', lineHeight: 1, margin: 0, letterSpacing: '-0.04em' }}>
                ¡Bienvenido al Centro de Mando!
             </h2>
-            <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 'clamp(0.95rem, 1.7vw, 1.2rem)', marginTop: '1.5rem', maxWidth: 'min(500px, 90vw)', lineHeight: 1.6 }}>
+            <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '1.2rem', marginTop: '2rem', maxWidth: '500px', lineHeight: 1.6 }}>
               Menos caos, más resultados. Accede para sincronizar tus objetivos y llevar tus proyectos al siguiente nivel.
             </p>
           </div>
 
-          <div style={{ display: 'flex', gap: 'clamp(1rem, 3vw, 2rem)' }}>
+          <div style={{ display: 'flex', gap: '2rem' }}>
              <div style={{ color: 'white' }}>
-               <h4 style={{ margin: 0, fontSize: 'clamp(1.1rem, 2.5vw, 1.5rem)' }}>+500</h4>
-               <p style={{ margin: 0, opacity: 0.5, fontSize: 'clamp(0.75rem, 1.4vw, 0.8rem)' }}>Proyectos Activos</p>
+               <h4 style={{ margin: 0, fontSize: '1.5rem' }}>+500</h4>
+               <p style={{ margin: 0, opacity: 0.5, fontSize: '0.8rem' }}>Proyectos Activos</p>
              </div>
              <div style={{ color: 'white' }}>
-               <h4 style={{ margin: 0, fontSize: 'clamp(1.1rem, 2.5vw, 1.5rem)' }}>99.9%</h4>
-               <p style={{ margin: 0, opacity: 0.5, fontSize: 'clamp(0.75rem, 1.4vw, 0.8rem)' }}>Productividad</p>
+               <h4 style={{ margin: 0, fontSize: '1.5rem' }}>99.9%</h4>
+               <p style={{ margin: 0, opacity: 0.5, fontSize: '0.8rem' }}>Productividad</p>
              </div>
           </div>
         </div>
@@ -603,7 +578,7 @@ function LoginScreen({ onLogin }) {
         {/* SECCIÓN LOGIN (Derecha - Más ancha y limpia) */}
         <div style={{
           flex: '1', backgroundColor: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          padding: 'clamp(1.5rem, 4vw, 3.5rem)'
+          padding: '4rem'
         }}>
           <div style={{ width: '100%', maxWidth: '460px' }}>
 
@@ -633,10 +608,6 @@ function LoginScreen({ onLogin }) {
                 <line x1="2" y1="30" x2="11" y2="29.5" stroke="#555" strokeWidth="0.8" strokeLinecap="round"/>
                 <line x1="34" y1="27" x2="25" y2="28.5" stroke="#555" strokeWidth="0.8" strokeLinecap="round"/>
                 <line x1="34" y1="30" x2="25" y2="29.5" stroke="#555" strokeWidth="0.8" strokeLinecap="round"/>
-                {/* cuerpo */}
-                <ellipse cx="18" cy="49" rx="13" ry="10" fill="#1e1e1e"/>
-                {/* brazo izquierdo (descansando) */}
-                <ellipse cx="6" cy="46" rx="4" ry="3" fill="#1e1e1e" transform="rotate(20 6 46)"/>
                 {/* brazo derecho levantado */}
                 <path d="M28 38 Q34 28 40 22" stroke="#1e1e1e" strokeWidth="5" fill="none" strokeLinecap="round"/>
                 {/* manita levantada */}
@@ -644,17 +615,12 @@ function LoginScreen({ onLogin }) {
                 <circle cx="38" cy="16" r="2.2" fill="#1e1e1e"/>
                 <circle cx="41" cy="15" r="2.2" fill="#1e1e1e"/>
                 <circle cx="44" cy="16" r="2.2" fill="#1e1e1e"/>
-                {/* patitas */}
-                <ellipse cx="11" cy="58" rx="5" ry="3" fill="#1e1e1e"/>
-                <ellipse cx="24" cy="58" rx="5" ry="3" fill="#1e1e1e"/>
-                {/* cola */}
-                <path d="M31 54 Q44 50 42 39" stroke="#1e1e1e" strokeWidth="4" fill="none" strokeLinecap="round"/>
               </svg>
               <div>
-                <h2 style={{ margin: 0, fontSize: '1.6rem', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.5px', lineHeight: 1.1 }}>
-                  {isLogin ? 'Bienvenido de vuelta' : 'Bienvenido'}
+                <h2 style={{ margin: 0, fontSize: '0.6 rem', fontWeight: 700, color: '#0f172a', letterSpacing: '-0.5px', lineHeight: 1.1 }}>
+                  {isLogin ? 'Entra a tu espacio de trabajo' : 'Tu productividad comienza aquí'}
                 </h2>
-                <p style={{ margin: '4px 0 0', fontSize: '0.875rem', color: '#94a3b8', fontWeight: 500 }}>
+                <p style={{ margin: '4px 0 0', fontSize: '0.875rem', color: '#94a3b8', fontWeight: 400 }}>
                   {isLogin ? 'Nos alegra verte de nuevo por aquí.' : 'Crea tu cuenta y empieza hoy.'}
                 </p>
               </div>
@@ -677,7 +643,7 @@ function LoginScreen({ onLogin }) {
                     flex: 1, padding: '0.8rem 1rem', borderRadius: '14px', border: 'none',
                     background: isLogin === mode ? 'white' : 'transparent',
                     color: isLogin === mode ? '#0f172a' : '#94a3b8',
-                    fontWeight: isLogin === mode ? 700 : 500,
+                    fontWeight: isLogin === mode ? 600 : 300,
                     fontSize: '0.95rem', cursor: 'pointer',
                     transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                     boxShadow: isLogin === mode ? '0 2px 12px rgba(15,23,42,0.1)' : 'none',
@@ -810,62 +776,30 @@ function MainApp({ user, onLogout, darkMode, toggleDarkMode }) {
   const [breadcrumbs, setBreadcrumbs] = useState([{ label: 'Dashboard', view: 'dashboard' }]);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const { addToast } = useToast();
-  const listIdRef = useRef(Date.now());
   const [showProjectManagement, setShowProjectManagement] = useState(false);
+  const [selectedProjectForManagement, setSelectedProjectForManagement] = useState(null);
 
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [isTablet, setIsTablet] = useState(window.innerWidth >= 768 && window.innerWidth < 1024);
 
 useEffect(() => {
   const handleResize = () => {
-    const width = window.innerWidth;
-    setIsMobile(width < 768);
-
-    // Ajuste automático del sidebar según el ancho
-    if (width < 768) {
-      setSidebarOpen(false); // móvil: cerrado por defecto
-    } else if (width < 1024) {
-      setSidebarOpen(false); // tablet: colapsado por defecto (solo iconos)
-    } else {
-      setSidebarOpen(true); // desktop: abierto
+    setIsMobile(window.innerWidth < 768);
+    setIsTablet(window.innerWidth >= 768 && window.innerWidth < 1024);
+    if (window.innerWidth < 768) {
+      setSidebarOpen(false);
     }
   };
-
+  
   window.addEventListener('resize', handleResize);
   handleResize();
-
+  
   return () => window.removeEventListener('resize', handleResize);
 }, []);
-
-  function loadData() {
-    setProjects(storageGet(STORAGE_KEYS.PROJECTS) || []);
-    setTasks(storageGet(STORAGE_KEYS.TASKS) || []);
-    setUsers(storageGet(STORAGE_KEYS.USERS) || []);
-    setComments(storageGet(STORAGE_KEYS.COMMENTS) || []);
-    setTags(storageGet(STORAGE_KEYS.TAGS) || []);
-  }
-
-  function logActivity(type, description) {
-    const log = storageGet(STORAGE_KEYS.ACTIVITY_LOG) || [];
-    log.unshift({
-      id: Date.now(),
-      type,
-      description,
-      userId: user.id,
-      timestamp: new Date().toISOString()
-    });
-    storageSet(STORAGE_KEYS.ACTIVITY_LOG, log.slice(0, 100));
-  }
-
-  function saveProjects(newProjects) {
-    setProjects(newProjects);
-    storageSet(STORAGE_KEYS.PROJECTS, newProjects);
-    logActivity('projects_updated', `Proyectos actualizados`);
-  }
 
   useEffect(() => {
     loadData();
   }, []);
-
   // Migrar proyectos existentes para agregar roadmap
   useEffect(() => {
     const migrateProjects = () => {
@@ -888,8 +822,20 @@ useEffect(() => {
     if (projects.length > 0) {
       migrateProjects();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projects.length]); // Solo ejecutar cuando cambie la cantidad de proyectos
+}, [projects.length]); // Solo ejecutar cuando cambie la cantidad de proyectos
+  const loadData = () => {
+    setProjects(storageGet(STORAGE_KEYS.PROJECTS) || []);
+    setTasks(storageGet(STORAGE_KEYS.TASKS) || []);
+    setUsers(storageGet(STORAGE_KEYS.USERS) || []);
+    setComments(storageGet(STORAGE_KEYS.COMMENTS) || []);
+    setTags(storageGet(STORAGE_KEYS.TAGS) || []);
+  };
+
+  const saveProjects = (newProjects) => {
+    setProjects(newProjects);
+    storageSet(STORAGE_KEYS.PROJECTS, newProjects);
+    logActivity('projects_updated', `Proyectos actualizados`);
+  };
 
   const saveTasks = (newTasks) => {
     setTasks(newTasks);
@@ -900,6 +846,18 @@ useEffect(() => {
   const saveComments = (newComments) => {
     setComments(newComments);
     storageSet(STORAGE_KEYS.COMMENTS, newComments);
+  };
+
+  const logActivity = (type, description) => {
+    const log = storageGet(STORAGE_KEYS.ACTIVITY_LOG) || [];
+    log.unshift({
+      id: Date.now(),
+      type,
+      description,
+      userId: user.id,
+      timestamp: new Date().toISOString()
+    });
+    storageSet(STORAGE_KEYS.ACTIVITY_LOG, log.slice(0, 100));
   };
 
   const handleViewChange = (view, label) => {
@@ -919,8 +877,8 @@ useEffect(() => {
   };
 
   const handleOpenProjectManagement = (project) => {
+    setSelectedProjectForManagement(project);
     setShowProjectManagement(true);
-    addToast(`Gestión de proyecto "${project.name}" próximamente`, 'info');
   };
 
   const handleProjectUpdate = (updatedProject) => {
@@ -1128,7 +1086,7 @@ useEffect(() => {
 
           {activeView === 'list' && (
             <ListView 
-              listId={listIdRef.current}
+              listId={Date.now()}
               listName={breadcrumbs[breadcrumbs.length - 1]?.label || 'Lista'}
               tasks={tasks}
               projects={projects}
@@ -1164,6 +1122,8 @@ useEffect(() => {
               tasks={tasks}
               onTasksChange={saveTasks}
               users={users}
+              comments={comments}
+              onCommentsChange={saveComments}
               tags={tags}
               onTaskClick={handleTaskClick}
               onProjectUpdate={handleProjectUpdate} 
@@ -1221,23 +1181,9 @@ useEffect(() => {
         />
       )}
 
-      {showProjectManagement && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000 }}>
-          <div style={{ width: 'min(460px, 90vw)', padding: '1.75rem', borderRadius: '18px', background: 'white', boxShadow: '0 24px 80px rgba(0,0,0,0.35)' }}>
-            <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: '#0f172a' }}>Gestión de proyecto</h3>
-            <p style={{ margin: '0.75rem 0 0', color: '#475569', lineHeight: 1.5 }}>
-              Esta vista aún no está disponible. Pronto podrás manejar la configuración y detalles avanzados del proyecto desde aquí.
-            </p>
-            <button
-              onClick={() => setShowProjectManagement(false)}
-              style={{ marginTop: '1.5rem', padding: '0.75rem 1rem', borderRadius: '12px', border: 'none', background: '#6366f1', color: 'white', cursor: 'pointer' }}
-            >
-              Cerrar
-            </button>
-          </div>
-        </div>
+      {showShortcuts && (
+        <KeyboardShortcutsModal onClose={() => setShowShortcuts(false)} />
       )}
-
       {showShortcuts && (
         <KeyboardShortcutsModal onClose={() => setShowShortcuts(false)} />
       )}
@@ -1349,17 +1295,6 @@ function TopBar({ user, onLogout, onMenuClick, searchQuery, onSearchChange, dark
             <Moon size={13} style={{ color: darkMode ? '#818cf8' : '#64748b', transition: 'color 0.3s', flexShrink: 0 }} />
           </div>
 
-          {user && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', paddingLeft: '0.5rem' }}>
-              <div style={{ width: '34px', height: '34px', borderRadius: '12px', background: 'rgba(15,23,42,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: '#0f172a' }}>
-                {(user.name || user.email || 'U').charAt(0).toUpperCase()}
-              </div>
-              <span style={{ fontSize: '0.85rem', color: '#475569', maxWidth: '120px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {user.name || user.email}
-              </span>
-            </div>
-          )}
-
           <button onClick={onLogout} style={iconButtonStyle} title="Cerrar sesión"
             onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.07)'; e.currentTarget.style.color = '#dc2626'; }}
             onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = '#64748b'; }}>
@@ -1383,56 +1318,61 @@ function TopBar({ user, onLogout, onMenuClick, searchQuery, onSearchChange, dark
 }
 
 // ============================================================================
-// DASHBOARD VIEW
+// DASHBOARD VIEW - CORREGIDA
 // ============================================================================
-function DashboardView({ user, tasks, projects, onTaskClick, onProjectSelect }) {
-  const myTasks = tasks.filter(t => t.assigneeId === user.id);
+function DashboardView({ user, tasks = [], projects = [], onTaskClick, onProjectSelect }) {
+  // Blindaje de seguridad: Si tasks o projects llegan undefined, usamos array vacío
+  const myTasks = (tasks || []).filter(t => t.assigneeId === user?.id);
+  
   const overdueTasks = myTasks.filter(t => 
     new Date(t.endDate) < new Date() && t.status !== 'completed'
   );
+  
   const todayTasks = myTasks.filter(t => {
     const today = new Date().toDateString();
-    return new Date(t.endDate).toDateString() === today && t.status !== 'completed';
+    return t.endDate && new Date(t.endDate).toDateString() === today && t.status !== 'completed';
   });
+  
   const upcomingTasks = myTasks.filter(t => {
     const days = Math.ceil((new Date(t.endDate) - new Date()) / (1000 * 60 * 60 * 24));
     return days > 0 && days <= 7 && t.status !== 'completed';
   });
+  
   const completedTasks = myTasks.filter(t => t.status === 'completed');
-
-  const activeProjects = projects.filter(p => p.status === 'active');
+  const activeProjects = (projects || []).filter(p => p.status === 'active');
 
   return (
-    <div style={{ padding: 'clamp(1rem, 2.5vw, 2rem)' }}>
-      <div style={{ marginBottom: 'clamp(1.25rem, 2.5vw, 2rem)' }}>
-        <h1 style={{ fontSize: 'clamp(1.4rem, 2.6vw, 1.75rem)', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 0.4rem', letterSpacing: '-0.5px' }}>
-          {user.isNew ? 'Bienvenido' : 'Bienvenido de vuelta'}, {(user.name || user.email || 'Usuario').split(' ')[0]}
+    <div style={{ padding: '2rem' }}>
+      <div style={{ marginBottom: '2rem' }}>
+        <h1 style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 0.4rem', letterSpacing: '-0.5px' }}>
+          {/* CORRECCIÓN: Todo dentro de llaves para que se ejecute el código */}
+          {user?.isNew ? 'Bienvenido' : 'Bienvenido de vuelta'}, {(user?.name || user?.email || 'Usuario').split(' ')[0]}
         </h1>
-        <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: 'clamp(0.85rem, 1.6vw, 0.9375rem)', fontWeight: 500 }}>
+        <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '0.9375rem', fontWeight: 500 }}>
           Aquí está tu resumen del día
         </p>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 'clamp(1rem, 2vw, 1.5rem)', marginBottom: '3rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.5rem', marginBottom: '3rem' }}>
         <StatCard 
-          label="  Vencidas HOY" 
+          label="Vencidas HOY" 
           value={todayTasks.length} 
           color={DESIGN_TOKENS.warning.base}
           icon={<Clock size={20} />}
           trend="+2 desde ayer"
         />
         <StatCard 
-          label=" Esta Semana" 
+          label="Esta Semana" 
           value={upcomingTasks.length} 
           color={DESIGN_TOKENS.info.base}
           icon={<Calendar size={20} />}
         />
         <StatCard 
-          label=" Completadas" 
+          label="Completadas" 
           value={completedTasks.length} 
           color={DESIGN_TOKENS.success.base}
           icon={<CheckCircle2 size={20} />}
-          trend={`${Math.round((completedTasks.length / myTasks.length) * 100)}% del total`}
+          trend={myTasks.length > 0 ? `${Math.round((completedTasks.length / myTasks.length) * 100)}% del total` : "0% del total"}
         />
         <StatCard 
           label="Proyectos Activos" 
@@ -1444,21 +1384,21 @@ function DashboardView({ user, tasks, projects, onTaskClick, onProjectSelect }) 
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '2rem', marginBottom: '3rem' }}>
         <TaskSection
-          title=" Tareas Vencidas"
+          title="Tareas Vencidas"
           count={overdueTasks.length}
           tasks={overdueTasks.slice(0, 5)}
           onTaskClick={onTaskClick}
           emptyMessage="¡Genial! No hay tareas vencidas"
         />
         <TaskSection
-          title=" Para Hoy"
+          title="Para Hoy"
           count={todayTasks.length}
           tasks={todayTasks.slice(0, 5)}
           onTaskClick={onTaskClick}
           emptyMessage="No hay tareas pendientes para hoy"
         />
         <TaskSection
-          title=" Próxima Semana"
+          title="Próxima Semana"
           count={upcomingTasks.length}
           tasks={upcomingTasks.slice(0, 5)}
           onTaskClick={onTaskClick}
@@ -2002,7 +1942,7 @@ function ProjectCardExtended({ project, onClick, onToggleFavorite, onDuplicate, 
           borderRadius: DESIGN_TOKENS.border.radius.sm,
           boxShadow: DESIGN_TOKENS.shadows.xl,
           zIndex: 10,
-          minWidth: 'min(220px, 80vw)',
+          minWidth: '180px',
           overflow: 'hidden',
           animation: 'menuFadeIn 0.15s ease'
         }}>
@@ -2010,7 +1950,7 @@ function ProjectCardExtended({ project, onClick, onToggleFavorite, onDuplicate, 
             onClick={(e) => { 
               e.stopPropagation(); 
               setShowMenu(false);
-              onDuplicate();
+              onOpenManagement(); 
             }}
             style={menuItemStyle}
           >
@@ -2057,7 +1997,7 @@ function ProjectCardExtended({ project, onClick, onToggleFavorite, onDuplicate, 
 // ============================================================================
 // PROJECT DETAIL VIEW
 // ============================================================================
-function ProjectDetailView({ project, tasks, onTasksChange, users, tags, onTaskClick, onProjectUpdate }) {
+function ProjectDetailView({ project, tasks, onTasksChange, users, comments, onCommentsChange, tags, onTaskClick, onProjectUpdate }) {
   const [viewMode, setViewMode] = useState('list');
   const [showNewTask, setShowNewTask] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
@@ -2735,7 +2675,7 @@ function GanttView({ tasks, project }) {
       overflow: 'auto',
       boxShadow: DESIGN_TOKENS.shadows.sm
     }}>
-      <div style={{ minWidth: '100%' }}>
+      <div style={{ minWidth: '800px' }}>
         {tasks.filter(t => !t.parentId).map(task => {
           const pos = getTaskPosition(task);
           return (
@@ -2749,8 +2689,8 @@ function GanttView({ tasks, project }) {
               }}
             >
               <div style={{
-                minWidth: 'clamp(180px, 20vw, 250px)',
-                padding: 'clamp(0.75rem, 1.5vw, 1rem)',
+                minWidth: '250px',
+                padding: '1rem',
                 borderRight: `1px solid ${DESIGN_TOKENS.neutral[200]}`,
                 background: DESIGN_TOKENS.neutral[50]
               }}>
@@ -3114,17 +3054,17 @@ function AnalyticsView({ tasks, projects, users }) {
     : 0;
 
   return (
-    <div style={{ padding: 'clamp(1rem, 2.5vw, 2rem)' }}>
-      <div style={{ marginBottom: 'clamp(1.25rem, 2.5vw, 2rem)' }}>
-        <h2 style={{ fontSize: 'clamp(1.4rem, 2.6vw, 1.75rem)', fontWeight: 800, margin: '0 0 0.5rem', color: DESIGN_TOKENS.neutral[800] }}>
+    <div style={{ padding: '2rem' }}>
+      <div style={{ marginBottom: '2rem' }}>
+        <h2 style={{ fontSize: '1.75rem', fontWeight: 800, margin: '0 0 0.5rem', color: DESIGN_TOKENS.neutral[800] }}>
           Analítica y Reportes
         </h2>
-        <p style={{ color: DESIGN_TOKENS.neutral[600], margin: 0, fontSize: 'clamp(0.85rem, 1.6vw, 0.9375rem)' }}>
+        <p style={{ color: DESIGN_TOKENS.neutral[600], margin: 0 }}>
           Resumen general del rendimiento
         </p>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 'clamp(1rem, 2vw, 1.5rem)', marginBottom: '3rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.5rem', marginBottom: '3rem' }}>
         <AnalyticsCard
           label="Total de Tareas"
           value={tasks.length}
@@ -3196,14 +3136,14 @@ function AnalyticsCard({ label, value, subtitle, icon, color }) {
           {icon}
         </div>
       </div>
-      <div style={{ fontSize: 'clamp(1.8rem, 3vw, 2.5rem)', fontWeight: 800, color, marginBottom: '0.5rem' }}>
+      <div style={{ fontSize: '2.5rem', fontWeight: 800, color, marginBottom: '0.5rem' }}>
         {value}
       </div>
-      <div style={{ fontSize: 'clamp(0.8rem, 1.6vw, 0.875rem)', color: DESIGN_TOKENS.neutral[600], fontWeight: 600, marginBottom: '0.25rem' }}>
+      <div style={{ fontSize: '0.875rem', color: DESIGN_TOKENS.neutral[600], fontWeight: 600, marginBottom: '0.25rem' }}>
         {label}
       </div>
       {subtitle && (
-        <div style={{ fontSize: 'clamp(0.7rem, 1.4vw, 0.75rem)', color: DESIGN_TOKENS.neutral[500] }}>
+        <div style={{ fontSize: '0.75rem', color: DESIGN_TOKENS.neutral[500] }}>
           {subtitle}
         </div>
       )}
@@ -3312,8 +3252,11 @@ function TaskDetailModal({ task, project, users, comments, onClose, onUpdate, on
   const [editedTask, setEditedTask] = useState(task);
   const [newComment, setNewComment] = useState('');
   const [showHistory, setShowHistory] = useState(false);
+  const { addToast } = useToast();
 
-const handleSave = () => {
+  const assignee = users.find(u => u.id === task.assigneeId);
+
+  const handleSave = () => {
     onUpdate(editedTask);
     setIsEditing(false);
   };
@@ -3738,7 +3681,7 @@ function ProjectFormModal({ users, onSave, onClose }) {
                       ? p.members.filter(id => id !== u.id)
                       : [...p.members, u.id]
                   }))}
-                  style={{ width: 18, height: 18, cursor: 'pointer', accentColor: DESIGN_TOKENS.primary.base }}
+                  style={checkboxStyle}
                 />
                 <div style={{
                   width: '28px', height: '28px', borderRadius: '8px',
@@ -4132,12 +4075,223 @@ function FormField({ label, required, children, error }) {
 // ============================================================================
 // STYLES
 // ============================================================================
-const dashboardContainerStyle = {
+const animationStyles = `
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes fadeInUp {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes slideUp {
+    from {
+      transform: translateY(30px);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+
+  @keyframes slideInRight {
+    from {
+      opacity: 0;
+      transform: translateX(30px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-5px); }
+    75% { transform: translateX(5px); }
+  }
+`;
+
+const loginContainerStyle = {
   minHeight: '100vh',
+  display: 'flex',
+  background: '#FFFFFF',
+  fontFamily: DESIGN_TOKENS.typography.fontFamily
+};
+
+const brandingSectionStyle = {
+  flex: 1,
+  background: DESIGN_TOKENS.gradients.primary,
+  display: 'flex',
+  flexDirection: 'column',
+  justifyContent: 'center',
+  alignItems: 'center',
+  padding: '4rem 3rem',
+  color: 'white'
+};
+
+const brandingContentStyle = {
+  maxWidth: '500px',
+  animation: 'fadeInUp 0.8s ease forwards'
+};
+
+const logoStyle = {
+  marginBottom: '1.5rem'
+};
+
+const brandingTitleStyle = {
+  fontSize: '3.5rem',
+  fontWeight: 800,
+  margin: '0 0 1rem',
+  letterSpacing: '-0.03em',
+  lineHeight: 1.2,
+  color: 'white'
+};
+
+const brandingDescStyle = {
+  fontSize: '1.125rem',
+  opacity: 0.9,
+  lineHeight: 1.8,
+  marginBottom: '2.5rem',
+  color: 'rgba(255,255,255,0.9)'
+};
+
+const featureListStyle = {
+  display: 'flex',
+  flexDirection: 'column'
+};
+
+const formSectionStyle = {
   width: '100%',
-  maxWidth: 'min(1200px, 100vw)',
-  margin: '0 auto',
-  padding: '0 1rem',
+  maxWidth: '480px',
+  background: DESIGN_TOKENS.neutral[50],
+  display: 'flex',
+  flexDirection: 'column',
+  justifyContent: 'center',
+  alignItems: 'center',
+  padding: '3rem',
+  boxShadow: DESIGN_TOKENS.shadows.xl
+};
+
+const formContentStyle = {
+  width: '100%',
+  maxWidth: '400px'
+};
+
+const tabsContainerStyle = {
+  display: 'flex',
+  gap: '1rem',
+  marginBottom: '2rem',
+  borderBottom: `1px solid ${DESIGN_TOKENS.neutral[200]}`
+};
+
+const tabStyle = {
+  background: 'none',
+  border: 'none',
+  fontSize: '0.875rem',
+  fontWeight: 600,
+  cursor: 'pointer',
+  padding: '0.75rem 0',
+  transition: 'all 0.3s ease',
+  textTransform: 'uppercase',
+  letterSpacing: '0.5px'
+};
+
+const formTitleStyle = {
+  fontSize: '1.75rem',
+  fontWeight: 800,
+  color: DESIGN_TOKENS.neutral[800],
+  margin: '0 0 0.5rem',
+  letterSpacing: '-0.01em'
+};
+
+const formSubtitleStyle = {
+  fontSize: '0.875rem',
+  color: DESIGN_TOKENS.neutral[500],
+  margin: '0 0 1.5rem'
+};
+
+const formStyle = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '0'
+};
+
+const errorAlertStyle = {
+  padding: '0.875rem 1rem',
+  background: DESIGN_TOKENS.danger.light,
+  border: `1px solid ${DESIGN_TOKENS.danger.base}30`,
+  borderLeft: `4px solid ${DESIGN_TOKENS.danger.base}`,
+  borderRadius: '8px',
+  color: DESIGN_TOKENS.danger.dark,
+  fontSize: '0.875rem',
+  marginBottom: '1.5rem',
+  display: 'flex',
+  alignItems: 'flex-start',
+  gap: '0.75rem'
+};
+
+const checkboxStyle = {
+  width: '18px',
+  height: '18px',
+  cursor: 'pointer',
+  accentColor: DESIGN_TOKENS.primary.base
+};
+
+const submitButtonStyle = {
+  width: '100%',
+  padding: '0.875rem 1rem',
+  background: DESIGN_TOKENS.gradients.primary,
+  color: 'white',
+  border: 'none',
+  borderRadius: '8px',
+  fontSize: '0.95rem',
+  fontWeight: 600,
+  cursor: 'pointer',
+  marginTop: '1.5rem',
+  transition: 'all 0.3s ease',
+  boxShadow: `0 4px 12px ${DESIGN_TOKENS.primary.base}40`
+};
+
+const demoBoxStyle = {
+  marginTop: '2rem',
+  padding: '1rem',
+  background: DESIGN_TOKENS.primary.lightest,
+  border: `1px solid ${DESIGN_TOKENS.primary.lighter}`,
+  borderRadius: '8px'
+};
+
+const passwordToggleStyle = {
+  position: 'absolute',
+  right: '0.75rem',
+  top: '50%',
+  transform: 'translateY(-50%)',
+  background: 'none',
+  border: 'none',
+  color: DESIGN_TOKENS.neutral[400],
+  cursor: 'pointer',
+  display: 'flex',
+  padding: '0.5rem'
+};
+
+const dashboardContainerStyle = {
+  height: '100vh',
+  width: '100vw',
   display: 'flex',
   overflow: 'hidden',
   background: 'var(--bg-base)',
@@ -4147,7 +4301,6 @@ const dashboardContainerStyle = {
 
 const mainContentWrapperStyle = {
   flex: 1,
-  minWidth: 0,
   display: 'flex',
   flexDirection: 'column',
   overflow: 'hidden'
@@ -4158,7 +4311,7 @@ const topBarStyle = {
   backdropFilter: 'blur(20px)',
   WebkitBackdropFilter: 'blur(20px)',
   borderBottom: '1px solid var(--border)',
-  padding: '0 clamp(1rem, 2.5vw, 2rem)',
+  padding: '0 2rem',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'space-between',
@@ -4172,7 +4325,7 @@ const topBarStyle = {
 
 const searchBarStyle = {
   flex: 1,
-  maxWidth: 'min(460px, 100%)',
+  maxWidth: '460px',
   display: 'flex',
   alignItems: 'center',
   background: 'var(--bg-input)',
@@ -4209,7 +4362,6 @@ const iconButtonStyle = {
 
 const contentAreaStyle = {
   flex: 1,
-  minWidth: 0,
   overflow: 'auto',
   background: 'var(--bg-base)',
   transition: 'background 0.4s ease'
