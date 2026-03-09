@@ -631,9 +631,9 @@ return (
 
             {/* TAB SWITCHER */}
             <div style={{
-              display: 'flex', background: '#191a1b', borderRadius: '14px',
+              display: 'flex', background: '#f7f7f7', borderRadius: '14px',
               padding: '3px', margin: '0 auto 1.0rem auto',
-              boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.06)',
+              boxShadow: 'inset 0 1px 3px rgba(0, 0, 0, 0.58)',
               maxWidth: '260px',
             }}>
               {[{ label: 'Iniciar sesión', mode: true }, { label: 'Registrarse', mode: false }].map(({ label, mode }) => (
