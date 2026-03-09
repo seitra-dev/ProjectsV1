@@ -490,7 +490,7 @@ function LoginScreen({ onLogin }) {
 
   return (
     <div style={{
-      minHeight: '100vh', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+      minHeight: '100%', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
       backgroundColor: '#0a0f1e', fontFamily: 'Inter, system-ui, sans-serif', overflow: 'hidden', position: 'relative',
       padding: '2rem'
     }}>
@@ -498,7 +498,7 @@ function LoginScreen({ onLogin }) {
       <div style={{
         position: 'absolute', inset: 0,
         backgroundImage: 'url(https://images.unsplash.com/photo-1497215728101-856f4ea42174?q=80&w=2070&auto=format&fit=crop)',
-        backgroundSize: 'cover', backgroundPosition: 'center', zIndex: 0, opacity: 0.6
+        backgroundSize: 'contain', backgroundPosition: 'center', zIndex: 0, opacity: 0.6
       }}>
         <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at 30% 50%, rgba(15, 23, 42, 0.4) 0%, rgba(10, 15, 30, 0.95) 100%)' }} />
       </div>
