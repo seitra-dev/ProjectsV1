@@ -526,7 +526,7 @@ function LoginScreen({ onLogin }) {
           border-radius: 50%; filter: blur(80px); animation: float-complex 25s infinite linear reverse;
         }
         .main-container {
-          display: flex; width: 90%; max-width: 1000px; min-height: 850px;
+          display: flex; width: 90%; max-width: 1000px; min-height: 550px;
           background: rgba(255, 255, 255, 0.02); backdrop-filter: blur(10px);
           border-radius: 40px; border: 1px solid rgba(255, 255, 255, 0.1);
           overflow: hidden; z-index: 2; box-shadow: 0 50px 100px -20px rgba(0,0,0,0.5);
