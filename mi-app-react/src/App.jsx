@@ -488,22 +488,22 @@ function LoginScreen({ onLogin }) {
     }
   };
 
-  return (
+return (
     <div style={{
-      minHeight: '100%', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+      minHeight: '100vh', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
       backgroundColor: '#0a0f1e', fontFamily: 'Inter, system-ui, sans-serif', overflow: 'hidden', position: 'relative',
-      padding: '2rem'
+      padding: '1.5rem'
     }}>
       {/* --- FONDO CINEMÁTICO --- */}
       <div style={{
         position: 'absolute', inset: 0,
         backgroundImage: 'url(https://images.unsplash.com/photo-1497215728101-856f4ea42174?q=80&w=2070&auto=format&fit=crop)',
-        backgroundSize: 'contain', backgroundPosition: 'center', zIndex: 0, opacity: 0.6
+        backgroundSize: 'cover', backgroundPosition: 'center', zIndex: 0, opacity: 0.6
       }}>
         <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at 30% 50%, rgba(15, 23, 42, 0.4) 0%, rgba(10, 15, 30, 0.95) 100%)' }} />
       </div>
 
-      {/* --- FIGURAS ANIMADAS INTERACTIVAS --- */}
+      {/* --- FIGURAS ANIMADAS --- */}
       <div style={{ position: 'absolute', inset: 0, zIndex: 1, pointerEvents: 'none' }}>
         <div className="shape-1" />
         <div className="shape-2" />
@@ -516,39 +516,38 @@ function LoginScreen({ onLogin }) {
           66% { transform: translate(-20px, 20px) rotate(-5deg); }
         }
         .shape-1 { 
-          position: absolute; top: 15%; right: 25%; width: 350px; height: 350px; 
+          position: absolute; top: 15%; right: 25%; width: 250px; height: 250px; 
           background: linear-gradient(135deg, rgba(79, 70, 229, 0.4) 0%, transparent 80%);
           border-radius: 30% 70% 70% 30% / 30% 30% 70% 70%; filter: blur(60px); animation: float-complex 20s infinite linear;
         }
         .shape-2 { 
-          position: absolute; bottom: 10%; left: 20%; width: 450px; height: 450px; 
+          position: absolute; bottom: 10%; left: 20%; width: 300px; height: 300px; 
           background: linear-gradient(135deg, rgba(124, 205, 243, 0.3) 0%, transparent 80%);
           border-radius: 50%; filter: blur(80px); animation: float-complex 25s infinite linear reverse;
         }
-       .main-container {
-        display: flex; 
-        width: 90%; 
-        max-width: 950px; 
-        min-height: 460px;
-        background: rgba(255, 255, 255, 0.02); 
-        backdrop-filter: blur(10px);
-        border-radius: 40px; 
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        overflow: hidden; 
-        z-index: 2; 
-        box-shadow: 0 50px 100px -20px rgba(0,0,0,0.5);
-        margin: 0 auto;
-      }
+        .main-container {
+          display: flex;
+          width: 88%;
+          max-width: 860px;
+          background: rgba(255, 255, 255, 0.02);
+          backdrop-filter: blur(10px);
+          border-radius: 32px;
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          overflow: hidden;
+          z-index: 2;
+          box-shadow: 0 40px 80px -20px rgba(0,0,0,0.5);
+          margin: 0 auto;
+        }
         .input-pro { 
-          width: 100%; padding: 1.1rem 1.4rem; border-radius: 16px; border: 1px solid #e2e8f0; 
-          background: #f8fafc; font-size: 1rem; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+          width: 100%; padding: 0.75rem 1.1rem; border-radius: 12px; border: 1px solid #e2e8f0; 
+          background: #f8fafc; font-size: 0.9rem; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
           box-sizing: border-box;
         }
         .input-pro:focus { 
           border-color: #0f172a; background: white; 
-          box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); outline: none;
+          box-shadow: 0 6px 12px -3px rgba(0, 0, 0, 0.1); outline: none;
         }
-        @media (max-width: 1024px) { .branding-section { display: none !important; } }
+        @media (max-width: 768px) { .branding-section { display: none !important; } }
       `}</style>
 
       {/* --- CONTENEDOR MAESTRO --- */}
@@ -556,213 +555,175 @@ function LoginScreen({ onLogin }) {
         
         {/* SECCIÓN BRANDING (Izquierda) */}
         <div className="branding-section" style={{
-          flex: '1.2', padding: '5rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+          flex: '1.1', padding: '3rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
           borderRight: '1px solid rgba(255,255,255,0.05)', position: 'relative'
         }}>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '4rem' }}>
-              <div style={{ background: '#fff', padding: '10px', borderRadius: '14px' }}>
-                <Layout size={32} color="#0a0f1e" strokeWidth={2.5} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '2.5rem' }}>
+              <div style={{ background: '#fff', padding: '8px', borderRadius: '10px' }}>
+                <Layout size={22} color="#0a0f1e" strokeWidth={2.5} />
               </div>
-              <h1 style={{ fontSize: '1.8rem', fontWeight: 900, color: 'white', margin: 0, letterSpacing: '-0.02em' }}>SEITRA</h1>
+              <h1 style={{ fontSize: '1.3rem', fontWeight: 900, color: 'white', margin: 0, letterSpacing: '-0.02em' }}>SEITRA</h1>
             </div>
 
-            <h2 style={{ fontSize: '2.2rem', fontWeight: 600, color: 'white', lineHeight: 1, margin: 0, letterSpacing: '-0.04em' }}>
-               ¡Bienvenido al Centro de Mando!
+            <h2 style={{ fontSize: '1.6rem', fontWeight: 600, color: 'white', lineHeight: 1.2, margin: 0, letterSpacing: '-0.03em' }}>
+              ¡Bienvenido al Centro de Mando!
             </h2>
-            <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '1.2rem', marginTop: '2rem', maxWidth: '500px', lineHeight: 1.6 }}>
+            <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.95rem', marginTop: '1rem', maxWidth: '340px', lineHeight: 1.6 }}>
               Menos caos, más resultados. Accede para sincronizar tus objetivos y llevar tus proyectos al siguiente nivel.
             </p>
           </div>
 
-          <div style={{ display: 'flex', gap: '2rem' }}>
-             <div style={{ color: 'white' }}>
-               <h4 style={{ margin: 0, fontSize: '1.5rem' }}>+500</h4>
-               <p style={{ margin: 0, opacity: 0.5, fontSize: '0.8rem' }}>Proyectos Activos</p>
-             </div>
-             <div style={{ color: 'white' }}>
-               <h4 style={{ margin: 0, fontSize: '1.5rem' }}>99.9%</h4>
-               <p style={{ margin: 0, opacity: 0.5, fontSize: '0.8rem' }}>Productividad</p>
-             </div>
+          <div style={{ display: 'flex', gap: '1.5rem' }}>
+            <div style={{ color: 'white' }}>
+              <h4 style={{ margin: 0, fontSize: '1.2rem' }}>+500</h4>
+              <p style={{ margin: 0, opacity: 0.5, fontSize: '0.75rem' }}>Proyectos Activos</p>
+            </div>
+            <div style={{ color: 'white' }}>
+              <h4 style={{ margin: 0, fontSize: '1.2rem' }}>99.9%</h4>
+              <p style={{ margin: 0, opacity: 0.5, fontSize: '0.75rem' }}>Productividad</p>
+            </div>
           </div>
         </div>
 
-        {/* SECCIÓN LOGIN (Derecha - Más ancha y limpia) */}
+        {/* SECCIÓN LOGIN (Derecha) */}
         <div style={{
           flex: '1', backgroundColor: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          padding: '4rem'
+          padding: '2.5rem'
         }}>
-          <div style={{ width: '100%', maxWidth: '460px' }}>
+          <div style={{ width: '100%', maxWidth: '380px' }}>
 
-            {/* ── BIENVENIDA CON GATITO ── */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '2rem' }}>
-              <svg width="52" height="62" viewBox="0 0 52 62" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
-                {/* orejas */}
+            {/* BIENVENIDA CON GATITO */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem' }}>
+              <svg width="40" height="48" viewBox="0 0 52 62" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
                 <polygon points="6,18 2,4 14,12" fill="#1e1e1e"/>
                 <polygon points="30,18 38,4 26,12" fill="#1e1e1e"/>
                 <polygon points="7,17 4,8 13,13" fill="#f87171"/>
                 <polygon points="29,17 35,8 27,13" fill="#f87171"/>
-                {/* cabeza */}
                 <ellipse cx="18" cy="26" rx="16" ry="14" fill="#1e1e1e"/>
-                {/* ojos */}
                 <ellipse cx="12" cy="24" rx="3" ry="3.5" fill="white"/>
                 <ellipse cx="24" cy="24" rx="3" ry="3.5" fill="white"/>
                 <circle cx="12.5" cy="24.5" r="1.8" fill="#111"/>
                 <circle cx="24.5" cy="24.5" r="1.8" fill="#111"/>
                 <circle cx="13.2" cy="23.8" r="0.6" fill="white"/>
                 <circle cx="25.2" cy="23.8" r="0.6" fill="white"/>
-                {/* nariz */}
                 <polygon points="18,29 16.5,27.5 19.5,27.5" fill="#f87171"/>
-                {/* boca */}
                 <path d="M16.5 29.5 Q18 31.5 19.5 29.5" stroke="#f87171" strokeWidth="0.8" fill="none" strokeLinecap="round"/>
-                {/* bigotes */}
                 <line x1="2" y1="27" x2="11" y2="28.5" stroke="#555" strokeWidth="0.8" strokeLinecap="round"/>
                 <line x1="2" y1="30" x2="11" y2="29.5" stroke="#555" strokeWidth="0.8" strokeLinecap="round"/>
                 <line x1="34" y1="27" x2="25" y2="28.5" stroke="#555" strokeWidth="0.8" strokeLinecap="round"/>
                 <line x1="34" y1="30" x2="25" y2="29.5" stroke="#555" strokeWidth="0.8" strokeLinecap="round"/>
-                {/* brazo derecho levantado */}
                 <path d="M28 38 Q34 28 40 22" stroke="#1e1e1e" strokeWidth="5" fill="none" strokeLinecap="round"/>
-                {/* manita levantada */}
                 <circle cx="41" cy="20" r="4.5" fill="#1e1e1e"/>
                 <circle cx="38" cy="16" r="2.2" fill="#1e1e1e"/>
                 <circle cx="41" cy="15" r="2.2" fill="#1e1e1e"/>
                 <circle cx="44" cy="16" r="2.2" fill="#1e1e1e"/>
               </svg>
               <div>
-                <h2 style={{ margin: 0, fontSize: '0.6 rem', fontWeight: 700, color: '#0f172a', letterSpacing: '-0.5px', lineHeight: 1.1 }}>
+                <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: '#0f172a', letterSpacing: '-0.3px', lineHeight: 1.2 }}>
                   {isLogin ? 'Entra a tu espacio de trabajo' : 'Tu productividad comienza aquí'}
                 </h2>
-                <p style={{ margin: '4px 0 0', fontSize: '0.875rem', color: '#94a3b8', fontWeight: 400 }}>
+                <p style={{ margin: '3px 0 0', fontSize: '0.8rem', color: '#94a3b8' }}>
                   {isLogin ? 'Nos alegra verte de nuevo por aquí.' : 'Crea tu cuenta y empieza hoy.'}
                 </p>
               </div>
             </div>
-            {/* ── TAB SWITCHER ── */}
+
+            {/* TAB SWITCHER */}
             <div style={{
-              display: 'flex', background: '#f1f5f9', borderRadius: '18px',
-              padding: '5px', marginBottom: '2.5rem',
+              display: 'flex', background: '#f1f5f9', borderRadius: '14px',
+              padding: '4px', marginBottom: '1.5rem',
               boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.06)'
             }}>
-              {[
-                { label: 'Iniciar sesión', mode: true },
-                { label: 'Registrarse', mode: false }
-              ].map(({ label, mode }) => (
-                <button
-                  key={label}
-                  type="button"
-                  onClick={() => switchMode(mode)}
-                  style={{
-                    flex: 1, padding: '0.8rem 1rem', borderRadius: '14px', border: 'none',
-                    background: isLogin === mode ? 'white' : 'transparent',
-                    color: isLogin === mode ? '#0f172a' : '#94a3b8',
-                    fontWeight: isLogin === mode ? 600 : 300,
-                    fontSize: '0.95rem', cursor: 'pointer',
-                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                    boxShadow: isLogin === mode ? '0 2px 12px rgba(15,23,42,0.1)' : 'none',
-                    letterSpacing: isLogin === mode ? '-0.2px' : '0'
-                  }}
-                >
+              {[{ label: 'Iniciar sesión', mode: true }, { label: 'Registrarse', mode: false }].map(({ label, mode }) => (
+                <button key={label} type="button" onClick={() => switchMode(mode)} style={{
+                  flex: 1, padding: '0.6rem 1rem', borderRadius: '11px', border: 'none',
+                  background: isLogin === mode ? 'white' : 'transparent',
+                  color: isLogin === mode ? '#0f172a' : '#94a3b8',
+                  fontWeight: isLogin === mode ? 600 : 300,
+                  fontSize: '0.85rem', cursor: 'pointer',
+                  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                  boxShadow: isLogin === mode ? '0 2px 8px rgba(15,23,42,0.1)' : 'none',
+                }}>
                   {label}
                 </button>
               ))}
             </div>
 
-            {/* ── FORMULARIO ── */}
-            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
-
+            {/* FORMULARIO */}
+            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
               {!isLogin && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  <label style={{ color: '#475569', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Nombre completo</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                  <label style={{ color: '#475569', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Nombre completo</label>
                   <input type="text" required={!isLogin} value={name} onChange={(e) => setName(e.target.value)} className="input-pro" placeholder="Ej. María González" />
                 </div>
               )}
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                <label style={{ color: '#475569', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Correo corporativo</label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                <label style={{ color: '#475569', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Correo corporativo</label>
                 <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="input-pro" placeholder="admin@seitra.com" />
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                <label style={{ color: '#475569', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Contraseña</label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                <label style={{ color: '#475569', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Contraseña</label>
                 <div style={{ position: 'relative' }}>
-                  <input type={showPassword ? 'text' : 'password'} required value={password} onChange={(e) => setPassword(e.target.value)} className="input-pro" style={{ paddingRight: '4rem' }} placeholder="••••••••" />
-                  <button type="button" onClick={() => setShowPassword(!showPassword)} style={{ position: 'absolute', right: '1.2rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>
-                    {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                  <input type={showPassword ? 'text' : 'password'} required value={password} onChange={(e) => setPassword(e.target.value)} className="input-pro" style={{ paddingRight: '3rem' }} placeholder="••••••••" />
+                  <button type="button" onClick={() => setShowPassword(!showPassword)} style={{ position: 'absolute', right: '1rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 </div>
               </div>
 
               {error && (
-                <div style={{ padding: '0.8rem 1rem', borderRadius: '12px', background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626', fontSize: '0.875rem', fontWeight: 500 }}>
+                <div style={{ padding: '0.65rem 0.9rem', borderRadius: '10px', background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626', fontSize: '0.8rem', fontWeight: 500 }}>
                   {error}
                 </div>
               )}
 
               <button disabled={isLoading} style={{
-                width: '100%', padding: '1.05rem', border: 'none', borderRadius: '16px',
+                width: '100%', padding: '0.85rem', border: 'none', borderRadius: '12px',
                 background: isLoading ? '#94a3b8' : 'linear-gradient(135deg, #15066c 0%, #0455c7 100%)',
-                color: 'white', fontSize: '1rem', fontWeight: 700,
+                color: 'white', fontSize: '0.9rem', fontWeight: 700,
                 cursor: isLoading ? 'not-allowed' : 'pointer', transition: 'all 0.3s ease',
-                boxShadow: isLoading ? 'none' : '0 8px 24px rgba(15,23,42,0.25)', marginTop: '0.2rem'
+                boxShadow: isLoading ? 'none' : '0 6px 18px rgba(15,23,42,0.25)', marginTop: '0.1rem'
               }}>
                 {isLoading ? 'Verificando...' : isLogin ? 'Iniciar sesión' : 'Crear mi cuenta'}
               </button>
             </form>
 
-            {/* ── DIVISOR ── */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', margin: '1.75rem 0' }}>
+            {/* DIVISOR */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', margin: '1.25rem 0' }}>
               <div style={{ flex: 1, height: '1px', background: '#e2e8f0' }} />
-              <span style={{ fontSize: '0.78rem', color: '#cbd5e1', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>
-                o continuar con
-              </span>
+              <span style={{ fontSize: '0.7rem', color: '#cbd5e1', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>o continuar con</span>
               <div style={{ flex: 1, height: '1px', background: '#e2e8f0' }} />
             </div>
 
-            {/* ── SOCIAL LOGIN ── */}
-            <div style={{ display: 'flex', gap: '0.75rem' }}>
-
-              {/* Google */}
-              <button
-                type="button"
-                style={{
-                  flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
-                  padding: '0.85rem 1rem', borderRadius: '14px',
-                  border: '1.5px solid #e2e8f0', background: 'white',
-                  color: '#1e293b', fontWeight: 600, fontSize: '0.9rem',
-                  cursor: 'pointer', transition: 'all 0.2s ease'
-                }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = '#cbd5e1'; e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.08)'; }}
+            {/* SOCIAL LOGIN */}
+            <div style={{ display: 'flex', gap: '0.6rem' }}>
+              <button type="button" style={{
+                flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                padding: '0.7rem 1rem', borderRadius: '12px', border: '1.5px solid #e2e8f0', background: 'white',
+                color: '#1e293b', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer', transition: 'all 0.2s ease'
+              }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = '#cbd5e1'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)'; }}
                 onMouseLeave={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = 'none'; }}
               >
-                <svg width="18" height="18" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z" fill="#FFC107"/>
-                  <path d="M6.306 14.691l6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 16.318 4 9.656 8.337 6.306 14.691z" fill="#FF3D00"/>
-                  <path d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238A11.91 11.91 0 0 1 24 36c-5.202 0-9.619-3.317-11.283-7.946l-6.522 5.025C9.505 39.556 16.227 44 24 44z" fill="#4CAF50"/>
-                  <path d="M43.611 20.083H42V20H24v8h11.303a12.04 12.04 0 0 1-4.087 5.571l.003-.002 6.19 5.238C36.971 39.205 44 34 44 24c0-1.341-.138-2.65-.389-3.917z" fill="#1976D2"/>
-                </svg>
+                <svg width="16" height="16" viewBox="0 0 48 48" fill="none"><path d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z" fill="#FFC107"/><path d="M6.306 14.691l6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 16.318 4 9.656 8.337 6.306 14.691z" fill="#FF3D00"/><path d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238A11.91 11.91 0 0 1 24 36c-5.202 0-9.619-3.317-11.283-7.946l-6.522 5.025C9.505 39.556 16.227 44 24 44z" fill="#4CAF50"/><path d="M43.611 20.083H42V20H24v8h11.303a12.04 12.04 0 0 1-4.087 5.571l.003-.002 6.19 5.238C36.971 39.205 44 34 44 24c0-1.341-.138-2.65-.389-3.917z" fill="#1976D2"/></svg>
                 Google
               </button>
-
-              {/* Facebook */}
-              <button
-                type="button"
-                style={{
-                  flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
-                  padding: '0.85rem 1rem', borderRadius: '14px',
-                  border: 'none', background: '#1877F2',
-                  color: 'white', fontWeight: 600, fontSize: '0.9rem',
-                  cursor: 'pointer', transition: 'all 0.2s ease'
-                }}
-                onMouseEnter={e => { e.currentTarget.style.background = '#1565d8'; e.currentTarget.style.boxShadow = '0 4px 16px rgba(24,119,242,0.35)'; }}
+              <button type="button" style={{
+                flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                padding: '0.7rem 1rem', borderRadius: '12px', border: 'none', background: '#1877F2',
+                color: 'white', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer', transition: 'all 0.2s ease'
+              }}
+                onMouseEnter={e => { e.currentTarget.style.background = '#1565d8'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(24,119,242,0.35)'; }}
                 onMouseLeave={e => { e.currentTarget.style.background = '#1877F2'; e.currentTarget.style.boxShadow = 'none'; }}
               >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="white" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
-                </svg>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
                 Facebook
               </button>
-
             </div>
+
           </div>
         </div>
       </div>
