@@ -158,8 +158,8 @@ const StatCard = ({ value, suffix, label, active }) => {
 
 // ─── SLIDE 1: HERO ────────────────────────────────────────────────────────────
 
-const SlideHero = ({ onGetStarted, typeword }) => (
-  <div style={{ height: '100%', background: '#080c14', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 40px 80px', position: 'relative', overflow: 'hidden' }}>
+const SlideHero = ({ onGetStarted, typeword, isMobile = false }) => (
+  <div style={{ height: '100%', background: '#080c14', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: isMobile ? '84px 14px 72px' : '80px 40px 80px', position: 'relative', overflow: 'hidden' }}>
     {/* Orbs */}
     <div style={{ position: 'absolute', top: '8%', left: '10%', width: '480px', height: '480px', background: 'radial-gradient(circle, rgba(99,102,241,0.18) 0%, transparent 70%)', animation: 'orbFloat1 12s ease-in-out infinite', pointerEvents: 'none' }} />
     <div style={{ position: 'absolute', bottom: '10%', right: '8%', width: '360px', height: '360px', background: 'radial-gradient(circle, rgba(16,185,129,0.15) 0%, transparent 70%)', animation: 'orbFloat2 15s ease-in-out infinite', pointerEvents: 'none' }} />
@@ -189,15 +189,15 @@ const SlideHero = ({ onGetStarted, typeword }) => (
       </p>
 
       {/* CTAs */}
-      <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap', animation: 'fadeUp 0.9s ease 0.8s backwards' }}>
+      <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap', width: isMobile ? '100%' : 'auto', animation: 'fadeUp 0.9s ease 0.8s backwards' }}>
         <button onClick={onGetStarted}
-          style={{ padding: '13px 30px', background: 'linear-gradient(135deg, #6366f1, #4f46e5)', border: 'none', borderRadius: '10px', color: 'white', fontSize: '15px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', transition: 'all 0.3s ease' }}
+           style={{ padding: '13px 30px', background: 'linear-gradient(135deg, #6366f1, #4f46e5)', border: 'none', borderRadius: '10px', color: 'white', fontSize: '15px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', transition: 'all 0.3s ease', width: isMobile ? '100%' : 'auto' }}
           onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 12px 40px rgba(99,102,241,0.4)'; }}
           onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none'; }}>
           Comenzar gratis <ArrowRight size={16} />
         </button>
         <button onClick={onGetStarted}
-          style={{ padding: '13px 30px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '10px', color: 'white', fontSize: '15px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.3s ease' }}
+          style={{ padding: '13px 30px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '10px', color: 'white', fontSize: '15px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.3s ease', width: isMobile ? '100%' : 'auto' }}
           onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
           onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.06)'}>
           Iniciar sesión
@@ -230,7 +230,7 @@ const SlideHero = ({ onGetStarted, typeword }) => (
 
 // ─── SLIDE 2: FEATURES ────────────────────────────────────────────────────────
 
-const SlideFeatures = () => {
+const SlideFeatures = ({ isMobile = false }) => {
   const features = [
     {
       icon: FolderKanban, color: '#6366f1', bg: 'rgba(99,102,241,0.07)',
@@ -253,7 +253,7 @@ const SlideFeatures = () => {
   ];
 
   return (
-    <div style={{ height: '100%', background: '#ffffff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 40px 80px' }}>
+    <div style={{ height: '100%', background: '#ffffff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: isMobile ? '84px 14px 72px' : '80px 40px 80px' }}>
       <div style={{ textAlign: 'center', marginBottom: '48px' }}>
         <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '3px', textTransform: 'uppercase', color: '#6366f1', marginBottom: '12px' }}>
           Por qué elegir SEITRA
@@ -291,7 +291,7 @@ const SlideFeatures = () => {
 
 // ─── SLIDE 3: DEMO ────────────────────────────────────────────────────────────
 
-const SlideDemo = () => {
+const SlideDemo = ({ isMobile = false }) => {
   const steps = [
     { icon: Zap, color: '#6366f1', text: 'Crea sprints en segundos con el planning automático' },
     { icon: TrendingUp, color: '#10b981', text: 'Mide velocidad real del equipo con burndown en vivo' },
@@ -299,8 +299,8 @@ const SlideDemo = () => {
   ];
 
   return (
-    <div style={{ height: '100%', background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '80px 40px 80px', overflow: 'hidden' }}>
-      <div style={{ maxWidth: '1080px', width: '100%', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 400px), 1fr))', gap: '60px', alignItems: 'center' }}>
+    <div style={{ height: '100%', background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: isMobile ? '84px 14px 72px' : '80px 40px 80px', overflow: 'hidden' }}>
+      <div style={{ maxWidth: '1080px', width: '100%', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 400px), 1fr))', gap: isMobile ? '24px' : '60px', alignItems: 'center' }}>
         {/* Text */}
         <div>
           <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '3px', textTransform: 'uppercase', color: '#10b981', marginBottom: '16px' }}>
@@ -334,7 +334,7 @@ const SlideDemo = () => {
 
 // ─── SLIDE 4: CTA ─────────────────────────────────────────────────────────────
 
-const SlideCTA = ({ onGetStarted, active }) => {
+const SlideCTA = ({ onGetStarted, active, isMobile = false }) => {
   const stats = [
     { value: 10000, suffix: '+', label: 'Proyectos gestionados' },
     { value: 98, suffix: '%', label: 'Satisfacción' },
@@ -344,13 +344,13 @@ const SlideCTA = ({ onGetStarted, active }) => {
   const perks = ['Sin tarjeta de crédito', 'Gratis para siempre', 'Setup en 5 minutos'];
 
   return (
-    <div style={{ height: '100%', background: 'linear-gradient(135deg, #080c14 0%, #0f172a 60%, #0c1a3e 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 40px 80px', position: 'relative', overflow: 'hidden' }}>
+    <div style={{ height: '100%', background: 'linear-gradient(135deg, #080c14 0%, #0f172a 60%, #0c1a3e 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: isMobile ? '84px 14px 72px' : '80px 40px 80px', position: 'relative', overflow: 'hidden' }}>
       {/* glow */}
       <div style={{ position: 'absolute', top: '30%', left: '50%', transform: 'translate(-50%, -50%)', width: '700px', height: '700px', background: 'radial-gradient(circle, rgba(99,102,241,0.1) 0%, transparent 70%)', pointerEvents: 'none' }} />
 
       <div style={{ position: 'relative', zIndex: 1, textAlign: 'center', maxWidth: '800px', width: '100%' }}>
         {/* Stats */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '24px', marginBottom: '60px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: isMobile ? '16px' : '24px', marginBottom: '60px' }}>
           {stats.map((s, i) => <StatCard key={i} {...s} active={active} />)}
         </div>
 
@@ -368,7 +368,7 @@ const SlideCTA = ({ onGetStarted, active }) => {
         </p>
 
         <button onClick={onGetStarted}
-          style={{ padding: '16px 40px', background: 'linear-gradient(135deg, #6366f1, #4f46e5)', border: 'none', borderRadius: '12px', color: 'white', fontSize: '16px', fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '10px', marginBottom: '28px', transition: 'all 0.3s ease' }}
+          style={{ padding: '16px 40px', background: 'linear-gradient(135deg, #6366f1, #4f46e5)', border: 'none', borderRadius: '12px', color: 'white', fontSize: '16px', fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginBottom: '28px', transition: 'all 0.3s ease', width: isMobile ? '100%' : 'auto' }}
           onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.boxShadow = '0 16px 48px rgba(99,102,241,0.5)'; }}
           onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none'; }}>
           Crear cuenta gratuita <ArrowRight size={18} />
@@ -391,6 +391,7 @@ const SlideCTA = ({ onGetStarted, active }) => {
 
 export default function LandingPage({ onGetStarted }) {
   const [slide, setSlide] = useState(0);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const TOTAL = 4;
   const wheelLocked = useRef(false);
   const typeword = useTypewriter(['más rápido.', 'sin caos.', 'con claridad.', 'en equipo.']);
@@ -398,6 +399,13 @@ export default function LandingPage({ onGetStarted }) {
   const go = useCallback((n) => {
     const next = Math.max(0, Math.min(TOTAL - 1, n));
     setSlide(next);
+  }, []);
+
+    useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', onResize);
+    onResize();
+    return () => window.removeEventListener('resize', onResize);
   }, []);
 
   // Keyboard navigation
@@ -441,7 +449,7 @@ export default function LandingPage({ onGetStarted }) {
       `}</style>
 
       {/* ── NAVBAR (fixed, visible en todos los slides) ── */}
-      <nav style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 500, padding: '0 40px', height: '58px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(8,12,20,0.88)', backdropFilter: 'blur(20px)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+      <nav style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 500, padding: isMobile ? '0 12px' : '0 40px', height: '58px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(8,12,20,0.88)', backdropFilter: 'blur(20px)', borderBottom: '1px solid rgba(255,255,255,0.06)', gap: '8px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '17px', fontWeight: 900, letterSpacing: '-0.5px', color: 'white' }}>
           <div style={{ width: '27px', height: '27px', borderRadius: '7px', background: 'linear-gradient(135deg, #6366f1, #10b981)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Sparkles size={13} color="white" />
@@ -449,17 +457,21 @@ export default function LandingPage({ onGetStarted }) {
           SEITRA
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
-          <button onClick={onGetStarted} style={{ padding: '7px 18px', background: 'transparent', border: '1px solid rgba(255,255,255,0.18)', borderRadius: '7px', color: 'rgba(255,255,255,0.8)', fontSize: '13px', fontWeight: 600, cursor: 'pointer', transition: 'border-color 0.2s' }} onMouseEnter={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.4)'} onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.18)'}>
-            Iniciar sesión
-          </button>
-          <button onClick={onGetStarted} style={{ padding: '7px 18px', background: 'white', border: 'none', borderRadius: '7px', color: '#0f172a', fontSize: '13px', fontWeight: 700, cursor: 'pointer', transition: 'opacity 0.2s' }} onMouseEnter={e => e.currentTarget.style.opacity = '0.88'} onMouseLeave={e => e.currentTarget.style.opacity = '1'}>
-            Empezar gratis
-          </button>
+          {!isMobile && (
+            <>
+              {!isMobile && <button onClick={onGetStarted} style={{ padding: '7px 18px', background: 'transparent', border: '1px solid rgba(255,255,255,0.18)', borderRadius: '7px', color: 'rgba(255,255,255,0.8)', fontSize: '13px', fontWeight: 600, cursor: 'pointer', transition: 'border-color 0.2s' }} onMouseEnter={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.4)'} onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.18)'}>
+                Iniciar sesión
+              </button>}
+                <button onClick={onGetStarted} style={{ padding: isMobile ? '7px 12px' : '7px 18px', background: 'white', border: 'none', borderRadius: '7px', color: '#0f172a', fontSize: '13px', fontWeight: 700, cursor: 'pointer', transition: 'opacity 0.2s', whiteSpace: 'nowrap' }} onMouseEnter={e => e.currentTarget.style.opacity = '0.88'} onMouseLeave={e => e.currentTarget.style.opacity = '1'}>
+                Empezar gratis
+              </button>
+            </>
+          )}
         </div>
       </nav>
 
       {/* ── DOT NAV (derecha) ── */}
-      <div style={{ position: 'fixed', right: '20px', top: '50%', transform: 'translateY(-50%)', zIndex: 500, display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center' }}>
+      {!isMobile && <div style={{ position: 'fixed', right: '20px', top: '50%', transform: 'translateY(-50%)', zIndex: 500, display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center' }}>
         {slideLabels.map((label, i) => (
           <button
             key={i}
@@ -468,10 +480,10 @@ export default function LandingPage({ onGetStarted }) {
             style={{ width: i === slide ? 10 : 7, height: i === slide ? 10 : 7, borderRadius: '50%', background: i === slide ? 'white' : 'rgba(255,255,255,0.28)', border: 'none', cursor: 'pointer', padding: 0, transition: 'all 0.35s ease', outline: 'none' }}
           />
         ))}
-      </div>
+      </div>}
 
       {/* ── ARROW NAV (abajo centro) ── */}
-      <div style={{ position: 'fixed', bottom: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: 500, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
+      <div style={{ position: 'fixed', bottom: isMobile ? '12px' : '20px', left: '50%', transform: 'translateX(-50%)', zIndex: 500, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
         <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.28)', letterSpacing: '0.5px', fontFamily: DESIGN_TOKENS.typography.fontFamily }}>
           {slide + 1} / {TOTAL}
         </span>
@@ -495,10 +507,10 @@ export default function LandingPage({ onGetStarted }) {
 
       {/* ── SLIDES ── */}
       {[
-        <SlideHero key={0} onGetStarted={onGetStarted} typeword={typeword} />,
-        <SlideFeatures key={1} active={slide === 1} />,
-        <SlideDemo key={2} active={slide === 2} />,
-        <SlideCTA key={3} onGetStarted={onGetStarted} active={slide === 3} />,
+        <SlideHero key={0} onGetStarted={onGetStarted} typeword={typeword} isMobile={isMobile} />,
+        <SlideFeatures key={1} active={slide === 1} isMobile={isMobile} />,
+        <SlideDemo key={2} active={slide === 2} isMobile={isMobile} />,
+        <SlideCTA key={3} onGetStarted={onGetStarted} active={slide === 3} isMobile={isMobile} />,
       ].map((SlideEl, i) => (
         <div
           key={i}
@@ -508,7 +520,8 @@ export default function LandingPage({ onGetStarted }) {
             transform: `translateY(${(i - slide) * 100}%)`,
             transition: 'transform 0.75s cubic-bezier(0.4, 0, 0.2, 1)',
             willChange: 'transform',
-            overflow: 'hidden'
+            overflowY: isMobile ? 'auto' : 'hidden',
+            overflowX: 'hidden',
           }}
         >
           {SlideEl}
