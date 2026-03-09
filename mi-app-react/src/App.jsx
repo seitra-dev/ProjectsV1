@@ -632,7 +632,7 @@ return (
             {/* TAB SWITCHER */}
             <div style={{
               display: 'flex', background: '#f1f5f9', borderRadius: '14px',
-              padding: '4px', marginBottom: '1.5rem',
+              padding: '2.5px', marginBottom: '1.0rem',
               boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.06)'
             }}>
               {[{ label: 'Iniciar sesión', mode: true }, { label: 'Registrarse', mode: false }].map(({ label, mode }) => (
