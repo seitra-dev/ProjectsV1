@@ -358,7 +358,7 @@ if (isTransitioning) {
           100% { width: 100%; }
         }
         .loading-shape {
-          position: relative; width: 600px; height: 600px;
+          position: absolute; width: 600px; height: 600px;
           border-radius: 50%; background: radial-gradient(circle, rgba(79, 70, 229, 0.2) 0%, transparent 70%);
           animation: orbit-sync 8s infinite linear;
         }
@@ -496,15 +496,15 @@ function LoginScreen({ onLogin }) {
     }}>
       {/* --- FONDO CINEMÁTICO --- */}
       <div style={{
-        position: 'relative', inset: 0,
+        position: 'absolute', inset: 0,
         backgroundImage: 'url(https://images.unsplash.com/photo-1497215728101-856f4ea42174?q=80&w=2070&auto=format&fit=crop)',
         backgroundSize: 'cover', backgroundPosition: 'center', zIndex: 0, opacity: 0.6
       }}>
-        <div style={{ position: 'relative', inset: 0, background: 'radial-gradient(circle at 30% 50%, rgba(15, 23, 42, 0.4) 0%, rgba(10, 15, 30, 0.95) 100%)' }} />
+        <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at 30% 50%, rgba(15, 23, 42, 0.4) 0%, rgba(10, 15, 30, 0.95) 100%)' }} />
       </div>
 
       {/* --- FIGURAS ANIMADAS INTERACTIVAS --- */}
-      <div style={{ position: 'relative', inset: 0, zIndex: 1, pointerEvents: 'none' }}>
+      <div style={{ position: 'absolute', inset: 0, zIndex: 1, pointerEvents: 'none' }}>
         <div className="shape-1" />
         <div className="shape-2" />
       </div>
@@ -516,17 +516,17 @@ function LoginScreen({ onLogin }) {
           66% { transform: translate(-20px, 20px) rotate(-5deg); }
         }
         .shape-1 { 
-          position: relative; top: 15%; right: 25%; width: 350px; height: 350px; 
+          position: absolute; top: 15%; right: 25%; width: 350px; height: 350px; 
           background: linear-gradient(135deg, rgba(79, 70, 229, 0.4) 0%, transparent 80%);
           border-radius: 30% 70% 70% 30% / 30% 30% 70% 70%; filter: blur(60px); animation: float-complex 20s infinite linear;
         }
         .shape-2 { 
-          position: relative; bottom: 10%; left: 20%; width: 450px; height: 450px; 
+          position: absolute; bottom: 10%; left: 20%; width: 450px; height: 450px; 
           background: linear-gradient(135deg, rgba(124, 205, 243, 0.3) 0%, transparent 80%);
           border-radius: 50%; filter: blur(80px); animation: float-complex 25s infinite linear reverse;
         }
         .main-container {
-          display: flex; width: 100%; max-width: 900px; min-height: 750px;
+          display: flex; width: 100%; max-width: 1100px; min-height: 750px;
           background: rgba(255, 255, 255, 0.02); backdrop-filter: blur(10px);
           border-radius: 40px; border: 1px solid rgba(255, 255, 255, 0.1);
           overflow: hidden; z-index: 2; box-shadow: 0 50px 100px -20px rgba(0,0,0,0.5);
@@ -679,7 +679,7 @@ function LoginScreen({ onLogin }) {
                 <label style={{ color: '#475569', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Contraseña</label>
                 <div style={{ position: 'relative' }}>
                   <input type={showPassword ? 'text' : 'password'} required value={password} onChange={(e) => setPassword(e.target.value)} className="input-pro" style={{ paddingRight: '4rem' }} placeholder="••••••••" />
-                  <button type="button" onClick={() => setShowPassword(!showPassword)} style={{ position: 'relative', right: '1.2rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>
+                  <button type="button" onClick={() => setShowPassword(!showPassword)} style={{ position: 'absolute', right: '1.2rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>
                     {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                   </button>
                 </div>
@@ -1294,7 +1294,7 @@ function TopBar({ user, onLogout, onMenuClick, searchQuery, onSearchChange, dark
               flexShrink: 0,
             }}>
               <div style={{
-                position: 'relative',
+                position: 'absolute',
                 top: '3px',
                 left: darkMode ? '21px' : '3px',
                 width: '16px',
@@ -1947,7 +1947,7 @@ function ProjectCardExtended({ project, onClick, onToggleFavorite, onDuplicate, 
 
       {showMenu && (
         <div style={{
-          position: 'relative',
+          position: 'absolute',
           top: '3.5rem',
           right: '1rem',
           background: 'white',
@@ -2717,7 +2717,7 @@ function GanttView({ tasks, project }) {
               <div style={{ flex: 1, position: 'relative', padding: '0.75rem 1rem' }}>
                 <div
                   style={{
-                    position: 'relative',
+                    position: 'absolute',
                     left: `calc(1rem + ${pos.left}%)`,
                     width: `${pos.width}%`,
                     height: '32px',
@@ -4290,7 +4290,7 @@ const demoBoxStyle = {
 };
 
 const passwordToggleStyle = {
-  position: 'relative',
+  position: 'absolute',
   right: '0.75rem',
   top: '50%',
   transform: 'translateY(-50%)',
