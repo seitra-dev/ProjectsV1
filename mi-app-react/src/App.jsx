@@ -490,7 +490,7 @@ function LoginScreen({ onLogin }) {
 
   return (
     <div style={{
-      minHeight: '100vh', width: '100vw', display: 'flex', alignItems: 'center', justifyContent: 'center',
+      minHeight: '100vh', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
       backgroundColor: '#0a0f1e', fontFamily: 'Inter, system-ui, sans-serif', overflow: 'hidden', position: 'relative',
       padding: '2rem'
     }}>
@@ -526,10 +526,11 @@ function LoginScreen({ onLogin }) {
           border-radius: 50%; filter: blur(80px); animation: float-complex 25s infinite linear reverse;
         }
         .main-container {
-          display: flex; width: 100%; max-width: 1280px; min-height: 750px;
+          display: flex; width: 100%; max-width: 1100px; min-height: 750px;
           background: rgba(255, 255, 255, 0.02); backdrop-filter: blur(10px);
           border-radius: 40px; border: 1px solid rgba(255, 255, 255, 0.1);
           overflow: hidden; z-index: 2; box-shadow: 0 50px 100px -20px rgba(0,0,0,0.5);
+          margin: 0 auto;
         }
         .input-pro { 
           width: 100%; padding: 1.1rem 1.4rem; border-radius: 16px; border: 1px solid #e2e8f0; 
