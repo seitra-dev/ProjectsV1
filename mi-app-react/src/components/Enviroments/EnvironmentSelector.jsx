@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ChevronDown, Plus, Settings, Users } from 'lucide-react';
-import { useApp } from '../../context/AppContext-OLD';
+import { useApp } from '../../context/AppContext';
 import { DESIGN_TOKENS } from '/src/styles/tokens';
 
 

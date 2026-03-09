@@ -21,7 +21,7 @@ import ProjectRoadmap from './components/ProjectRoadmap';
 import EnvironmentSelector from "./components/Enviroments/EnvironmentSelector";
 import CreateEnvironmentModal from "./components/Enviroments/CreateEnvironmentModal";
 import EnvironmentSettings from "./components/Enviroments/EnvironmentSettings";
-import { AppProvider, useApp } from './context/AppContext';
+import { useApp } from './context/AppContext';
 import TeamChatView from './components/TeamChatView';
 import ListView from './components/ListView';
 import LandingPage from './components/LandingPage';
@@ -232,11 +232,9 @@ const PRIORITY_OPTIONS = {
 // ============================================================================
 function App() {
   return (
-    <AppProvider>
-      <ToastProvider>
-        <AppContent />
-      </ToastProvider>
-    </AppProvider>
+    <ToastProvider>
+      <AppContent />
+    </ToastProvider>
   );
 }
 
@@ -4294,8 +4292,10 @@ const passwordToggleStyle = {
 };
 
 const dashboardContainerStyle = {
-  height: '100vh',
-  width: '100vw',
+  minHeight: '100vh',
+  width: '100%',
+  maxWidth: '1440px',
+  margin: '0 auto',
   display: 'flex',
   overflow: 'hidden',
   background: 'var(--bg-base)',

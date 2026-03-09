@@ -7,7 +7,7 @@ import {
   Plane, Globe, Users, Sun, Moon, Sparkles, Gem, Gift,
   Code, Database, Settings, Lock, Mail, MessageSquare, Calendar, FileText
 } from 'lucide-react';
-import { useApp } from '../../context/AppContext-OLD.jsx';
+import { useApp } from '../../context/AppContext';
 import { DESIGN_TOKENS } from '../../styles/tokens.js';
 
 

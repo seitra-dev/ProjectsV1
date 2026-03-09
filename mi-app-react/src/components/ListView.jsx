@@ -3,7 +3,7 @@ import {
   ChevronDown, ChevronRight, Plus, Flag, X, GripVertical, 
   MoreVertical, Pencil, Trash2, Settings
 } from 'lucide-react';
-import { useApp } from '../context/AppContext-OLD';
+import { useApp } from '../context/AppContext';
 import { DESIGN_TOKENS } from '../styles/tokens';
 import {
   DndContext,
