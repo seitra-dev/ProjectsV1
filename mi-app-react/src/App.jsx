@@ -525,11 +525,11 @@ function LoginScreen({ onLogin }) {
           background: linear-gradient(135deg, rgba(124, 205, 243, 0.3) 0%, transparent 80%);
           border-radius: 50%; filter: blur(80px); animation: float-complex 25s infinite linear reverse;
         }
-        .main-container {
+       .main-container {
         display: flex; 
-        width: 85%; 
-        max-width: 780px; 
-        min-height: 500px;
+        width: 90%; 
+        max-width: 950px; 
+        min-height: 460px;
         background: rgba(255, 255, 255, 0.02); 
         backdrop-filter: blur(10px);
         border-radius: 40px; 
