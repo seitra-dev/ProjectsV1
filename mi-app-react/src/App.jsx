@@ -632,7 +632,7 @@ return (
             {/* TAB SWITCHER */}
             <div style={{
               display: 'flex', background: '#f1f5f9', borderRadius: '14px',
-              padding: '2.5px', marginBottom: '1.0rem',
+              padding: '0.4rem 0.8rem', marginBottom: '1.0rem',
               boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.06)'
             }}>
               {[{ label: 'Iniciar sesión', mode: true }, { label: 'Registrarse', mode: false }].map(({ label, mode }) => (
@@ -641,7 +641,7 @@ return (
                   background: isLogin === mode ? 'white' : 'transparent',
                   color: isLogin === mode ? '#0f172a' : '#94a3b8',
                   fontWeight: isLogin === mode ? 600 : 300,
-                  fontSize: '0.85rem', cursor: 'pointer',
+                  fontSize: '0.78rem', cursor: 'pointer',
                   transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                   boxShadow: isLogin === mode ? '0 2px 8px rgba(15,23,42,0.1)' : 'none',
                 }}>
