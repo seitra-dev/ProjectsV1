@@ -23,7 +23,7 @@ const useTypewriter = (words, typingSpeed = 90, deletingSpeed = 50, pause = 1800
       }
     }, deleting ? deletingSpeed : typingSpeed);
     return () => clearTimeout(id);
-  }, [display, deleting, wordIdx]);
+  }, [display, deleting, wordIdx, words, typingSpeed, deletingSpeed, pause]);
   return display;
 };
 
@@ -31,6 +31,7 @@ const useCountUp = (target, duration = 1800, active = false) => {
   const [val, setVal] = useState(0);
   useEffect(() => {
     if (!active) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setVal(0);
     let start = null;
     const step = ts => {
@@ -159,7 +160,7 @@ const StatCard = ({ value, suffix, label, active }) => {
 // ─── SLIDE 1: HERO ────────────────────────────────────────────────────────────
 
 const SlideHero = ({ onGetStarted, typeword }) => (
-  <div style={{ height: '100%', background: '#080c14', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 40px 80px', position: 'relative', overflow: 'hidden' }}>
+  <div style={{ height: '100%', background: '#080c14', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 'clamp(40px, 10vw, 80px) clamp(16px, 6vw, 40px)', position: 'relative', overflow: 'hidden' }}>
     {/* Orbs */}
     <div style={{ position: 'absolute', top: '8%', left: '10%', width: '480px', height: '480px', background: 'radial-gradient(circle, rgba(99,102,241,0.18) 0%, transparent 70%)', animation: 'orbFloat1 12s ease-in-out infinite', pointerEvents: 'none' }} />
     <div style={{ position: 'absolute', bottom: '10%', right: '8%', width: '360px', height: '360px', background: 'radial-gradient(circle, rgba(16,185,129,0.15) 0%, transparent 70%)', animation: 'orbFloat2 15s ease-in-out infinite', pointerEvents: 'none' }} />
@@ -253,7 +254,7 @@ const SlideFeatures = () => {
   ];
 
   return (
-    <div style={{ height: '100%', background: '#ffffff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 40px 80px' }}>
+    <div style={{ height: '100%', background: '#ffffff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 'clamp(40px, 10vw, 80px) clamp(16px, 6vw, 40px)' }}>
       <div style={{ textAlign: 'center', marginBottom: '48px' }}>
         <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '3px', textTransform: 'uppercase', color: '#6366f1', marginBottom: '12px' }}>
           Por qué elegir SEITRA
@@ -299,7 +300,7 @@ const SlideDemo = () => {
   ];
 
   return (
-    <div style={{ height: '100%', background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '80px 40px 80px', overflow: 'hidden' }}>
+    <div style={{ height: '100%', background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'clamp(40px, 10vw, 80px) clamp(16px, 6vw, 40px)', overflow: 'hidden' }}>
       <div style={{ maxWidth: '1080px', width: '100%', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 400px), 1fr))', gap: '60px', alignItems: 'center' }}>
         {/* Text */}
         <div>
@@ -344,7 +345,7 @@ const SlideCTA = ({ onGetStarted, active }) => {
   const perks = ['Sin tarjeta de crédito', 'Gratis para siempre', 'Setup en 5 minutos'];
 
   return (
-    <div style={{ height: '100%', background: 'linear-gradient(135deg, #080c14 0%, #0f172a 60%, #0c1a3e 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 40px 80px', position: 'relative', overflow: 'hidden' }}>
+    <div style={{ height: '100%', background: 'linear-gradient(135deg, #080c14 0%, #0f172a 60%, #0c1a3e 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 'clamp(40px, 10vw, 80px) clamp(16px, 6vw, 40px)', position: 'relative', overflow: 'hidden' }}>
       {/* glow */}
       <div style={{ position: 'absolute', top: '30%', left: '50%', transform: 'translate(-50%, -50%)', width: '700px', height: '700px', background: 'radial-gradient(circle, rgba(99,102,241,0.1) 0%, transparent 70%)', pointerEvents: 'none' }} />
 
@@ -441,7 +442,7 @@ export default function LandingPage({ onGetStarted }) {
       `}</style>
 
       {/* ── NAVBAR (fixed, visible en todos los slides) ── */}
-      <nav style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 500, padding: '0 40px', height: '58px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(8,12,20,0.88)', backdropFilter: 'blur(20px)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+      <nav style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 500, padding: '0 clamp(16px, 5vw, 40px)', height: '58px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(8,12,20,0.88)', backdropFilter: 'blur(20px)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '17px', fontWeight: 900, letterSpacing: '-0.5px', color: 'white' }}>
           <div style={{ width: '27px', height: '27px', borderRadius: '7px', background: 'linear-gradient(135deg, #6366f1, #10b981)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Sparkles size={13} color="white" />
@@ -459,7 +460,7 @@ export default function LandingPage({ onGetStarted }) {
       </nav>
 
       {/* ── DOT NAV (derecha) ── */}
-      <div style={{ position: 'fixed', right: '20px', top: '50%', transform: 'translateY(-50%)', zIndex: 500, display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center' }}>
+      <div style={{ position: 'fixed', right: 'clamp(12px, 4vw, 20px)', top: '50%', transform: 'translateY(-50%)', zIndex: 500, display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center' }}>
         {slideLabels.map((label, i) => (
           <button
             key={i}
@@ -471,7 +472,7 @@ export default function LandingPage({ onGetStarted }) {
       </div>
 
       {/* ── ARROW NAV (abajo centro) ── */}
-      <div style={{ position: 'fixed', bottom: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: 500, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
+      <div style={{ position: 'fixed', bottom: 'clamp(12px, 4vw, 20px)', left: '50%', transform: 'translateX(-50%)', zIndex: 500, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
         <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.28)', letterSpacing: '0.5px', fontFamily: DESIGN_TOKENS.typography.fontFamily }}>
           {slide + 1} / {TOTAL}
         </span>

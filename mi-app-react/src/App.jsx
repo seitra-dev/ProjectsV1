@@ -1,5 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import { dbEnvironments, dbUsers } from './lib/database';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 
 import { 
   Plus, Search, Filter, Calendar, Users, ChevronDown, ChevronUp, ChevronRight,
@@ -248,9 +247,9 @@ function AppContent() {
 
   useEffect(() => {
     const initApp = () => {
-      const users = storageGet(STORAGE_KEYS.USERS);
-      const projects = storageGet(STORAGE_KEYS.PROJECTS);
-      const tasks = storageGet(STORAGE_KEYS.TASKS);
+      if (!storageGet(STORAGE_KEYS.USERS)) storageSet(STORAGE_KEYS.USERS, []);
+      if (!storageGet(STORAGE_KEYS.PROJECTS)) storageSet(STORAGE_KEYS.PROJECTS, []);
+      if (!storageGet(STORAGE_KEYS.TASKS)) storageSet(STORAGE_KEYS.TASKS, []);
       const comments = storageGet(STORAGE_KEYS.COMMENTS);
       if (!comments) storageSet(STORAGE_KEYS.COMMENTS, []);
 
@@ -523,12 +522,20 @@ function LoginScreen({ onLogin }) {
         }
         .main-container {
           display: flex;
-          width: min(95vw, 1280px);
-          max-height: min(85vh, 750px);
-          min-height: min(65vh, 520px);
-          background: rgba(255, 255, 255, 0.02); backdrop-filter: blur(10px);
-          border-radius: 40px; border: 1px solid rgba(255, 255, 255, 0.1);
-          overflow: auto; z-index: 2; box-shadow: 0 50px 100px -20px rgba(0,0,0,0.5);
+          width: min(95vw, 1080px);
+          max-width: 1080px;
+          max-height: calc(100vh - 3.5rem);
+          min-height: 420px;
+          background: rgba(255, 255, 255, 0.02);
+          backdrop-filter: blur(10px);
+          border-radius: 40px;
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          overflow: hidden;
+          z-index: 2;
+          box-shadow: 0 50px 100px -20px rgba(0,0,0,0.5);
+        }
+        .main-container > * {
+          min-width: 0;
         }
         .input-pro { 
           width: 100%; padding: 1.1rem 1.4rem; border-radius: 16px; border: 1px solid #e2e8f0; 
@@ -539,7 +546,22 @@ function LoginScreen({ onLogin }) {
           border-color: #0f172a; background: white; 
           box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); outline: none;
         }
-        @media (max-width: 1024px) { .branding-section { display: none !important; } }
+        @media (max-width: 1024px) {
+          .main-container {
+            width: min(92vw, 680px);
+            max-height: calc(100vh - 3rem);
+          }
+        }
+        @media (max-width: 900px) {
+          .main-container {
+            flex-direction: column;
+            width: min(94vw, 520px);
+            max-height: calc(100vh - 2.5rem);
+          }
+          .branding-section {
+            display: none;
+          }
+        }
       `}</style>
 
       {/* --- CONTENEDOR MAESTRO --- */}
@@ -547,8 +569,8 @@ function LoginScreen({ onLogin }) {
         
         {/* SECCIÓN BRANDING (Izquierda) */}
         <div className="branding-section" style={{
-          flex: '1.2', padding: 'clamp(2.5rem, 5vw, 5rem)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
-          borderRight: '1px solid rgba(255,255,255,0.05)', position: 'relative'
+          flex: '1.2', padding: 'clamp(2rem, 5vw, 4rem)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+          borderRight: '1px solid rgba(255,255,255,0.05)', position: 'relative', minWidth: 0
         }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '4rem' }}>
@@ -581,7 +603,7 @@ function LoginScreen({ onLogin }) {
         {/* SECCIÓN LOGIN (Derecha - Más ancha y limpia) */}
         <div style={{
           flex: '1', backgroundColor: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          padding: 'clamp(2rem, 4vw, 4rem)'
+          padding: 'clamp(1.5rem, 4vw, 3.5rem)'
         }}>
           <div style={{ width: '100%', maxWidth: '460px' }}>
 
@@ -788,17 +810,15 @@ function MainApp({ user, onLogout, darkMode, toggleDarkMode }) {
   const [breadcrumbs, setBreadcrumbs] = useState([{ label: 'Dashboard', view: 'dashboard' }]);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const { addToast } = useToast();
+  const listIdRef = useRef(Date.now());
   const [showProjectManagement, setShowProjectManagement] = useState(false);
-  const [selectedProjectForManagement, setSelectedProjectForManagement] = useState(null);
 
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
-  const [isTablet, setIsTablet] = useState(window.innerWidth >= 768 && window.innerWidth < 1024);
 
 useEffect(() => {
   const handleResize = () => {
     const width = window.innerWidth;
     setIsMobile(width < 768);
-    setIsTablet(width >= 768 && width < 1024);
 
     // Ajuste automático del sidebar según el ancho
     if (width < 768) {
@@ -868,6 +888,7 @@ useEffect(() => {
     if (projects.length > 0) {
       migrateProjects();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projects.length]); // Solo ejecutar cuando cambie la cantidad de proyectos
 
   const saveTasks = (newTasks) => {
@@ -898,8 +919,8 @@ useEffect(() => {
   };
 
   const handleOpenProjectManagement = (project) => {
-    setSelectedProjectForManagement(project);
     setShowProjectManagement(true);
+    addToast(`Gestión de proyecto "${project.name}" próximamente`, 'info');
   };
 
   const handleProjectUpdate = (updatedProject) => {
@@ -1107,7 +1128,7 @@ useEffect(() => {
 
           {activeView === 'list' && (
             <ListView 
-              listId={Date.now()}
+              listId={listIdRef.current}
               listName={breadcrumbs[breadcrumbs.length - 1]?.label || 'Lista'}
               tasks={tasks}
               projects={projects}
@@ -1143,8 +1164,6 @@ useEffect(() => {
               tasks={tasks}
               onTasksChange={saveTasks}
               users={users}
-              comments={comments}
-              onCommentsChange={saveComments}
               tags={tags}
               onTaskClick={handleTaskClick}
               onProjectUpdate={handleProjectUpdate} 
@@ -1202,9 +1221,23 @@ useEffect(() => {
         />
       )}
 
-      {showShortcuts && (
-        <KeyboardShortcutsModal onClose={() => setShowShortcuts(false)} />
+      {showProjectManagement && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000 }}>
+          <div style={{ width: 'min(460px, 90vw)', padding: '1.75rem', borderRadius: '18px', background: 'white', boxShadow: '0 24px 80px rgba(0,0,0,0.35)' }}>
+            <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: '#0f172a' }}>Gestión de proyecto</h3>
+            <p style={{ margin: '0.75rem 0 0', color: '#475569', lineHeight: 1.5 }}>
+              Esta vista aún no está disponible. Pronto podrás manejar la configuración y detalles avanzados del proyecto desde aquí.
+            </p>
+            <button
+              onClick={() => setShowProjectManagement(false)}
+              style={{ marginTop: '1.5rem', padding: '0.75rem 1rem', borderRadius: '12px', border: 'none', background: '#6366f1', color: 'white', cursor: 'pointer' }}
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>
       )}
+
       {showShortcuts && (
         <KeyboardShortcutsModal onClose={() => setShowShortcuts(false)} />
       )}
@@ -1315,6 +1348,17 @@ function TopBar({ user, onLogout, onMenuClick, searchQuery, onSearchChange, dark
             </div>
             <Moon size={13} style={{ color: darkMode ? '#818cf8' : '#64748b', transition: 'color 0.3s', flexShrink: 0 }} />
           </div>
+
+          {user && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', paddingLeft: '0.5rem' }}>
+              <div style={{ width: '34px', height: '34px', borderRadius: '12px', background: 'rgba(15,23,42,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: '#0f172a' }}>
+                {(user.name || user.email || 'U').charAt(0).toUpperCase()}
+              </div>
+              <span style={{ fontSize: '0.85rem', color: '#475569', maxWidth: '120px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {user.name || user.email}
+              </span>
+            </div>
+          )}
 
           <button onClick={onLogout} style={iconButtonStyle} title="Cerrar sesión"
             onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.07)'; e.currentTarget.style.color = '#dc2626'; }}
@@ -1966,7 +2010,7 @@ function ProjectCardExtended({ project, onClick, onToggleFavorite, onDuplicate, 
             onClick={(e) => { 
               e.stopPropagation(); 
               setShowMenu(false);
-              onOpenManagement(); 
+              onDuplicate();
             }}
             style={menuItemStyle}
           >
@@ -2013,7 +2057,7 @@ function ProjectCardExtended({ project, onClick, onToggleFavorite, onDuplicate, 
 // ============================================================================
 // PROJECT DETAIL VIEW
 // ============================================================================
-function ProjectDetailView({ project, tasks, onTasksChange, users, comments, onCommentsChange, tags, onTaskClick, onProjectUpdate }) {
+function ProjectDetailView({ project, tasks, onTasksChange, users, tags, onTaskClick, onProjectUpdate }) {
   const [viewMode, setViewMode] = useState('list');
   const [showNewTask, setShowNewTask] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
@@ -3268,11 +3312,8 @@ function TaskDetailModal({ task, project, users, comments, onClose, onUpdate, on
   const [editedTask, setEditedTask] = useState(task);
   const [newComment, setNewComment] = useState('');
   const [showHistory, setShowHistory] = useState(false);
-  const { addToast } = useToast();
 
-  const assignee = users.find(u => u.id === task.assigneeId);
-
-  const handleSave = () => {
+const handleSave = () => {
     onUpdate(editedTask);
     setIsEditing(false);
   };
@@ -3697,7 +3738,7 @@ function ProjectFormModal({ users, onSave, onClose }) {
                       ? p.members.filter(id => id !== u.id)
                       : [...p.members, u.id]
                   }))}
-                  style={checkboxStyle}
+                  style={{ width: 18, height: 18, cursor: 'pointer', accentColor: DESIGN_TOKENS.primary.base }}
                 />
                 <div style={{
                   width: '28px', height: '28px', borderRadius: '8px',
@@ -4091,220 +4132,6 @@ function FormField({ label, required, children, error }) {
 // ============================================================================
 // STYLES
 // ============================================================================
-const animationStyles = `
-  @keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
-  }
-
-  @keyframes fadeInUp {
-    from {
-      opacity: 0;
-      transform: translateY(20px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
-  @keyframes slideUp {
-    from {
-      transform: translateY(30px);
-      opacity: 0;
-    }
-    to {
-      transform: translateY(0);
-      opacity: 1;
-    }
-  }
-
-  @keyframes slideInRight {
-    from {
-      opacity: 0;
-      transform: translateX(30px);
-    }
-    to {
-      opacity: 1;
-      transform: translateX(0);
-    }
-  }
-
-  @keyframes spin {
-    to {
-      transform: rotate(360deg);
-    }
-  }
-
-  @keyframes shake {
-    0%, 100% { transform: translateX(0); }
-    25% { transform: translateX(-5px); }
-    75% { transform: translateX(5px); }
-  }
-`;
-
-const loginContainerStyle = {
-  minHeight: '100vh',
-  display: 'flex',
-  background: '#FFFFFF',
-  fontFamily: DESIGN_TOKENS.typography.fontFamily
-};
-
-const brandingSectionStyle = {
-  flex: 1,
-  background: DESIGN_TOKENS.gradients.primary,
-  display: 'flex',
-  flexDirection: 'column',
-  justifyContent: 'center',
-  alignItems: 'center',
-  padding: 'clamp(2rem, 5vw, 4rem) clamp(1.5rem, 4vw, 3rem)',
-  color: 'white'
-};
-
-const brandingContentStyle = {
-  maxWidth: 'min(500px, 90vw)',
-  animation: 'fadeInUp 0.8s ease forwards'
-};
-
-const logoStyle = {
-  marginBottom: '1.5rem'
-};
-
-const brandingTitleStyle = {
-  fontSize: 'clamp(2rem, 3.2vw, 2.7rem)',
-  fontWeight: 800,
-  margin: '0 0 1rem',
-  letterSpacing: '-0.03em',
-  lineHeight: 1.2,
-  color: 'white'
-};
-
-const brandingDescStyle = {
-  fontSize: 'clamp(1rem, 1.7vw, 1.125rem)',
-  opacity: 0.9,
-  lineHeight: 1.8,
-  marginBottom: '2.5rem',
-  color: 'rgba(255,255,255,0.9)'
-};
-
-const featureListStyle = {
-  display: 'flex',
-  flexDirection: 'column'
-};
-
-const formSectionStyle = {
-  width: '100%',
-  maxWidth: 'min(480px, 90vw)',
-  background: DESIGN_TOKENS.neutral[50],
-  display: 'flex',
-  flexDirection: 'column',
-  justifyContent: 'center',
-  alignItems: 'center',
-  padding: 'clamp(2rem, 4vw, 3rem)',
-  boxShadow: DESIGN_TOKENS.shadows.xl
-};
-
-const formContentStyle = {
-  width: '100%',
-  maxWidth: 'min(400px, 90vw)'
-};
-
-const tabsContainerStyle = {
-  display: 'flex',
-  gap: '1rem',
-  marginBottom: '2rem',
-  borderBottom: `1px solid ${DESIGN_TOKENS.neutral[200]}`
-};
-
-const tabStyle = {
-  background: 'none',
-  border: 'none',
-  fontSize: '0.875rem',
-  fontWeight: 600,
-  cursor: 'pointer',
-  padding: '0.75rem 0',
-  transition: 'all 0.3s ease',
-  textTransform: 'uppercase',
-  letterSpacing: '0.5px'
-};
-
-const formTitleStyle = {
-  fontSize: '1.75rem',
-  fontWeight: 800,
-  color: DESIGN_TOKENS.neutral[800],
-  margin: '0 0 0.5rem',
-  letterSpacing: '-0.01em'
-};
-
-const formSubtitleStyle = {
-  fontSize: '0.875rem',
-  color: DESIGN_TOKENS.neutral[500],
-  margin: '0 0 1.5rem'
-};
-
-const formStyle = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: '0'
-};
-
-const errorAlertStyle = {
-  padding: '0.875rem 1rem',
-  background: DESIGN_TOKENS.danger.light,
-  border: `1px solid ${DESIGN_TOKENS.danger.base}30`,
-  borderLeft: `4px solid ${DESIGN_TOKENS.danger.base}`,
-  borderRadius: '8px',
-  color: DESIGN_TOKENS.danger.dark,
-  fontSize: '0.875rem',
-  marginBottom: '1.5rem',
-  display: 'flex',
-  alignItems: 'flex-start',
-  gap: '0.75rem'
-};
-
-const checkboxStyle = {
-  width: '18px',
-  height: '18px',
-  cursor: 'pointer',
-  accentColor: DESIGN_TOKENS.primary.base
-};
-
-const submitButtonStyle = {
-  width: '100%',
-  padding: '0.875rem 1rem',
-  background: DESIGN_TOKENS.gradients.primary,
-  color: 'white',
-  border: 'none',
-  borderRadius: '8px',
-  fontSize: '0.95rem',
-  fontWeight: 600,
-  cursor: 'pointer',
-  marginTop: '1.5rem',
-  transition: 'all 0.3s ease',
-  boxShadow: `0 4px 12px ${DESIGN_TOKENS.primary.base}40`
-};
-
-const demoBoxStyle = {
-  marginTop: '2rem',
-  padding: '1rem',
-  background: DESIGN_TOKENS.primary.lightest,
-  border: `1px solid ${DESIGN_TOKENS.primary.lighter}`,
-  borderRadius: '8px'
-};
-
-const passwordToggleStyle = {
-  position: 'absolute',
-  right: '0.75rem',
-  top: '50%',
-  transform: 'translateY(-50%)',
-  background: 'none',
-  border: 'none',
-  color: DESIGN_TOKENS.neutral[400],
-  cursor: 'pointer',
-  display: 'flex',
-  padding: '0.5rem'
-};
-
 const dashboardContainerStyle = {
   minHeight: '100vh',
   width: '100%',

@@ -30,17 +30,19 @@ const EMOJI_CATEGORIES = {
 // ============================================================================
 // TEAM CHAT VIEW - MEJORADO
 // ============================================================================
+const INITIAL_CHAT_MESSAGES = [
+  {
+    id: 1,
+    userId: 1,
+    text: '¡Bienvenido al chat del equipo! 🎉',
+    timestamp: new Date(Date.now() - 3600000).toISOString(),
+    userName: 'Sistema',
+    userAvatar: '🤖'
+  }
+];
+
 function TeamChatView({ user }) {
-  const [messages, setMessages] = useState([
-    {
-      id: 1,
-      userId: 1,
-      text: '¡Bienvenido al chat del equipo! 🎉',
-      timestamp: new Date(Date.now() - 3600000).toISOString(),
-      userName: 'Sistema',
-      userAvatar: '🤖'
-    }
-  ]);
+  const [messages, setMessages] = useState(INITIAL_CHAT_MESSAGES);
   const [newMessage, setNewMessage] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showBackgroundSelector, setShowBackgroundSelector] = useState(false);
