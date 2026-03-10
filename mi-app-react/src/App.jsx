@@ -423,7 +423,7 @@ if (isTransitioning) {
 }
 
 // ============================================================================
-// SEITRA PREMIUM LOGIN - REDISEÑO DE PROPORCIONES Y COLOR ANIMADO
+// SEITRA LOGIN 
 // ============================================================================
 
 function LoginScreen({ onLogin }) {
@@ -526,6 +526,8 @@ function LoginScreen({ onLogin }) {
           background: rgba(255, 255, 255, 0.02); backdrop-filter: blur(10px);
           border-radius: 40px; border: 1px solid rgba(255, 255, 255, 0.1);
           overflow: hidden; z-index: 2; box-shadow: 0 50px 100px -20px rgba(0,0,0,0.5);
+          max-width: 1400px;
+          margin: 0 auto;
         }
         .input-pro { 
           width: 100%; padding: 1.1rem 1.4rem; border-radius: 16px; border: 1px solid #e2e8f0; 
@@ -608,10 +610,6 @@ function LoginScreen({ onLogin }) {
                 <line x1="2" y1="30" x2="11" y2="29.5" stroke="#555" strokeWidth="0.8" strokeLinecap="round"/>
                 <line x1="34" y1="27" x2="25" y2="28.5" stroke="#555" strokeWidth="0.8" strokeLinecap="round"/>
                 <line x1="34" y1="30" x2="25" y2="29.5" stroke="#555" strokeWidth="0.8" strokeLinecap="round"/>
-                {/* cuerpo */}
-                <ellipse cx="18" cy="49" rx="13" ry="10" fill="#1e1e1e"/>
-                {/* brazo izquierdo (descansando) */}
-                <ellipse cx="6" cy="46" rx="4" ry="3" fill="#1e1e1e" transform="rotate(20 6 46)"/>
                 {/* brazo derecho levantado */}
                 <path d="M28 38 Q34 28 40 22" stroke="#1e1e1e" strokeWidth="5" fill="none" strokeLinecap="round"/>
                 {/* manita levantada */}
@@ -619,17 +617,12 @@ function LoginScreen({ onLogin }) {
                 <circle cx="38" cy="16" r="2.2" fill="#1e1e1e"/>
                 <circle cx="41" cy="15" r="2.2" fill="#1e1e1e"/>
                 <circle cx="44" cy="16" r="2.2" fill="#1e1e1e"/>
-                {/* patitas */}
-                <ellipse cx="11" cy="58" rx="5" ry="3" fill="#1e1e1e"/>
-                <ellipse cx="24" cy="58" rx="5" ry="3" fill="#1e1e1e"/>
-                {/* cola */}
-                <path d="M31 54 Q44 50 42 39" stroke="#1e1e1e" strokeWidth="4" fill="none" strokeLinecap="round"/>
               </svg>
               <div>
-                <h2 style={{ margin: 0, fontSize: '1.6rem', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.5px', lineHeight: 1.1 }}>
-                  {isLogin ? 'Bienvenido de vuelta' : 'Bienvenido'}
+                <h2 style={{ margin: 0, fontSize: '0.6 rem', fontWeight: 700, color: '#0f172a', letterSpacing: '-0.5px', lineHeight: 1.1 }}>
+                  {isLogin ? 'Entra a tu espacio de trabajo' : 'Tu productividad comienza aquí'}
                 </h2>
-                <p style={{ margin: '4px 0 0', fontSize: '0.875rem', color: '#94a3b8', fontWeight: 500 }}>
+                <p style={{ margin: '4px 0 0', fontSize: '0.875rem', color: '#94a3b8', fontWeight: 400 }}>
                   {isLogin ? 'Nos alegra verte de nuevo por aquí.' : 'Crea tu cuenta y empieza hoy.'}
                 </p>
               </div>
@@ -652,7 +645,7 @@ function LoginScreen({ onLogin }) {
                     flex: 1, padding: '0.8rem 1rem', borderRadius: '14px', border: 'none',
                     background: isLogin === mode ? 'white' : 'transparent',
                     color: isLogin === mode ? '#0f172a' : '#94a3b8',
-                    fontWeight: isLogin === mode ? 700 : 500,
+                    fontWeight: isLogin === mode ? 600 : 300,
                     fontSize: '0.95rem', cursor: 'pointer',
                     transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                     boxShadow: isLogin === mode ? '0 2px 12px rgba(15,23,42,0.1)' : 'none',
@@ -1327,30 +1320,35 @@ function TopBar({ user, onLogout, onMenuClick, searchQuery, onSearchChange, dark
 }
 
 // ============================================================================
-// DASHBOARD VIEW
+// DASHBOARD VIEW - CORREGIDA
 // ============================================================================
-function DashboardView({ user, tasks, projects, onTaskClick, onProjectSelect }) {
-  const myTasks = tasks.filter(t => t.assigneeId === user.id);
+function DashboardView({ user, tasks = [], projects = [], onTaskClick, onProjectSelect }) {
+  // Blindaje de seguridad: Si tasks o projects llegan undefined, usamos array vacío
+  const myTasks = (tasks || []).filter(t => t.assigneeId === user?.id);
+  
   const overdueTasks = myTasks.filter(t => 
     new Date(t.endDate) < new Date() && t.status !== 'completed'
   );
+  
   const todayTasks = myTasks.filter(t => {
     const today = new Date().toDateString();
-    return new Date(t.endDate).toDateString() === today && t.status !== 'completed';
+    return t.endDate && new Date(t.endDate).toDateString() === today && t.status !== 'completed';
   });
+  
   const upcomingTasks = myTasks.filter(t => {
     const days = Math.ceil((new Date(t.endDate) - new Date()) / (1000 * 60 * 60 * 24));
     return days > 0 && days <= 7 && t.status !== 'completed';
   });
+  
   const completedTasks = myTasks.filter(t => t.status === 'completed');
-
-  const activeProjects = projects.filter(p => p.status === 'active');
+  const activeProjects = (projects || []).filter(p => p.status === 'active');
 
   return (
     <div style={{ padding: '2rem' }}>
       <div style={{ marginBottom: '2rem' }}>
         <h1 style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 0.4rem', letterSpacing: '-0.5px' }}>
-          {user.isNew ? 'Bienvenido' : 'Bienvenido de vuelta'}, {(user.name || user.email || 'Usuario').split(' ')[0]}
+          {/* CORRECCIÓN: Todo dentro de llaves para que se ejecute el código */}
+          {user?.isNew ? 'Bienvenido' : 'Bienvenido de vuelta'}, {(user?.name || user?.email || 'Usuario').split(' ')[0]}
         </h1>
         <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '0.9375rem', fontWeight: 500 }}>
           Aquí está tu resumen del día
@@ -1359,24 +1357,24 @@ function DashboardView({ user, tasks, projects, onTaskClick, onProjectSelect }) 
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.5rem', marginBottom: '3rem' }}>
         <StatCard 
-          label="  Vencidas HOY" 
+          label="Vencidas HOY" 
           value={todayTasks.length} 
           color={DESIGN_TOKENS.warning.base}
           icon={<Clock size={20} />}
           trend="+2 desde ayer"
         />
         <StatCard 
-          label=" Esta Semana" 
+          label="Esta Semana" 
           value={upcomingTasks.length} 
           color={DESIGN_TOKENS.info.base}
           icon={<Calendar size={20} />}
         />
         <StatCard 
-          label=" Completadas" 
+          label="Completadas" 
           value={completedTasks.length} 
           color={DESIGN_TOKENS.success.base}
           icon={<CheckCircle2 size={20} />}
-          trend={`${Math.round((completedTasks.length / myTasks.length) * 100)}% del total`}
+          trend={myTasks.length > 0 ? `${Math.round((completedTasks.length / myTasks.length) * 100)}% del total` : "0% del total"}
         />
         <StatCard 
           label="Proyectos Activos" 
@@ -1388,21 +1386,21 @@ function DashboardView({ user, tasks, projects, onTaskClick, onProjectSelect }) 
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '2rem', marginBottom: '3rem' }}>
         <TaskSection
-          title=" Tareas Vencidas"
+          title="Tareas Vencidas"
           count={overdueTasks.length}
           tasks={overdueTasks.slice(0, 5)}
           onTaskClick={onTaskClick}
           emptyMessage="¡Genial! No hay tareas vencidas"
         />
         <TaskSection
-          title=" Para Hoy"
+          title="Para Hoy"
           count={todayTasks.length}
           tasks={todayTasks.slice(0, 5)}
           onTaskClick={onTaskClick}
           emptyMessage="No hay tareas pendientes para hoy"
         />
         <TaskSection
-          title=" Próxima Semana"
+          title="Próxima Semana"
           count={upcomingTasks.length}
           tasks={upcomingTasks.slice(0, 5)}
           onTaskClick={onTaskClick}
