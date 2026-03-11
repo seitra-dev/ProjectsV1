@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+  <defs>
+    <linearGradient id="deepBlue" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a3a6b;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0d2240;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="faceLight" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b6cb7;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1a3a6b;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="faceMid" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#2451a0;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0d2240;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="faceDark" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#0d2240;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#061526;stop-opacity:1" />
+    </linearGradient>
+    <filter id="shadow">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#0d2240" flood-opacity="0.4"/>
+    </filter>
+  </defs>
+
+  <!-- Background circle -->
+  <circle cx="50" cy="50" r="48" fill="url(#deepBlue)" />
+
+  <!-- Origami crane / rising shape - Kaizen (continuous improvement = always rising) -->
+  <!-- Wing left - light face -->
+  <polygon points="50,22 18,58 50,48" fill="url(#faceLight)" opacity="0.95"/>
+  <!-- Wing right - mid face -->
+  <polygon points="50,22 82,58 50,48" fill="url(#faceMid)" opacity="0.9"/>
+  <!-- Body bottom - dark face -->
+  <polygon points="18,58 50,48 82,58 50,78" fill="url(#faceDark)" opacity="1"/>
+  <!-- Inner crease left -->
+  <polygon points="50,48 18,58 50,78" fill="#0a1d3a" opacity="0.5"/>
+  <!-- Highlight fold line -->
+  <line x1="50" y1="22" x2="50" y2="78" stroke="white" stroke-width="0.6" opacity="0.2"/>
+  <line x1="18" y1="58" x2="82" y2="58" stroke="white" stroke-width="0.6" opacity="0.15"/>
+
+  <!-- Top tip glow -->
+  <circle cx="50" cy="22" r="1.5" fill="white" opacity="0.6"/>
+
+  <!-- Subtle outer ring -->
+  <circle cx="50" cy="50" r="47" fill="none" stroke="white" stroke-width="0.5" opacity="0.1"/>
+</svg>

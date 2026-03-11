@@ -84,7 +84,7 @@ export const AppProvider = ({ children }) => {
         // Por ahora, usamos un usuario hardcodeado
         // Después implementaremos autenticación real
         const mockUser = {
-          id: 'temp-user-id', // Este será reemplazado con auth real
+          id: null, // ← era 'temp-user-id'
           email: 'user@seitra.com',
           name: 'Usuario Demo',
           avatar: '👤',
@@ -136,7 +136,7 @@ export const AppProvider = ({ children }) => {
         description: data.description || '',
         color: data.color || '#6366f1',
         icon: data.icon || '📊',
-        owner_id: currentUser?.id
+        owner_id: null  // ← así hasta implementar auth real
       });
 
       // Agregar el creador como miembro admin

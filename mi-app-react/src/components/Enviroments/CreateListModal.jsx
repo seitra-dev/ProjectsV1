@@ -236,7 +236,7 @@ const CreateListModal = ({ isOpen, onClose, onSave }) => {
             <select
               value={formData.environmentId || ''}
               onChange={(e) => {
-                setFormData({ ...formData, environmentId: Number(e.target.value) });
+                setFormData({ ...formData, environmentId: e.target.value }); 
                 setErrors({ ...errors, environment: null });
               }}
               style={{
