@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { ChevronDown, ChevronRight, Plus, Calendar, User, Flag, FolderOpen, X, GripVertical } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ChevronDown, ChevronRight, Plus, Flag, X, GripVertical } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { DESIGN_TOKENS } from '../styles/tokens';
+import { dbTasks, dbProjects, dbUsers } from '../lib/database';
 import {
   DndContext,
   closestCenter,
@@ -50,44 +51,31 @@ const SortableTaskRow = ({ task, projects, users, onUpdate }) => {
     isDragging,
   } = useSortable({ id: task.id });
 
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
+  const style = { transform: CSS.Transform.toString(transform), transition };
 
-  const project = projects.find(p => p.id === task.projectId);
-  const assignee = users.find(u => u.id === task.assigneeId);
+  const project = projects.find(p => p.id === task.project_id);
+  const assignee = task.assignee || users.find(u => u.id === task.assignee_id);
   const priority = PRIORITY_OPTIONS[task.priority] || PRIORITY_OPTIONS.medium;
 
   return (
-    <div
-      ref={setNodeRef}
-      style={{
-        ...style,
-        opacity: isDragging ? 0.5 : 1,
-      }}
-    >
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: '24px 400px 150px 120px 120px 120px 120px 40px',
-        gap: '8px',
-        padding: '12px 32px',
-        background: isDragging ? DESIGN_TOKENS.primary.lightest : 'white',
-        borderBottom: `1px solid ${DESIGN_TOKENS.border.color.subtle}`,
-        alignItems: 'center',
-        fontSize: '13px',
-        transition: 'all 0.15s',
-        border: isDragging ? `2px solid ${DESIGN_TOKENS.primary.base}` : 'none',
-        borderRadius: isDragging ? '8px' : '0'
-      }}
-      onMouseEnter={(e) => {
-        if (!isDragging) e.currentTarget.style.background = DESIGN_TOKENS.neutral[50];
-      }}
-      onMouseLeave={(e) => {
-        if (!isDragging) e.currentTarget.style.background = 'white';
-      }}
+    <div ref={setNodeRef} style={{ ...style, opacity: isDragging ? 0.5 : 1 }}>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '24px 400px 150px 120px 120px 120px 120px 40px',
+          gap: '8px',
+          padding: '12px 32px',
+          background: isDragging ? DESIGN_TOKENS.primary.lightest : 'white',
+          borderBottom: `1px solid ${DESIGN_TOKENS.border.color.subtle}`,
+          alignItems: 'center',
+          fontSize: '13px',
+          transition: 'all 0.15s',
+          border: isDragging ? `2px solid ${DESIGN_TOKENS.primary.base}` : 'none',
+          borderRadius: isDragging ? '8px' : '0'
+        }}
+        onMouseEnter={(e) => { if (!isDragging) e.currentTarget.style.background = DESIGN_TOKENS.neutral[50]; }}
+        onMouseLeave={(e) => { if (!isDragging) e.currentTarget.style.background = 'white'; }}
       >
-        {/* DRAG HANDLE */}
         <div
           {...attributes}
           {...listeners}
@@ -104,16 +92,13 @@ const SortableTaskRow = ({ task, projects, users, onUpdate }) => {
           <GripVertical size={16} />
         </div>
 
-        <div style={{ 
-          fontWeight: 500,
-          color: DESIGN_TOKENS.neutral[800]
-        }}>
+        <div style={{ fontWeight: 500, color: DESIGN_TOKENS.neutral[800] }}>
           {task.title}
         </div>
 
         <div style={{
           padding: '4px 10px',
-          background: project?.color + '20' || DESIGN_TOKENS.neutral[100],
+          background: project?.color ? project.color + '20' : DESIGN_TOKENS.neutral[100],
           color: project?.color || DESIGN_TOKENS.neutral[600],
           borderRadius: '4px',
           fontSize: '12px',
@@ -125,23 +110,17 @@ const SortableTaskRow = ({ task, projects, users, onUpdate }) => {
           {project?.name || '—'}
         </div>
 
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '6px'
-        }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           <Flag size={14} color={priority.color} fill={priority.color} />
-          <span style={{ color: priority.color, fontSize: '12px' }}>
-            {priority.label}
-          </span>
+          <span style={{ color: priority.color, fontSize: '12px' }}>{priority.label}</span>
         </div>
 
         <div style={{ color: DESIGN_TOKENS.neutral[600], fontSize: '12px' }}>
-          {task.startDate || '—'}
+          {task.start_date || '—'}
         </div>
 
         <div style={{ color: DESIGN_TOKENS.neutral[600], fontSize: '12px' }}>
-          {task.endDate || '—'}
+          {task.due_date || '—'}
         </div>
 
         <div style={{ color: DESIGN_TOKENS.neutral[500], fontSize: '12px' }}>
@@ -162,7 +141,7 @@ const SortableTaskRow = ({ task, projects, users, onUpdate }) => {
               fontSize: '10px',
               fontWeight: 600
             }}>
-              {assignee.name.charAt(0).toUpperCase()}
+              {assignee.name?.charAt(0).toUpperCase()}
             </div>
           )}
         </div>
@@ -174,29 +153,14 @@ const SortableTaskRow = ({ task, projects, users, onUpdate }) => {
 // ============================================================================
 // DROPPABLE STATUS GROUP
 // ============================================================================
-const DroppableStatusGroup = ({ 
-  statusKey, 
-  statusInfo, 
-  tasks, 
-  isExpanded, 
-  onToggle, 
-  onAddTask,
-  projects,
-  users,
-  onUpdateTask,
-  children 
-}) => {
-  const { setNodeRef } = useSortable({ 
+const DroppableStatusGroup = ({ statusKey, statusInfo, tasks, isExpanded, onToggle, onAddTask, children }) => {
+  const { setNodeRef } = useSortable({
     id: `status-${statusKey}`,
-    data: {
-      type: 'status',
-      status: statusKey
-    }
+    data: { type: 'status', status: statusKey }
   });
 
   return (
     <div ref={setNodeRef} style={{ marginBottom: '4px' }}>
-      {/* STATUS HEADER */}
       <div
         onClick={onToggle}
         style={{
@@ -228,10 +192,7 @@ const DroppableStatusGroup = ({
           {tasks.length}
         </span>
         <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onAddTask();
-          }}
+          onClick={(e) => { e.stopPropagation(); onAddTask(); }}
           style={{
             marginLeft: 'auto',
             padding: '6px 12px',
@@ -258,9 +219,8 @@ const DroppableStatusGroup = ({
         </button>
       </div>
 
-      {/* TASKS */}
       {isExpanded && (
-        <div style={{ minHeight: tasks.length === 0 ? '100px' : 'auto' }}>
+        <div style={{ minHeight: tasks.length === 0 ? '60px' : 'auto' }}>
           {children}
         </div>
       )}
@@ -269,79 +229,94 @@ const DroppableStatusGroup = ({
 };
 
 // ============================================================================
-// BACKLOG VIEW WITH DRAG AND DROP
+// BACKLOG VIEW — CONECTADO A SUPABASE
 // ============================================================================
-function BacklogView({ tasks, projects, users, onTasksChange }) {
+function BacklogView() {
   const { currentEnvironment, currentWorkspace } = useApp();
+
+  const [tasks, setTasks] = useState([]);
+  const [projects, setProjects] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
   const [expandedStatuses, setExpandedStatuses] = useState({ in_progress: true, pending: true });
   const [activeId, setActiveId] = useState(null);
   const [newTaskRow, setNewTaskRow] = useState({ status: null });
 
+  // ── Cargar datos cuando cambia el workspace ──────────────────────────────
+  useEffect(() => {
+    if (!currentWorkspace?.id) {
+      setTasks([]);
+      setProjects([]);
+      return;
+    }
+    loadData();
+  }, [currentWorkspace?.id]);
+
+  const loadData = async () => {
+    setIsLoading(true);
+    try {
+      const [projectsData, usersData] = await Promise.all([
+        dbProjects.getByWorkspace(currentWorkspace.id),
+        dbUsers.getAll()
+      ]);
+      setProjects(projectsData);
+      setUsers(usersData);
+
+      // Cargar tareas de todos los proyectos del workspace
+      if (projectsData.length > 0) {
+        const taskPromises = projectsData.map(p => dbTasks.getByProject(p.id));
+        const taskArrays = await Promise.all(taskPromises);
+        setTasks(taskArrays.flat());
+      } else {
+        setTasks([]);
+      }
+    } catch (error) {
+      console.error('Error cargando backlog:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // ── Drag & Drop ──────────────────────────────────────────────────────────
   const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 8,
-      },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
-  // Filtrar proyectos del workspace actual
-  const workspaceProjects = currentWorkspace 
-    ? projects.filter(p => p.workspaceId === currentWorkspace.id)
-    : projects;
-
-  // Agrupar tareas por estado
   const groupedTasks = {};
   Object.keys(STATUS_OPTIONS).forEach(status => {
     groupedTasks[status] = tasks.filter(t => t.status === status);
   });
 
-  const handleDragStart = (event) => {
-    setActiveId(event.active.id);
-  };
+  const handleDragStart = (event) => setActiveId(event.active.id);
 
   const handleDragOver = (event) => {
     const { active, over } = event;
-    
     if (!over) return;
 
     const activeTask = tasks.find(t => t.id === active.id);
     if (!activeTask) return;
 
-    // Si se arrastra sobre otra tarea, obtener su estado
     let newStatus = activeTask.status;
-    
     if (over.data?.current?.type === 'status') {
       newStatus = over.data.current.status;
     } else {
       const overTask = tasks.find(t => t.id === over.id);
-      if (overTask) {
-        newStatus = overTask.status;
-      }
+      if (overTask) newStatus = overTask.status;
     }
 
-    // Actualizar estado si cambió
     if (newStatus !== activeTask.status) {
-      const updatedTasks = tasks.map(t =>
-        t.id === active.id ? { ...t, status: newStatus } : t
-      );
-      onTasksChange(updatedTasks);
+      setTasks(prev => prev.map(t => t.id === active.id ? { ...t, status: newStatus } : t));
     }
   };
 
-  const handleDragEnd = (event) => {
+  const handleDragEnd = async (event) => {
     setActiveId(null);
-    
     const { active, over } = event;
-    
     if (!over) return;
 
     const activeTask = tasks.find(t => t.id === active.id);
     const overTask = tasks.find(t => t.id === over.id);
-
     if (!activeTask) return;
 
     // Reordenar dentro del mismo grupo
@@ -349,44 +324,71 @@ function BacklogView({ tasks, projects, users, onTasksChange }) {
       const statusTasks = groupedTasks[activeTask.status];
       const oldIndex = statusTasks.findIndex(t => t.id === active.id);
       const newIndex = statusTasks.findIndex(t => t.id === over.id);
-      
       if (oldIndex !== newIndex) {
         const reordered = arrayMove(statusTasks, oldIndex, newIndex);
         const otherTasks = tasks.filter(t => t.status !== activeTask.status);
-        onTasksChange([...otherTasks, ...reordered]);
+        setTasks([...otherTasks, ...reordered]);
+      }
+    }
+
+    // Guardar nuevo status en Supabase si cambió
+    const currentTask = tasks.find(t => t.id === active.id);
+    if (currentTask && currentTask.status !== activeTask.status) {
+      try {
+        await dbTasks.update(active.id, { status: currentTask.status });
+      } catch (error) {
+        console.error('Error actualizando status:', error);
+        // Revertir si falla
+        setTasks(prev => prev.map(t => t.id === active.id ? activeTask : t));
       }
     }
   };
 
-  const toggleStatus = (status) => {
-    setExpandedStatuses(prev => ({
-      ...prev,
-      [status]: !prev[status]
-    }));
-  };
+  // ── Crear nueva tarea ────────────────────────────────────────────────────
+  const handleSaveNewTask = async (taskData) => {
+    if (!currentWorkspace?.id) return;
 
-  const handleAddTaskRow = (status) => {
-    setNewTaskRow({ status });
-  };
+    try {
+      const newTask = await dbTasks.create({
+        title: taskData.title,
+        status: taskData.status,
+        priority: taskData.priority || 'medium',
+        project_id: taskData.projectId || null,
+        assignee_id: taskData.assigneeId || null,
+        start_date: taskData.startDate || null,
+        due_date: taskData.endDate || null,
+        sprint: taskData.sprint || null,
+        workspace_id: currentWorkspace.id,
+        environment_id: currentEnvironment?.id || null,
+        progress: 0
+      });
 
-  const handleSaveNewTask = (taskData) => {
-    const newTask = {
-      id: Date.now(),
-      ...taskData,
-      workspaceId: currentWorkspace?.id,
-      environmentId: currentEnvironment?.id,
-      createdAt: new Date().toISOString(),
-      progress: 0
-    };
-    onTasksChange([...tasks, newTask]);
-    setNewTaskRow({ status: null });
-  };
-
-  const handleCancelNewTask = () => {
-    setNewTaskRow({ status: null });
+      setTasks(prev => [...prev, newTask]);
+      setNewTaskRow({ status: null });
+    } catch (error) {
+      console.error('Error creando tarea:', error);
+    }
   };
 
   const activeTask = tasks.find(t => t.id === activeId);
+
+  // ── Loading state ────────────────────────────────────────────────────────
+  if (!currentWorkspace) {
+    return (
+      <div style={{
+        height: '100%',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexDirection: 'column',
+        gap: '12px',
+        color: DESIGN_TOKENS.neutral[400]
+      }}>
+        <div style={{ fontSize: '40px' }}>📋</div>
+        <div style={{ fontWeight: 600 }}>Selecciona un espacio para ver el backlog</div>
+      </div>
+    );
+  }
 
   return (
     <DndContext
@@ -396,12 +398,7 @@ function BacklogView({ tasks, projects, users, onTasksChange }) {
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
-      <div style={{
-        height: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-        background: DESIGN_TOKENS.neutral[50]
-      }}>
+      <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: DESIGN_TOKENS.neutral[50] }}>
         {/* HEADER */}
         <div style={{
           padding: '24px 32px',
@@ -418,29 +415,17 @@ function BacklogView({ tasks, projects, users, onTasksChange }) {
           }}>
             <span>{currentEnvironment?.icon || '📁'} {currentEnvironment?.name || 'Sin entorno'}</span>
             <ChevronRight size={14} />
-            <span style={{ 
-              color: DESIGN_TOKENS.primary.base,
-              fontWeight: DESIGN_TOKENS.typography.weight.semibold 
-            }}>
-              {currentWorkspace?.name || 'Sin espacio'}
+            <span style={{ color: DESIGN_TOKENS.primary.base, fontWeight: DESIGN_TOKENS.typography.weight.semibold }}>
+              {currentWorkspace?.name}
             </span>
           </div>
-          <h1 style={{
-            fontSize: '28px',
-            fontWeight: 700,
-            margin: 0,
-            color: DESIGN_TOKENS.neutral[800]
-          }}>
+          <h1 style={{ fontSize: '28px', fontWeight: 700, margin: 0, color: DESIGN_TOKENS.neutral[800] }}>
             Backlog
           </h1>
         </div>
 
         {/* CONTENT */}
-        <div style={{
-          flex: 1,
-          overflow: 'auto',
-          padding: '0'
-        }}>
+        <div style={{ flex: 1, overflow: 'auto' }}>
           {/* TABLE HEADER */}
           <div style={{
             display: 'grid',
@@ -462,64 +447,70 @@ function BacklogView({ tasks, projects, users, onTasksChange }) {
             <div>Nombre</div>
             <div>Proyecto</div>
             <div>Prioridad</div>
-            <div>Fecha de inicio</div>
+            <div>Fecha inicio</div>
             <div>Fecha límite</div>
             <div>Sprint</div>
             <div></div>
           </div>
 
-          {/* GROUPED BY STATUS */}
-          {Object.entries(STATUS_OPTIONS).map(([statusKey, statusInfo]) => {
-            const statusTasks = groupedTasks[statusKey] || [];
-            const isExpanded = expandedStatuses[statusKey];
-            const isAddingTask = newTaskRow.status === statusKey;
+          {isLoading ? (
+            <div style={{ padding: '40px', textAlign: 'center', color: DESIGN_TOKENS.neutral[400] }}>
+              Cargando tareas...
+            </div>
+          ) : (
+            Object.entries(STATUS_OPTIONS).map(([statusKey, statusInfo]) => {
+              const statusTasks = groupedTasks[statusKey] || [];
+              const isExpanded = expandedStatuses[statusKey];
+              const isAddingTask = newTaskRow.status === statusKey;
 
-            return (
-              <DroppableStatusGroup
-                key={statusKey}
-                statusKey={statusKey}
-                statusInfo={statusInfo}
-                tasks={statusTasks}
-                isExpanded={isExpanded}
-                onToggle={() => toggleStatus(statusKey)}
-                onAddTask={() => handleAddTaskRow(statusKey)}
-                projects={workspaceProjects}
-                users={users}
-              >
-                <SortableContext
-                  items={statusTasks.map(t => t.id)}
-                  strategy={verticalListSortingStrategy}
+              return (
+                <DroppableStatusGroup
+                  key={statusKey}
+                  statusKey={statusKey}
+                  statusInfo={statusInfo}
+                  tasks={statusTasks}
+                  isExpanded={isExpanded}
+                  onToggle={() => setExpandedStatuses(prev => ({ ...prev, [statusKey]: !prev[statusKey] }))}
+                  onAddTask={() => setNewTaskRow({ status: statusKey })}
                 >
-                  {statusTasks.map(task => (
-                    <SortableTaskRow
-                      key={task.id}
-                      task={task}
-                      projects={workspaceProjects}
-                      users={users}
-                      onUpdate={(updated) => {
-                        onTasksChange(tasks.map(t => t.id === task.id ? updated : t));
-                      }}
-                    />
-                  ))}
-                </SortableContext>
+                  <SortableContext
+                    items={statusTasks.map(t => t.id)}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    {statusTasks.map(task => (
+                      <SortableTaskRow
+                        key={task.id}
+                        task={task}
+                        projects={projects}
+                        users={users}
+                        onUpdate={async (updated) => {
+                          try {
+                            await dbTasks.update(task.id, updated);
+                            setTasks(prev => prev.map(t => t.id === task.id ? { ...t, ...updated } : t));
+                          } catch (error) {
+                            console.error('Error actualizando tarea:', error);
+                          }
+                        }}
+                      />
+                    ))}
+                  </SortableContext>
 
-                {/* NEW TASK ROW */}
-                {isAddingTask && (
-                  <NewTaskRow
-                    status={statusKey}
-                    projects={workspaceProjects}
-                    users={users}
-                    onSave={handleSaveNewTask}
-                    onCancel={handleCancelNewTask}
-                  />
-                )}
-              </DroppableStatusGroup>
-            );
-          })}
+                  {isAddingTask && (
+                    <NewTaskRow
+                      status={statusKey}
+                      projects={projects}
+                      users={users}
+                      onSave={handleSaveNewTask}
+                      onCancel={() => setNewTaskRow({ status: null })}
+                    />
+                  )}
+                </DroppableStatusGroup>
+              );
+            })
+          )}
         </div>
       </div>
 
-      {/* DRAG OVERLAY */}
       <DragOverlay>
         {activeTask ? (
           <div style={{
@@ -544,7 +535,7 @@ function BacklogView({ tasks, projects, users, onTasksChange }) {
 }
 
 // ============================================================================
-// NEW TASK ROW COMPONENT
+// NEW TASK ROW
 // ============================================================================
 const NewTaskRow = ({ status, projects, users, onSave, onCancel }) => {
   const [taskData, setTaskData] = useState({
@@ -558,14 +549,7 @@ const NewTaskRow = ({ status, projects, users, onSave, onCancel }) => {
   });
 
   const handleSave = () => {
-    if (taskData.title.trim()) {
-      onSave(taskData);
-    }
-  };
-
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter') handleSave();
-    if (e.key === 'Escape') onCancel();
+    if (taskData.title.trim()) onSave(taskData);
   };
 
   return (
@@ -582,10 +566,13 @@ const NewTaskRow = ({ status, projects, users, onSave, onCancel }) => {
 
       <input
         type="text"
-        placeholder="Tarea Nombre o type '/' for commands"
+        placeholder="Nombre de la tarea..."
         value={taskData.title}
         onChange={(e) => setTaskData({ ...taskData, title: e.target.value })}
-        onKeyDown={handleKeyDown}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') handleSave();
+          if (e.key === 'Escape') onCancel();
+        }}
         autoFocus
         style={{
           border: 'none',
@@ -599,7 +586,7 @@ const NewTaskRow = ({ status, projects, users, onSave, onCancel }) => {
 
       <select
         value={taskData.projectId || ''}
-        onChange={(e) => setTaskData({ ...taskData, projectId: Number(e.target.value) })}
+        onChange={(e) => setTaskData({ ...taskData, projectId: e.target.value || null })}
         style={{
           padding: '6px',
           border: `1px solid ${DESIGN_TOKENS.border.color.normal}`,

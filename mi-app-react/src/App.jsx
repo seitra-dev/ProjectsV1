@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { supabase } from './lib/supabase';
+import { dbProjects, dbTasks, dbUsers, dbComments } from '../lib/database';
 
 import { 
   Plus, Search, Filter, Calendar, Users, ChevronDown, ChevronUp, ChevronRight,
@@ -16,7 +17,7 @@ import {
 } from 'lucide-react';
 
 import Sidebar from './components/Sidebar';
-import { DESIGN_TOKENS, STORAGE_KEYS, storageGet, storageSet, storageDelete } from './styles/tokens';
+import { DESIGN_TOKENS, STORAGE_KEYS, storageGet, storageSet, } from './styles/tokens';
 import ProjectRoadmap from './components/ProjectRoadmap';
 import EnvironmentSelector from "./components/Enviroments/EnvironmentSelector";
 import CreateEnvironmentModal from "./components/Enviroments/CreateEnvironmentModal";
@@ -253,26 +254,37 @@ function AppContent() {
   const { addToast } = useToast();
 
   useEffect(() => {
-    const initApp = () => {
-      const users = storageGet(STORAGE_KEYS.USERS);
-      const projects = storageGet(STORAGE_KEYS.PROJECTS);
-      const tasks = storageGet(STORAGE_KEYS.TASKS);
-      const comments = storageGet(STORAGE_KEYS.COMMENTS);
-      if (!comments) storageSet(STORAGE_KEYS.COMMENTS, []);
+  const initApp = async () => {
+    const prefs = storageGet(STORAGE_KEYS.PREFERENCES);
+    if (prefs?.darkMode) setDarkMode(prefs.darkMode);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user) {
+      setCurrentUser({
+        id: session.user.id,
+        email: session.user.email,
+        name: session.user.user_metadata?.name || session.user.email,
+        role: session.user.user_metadata?.role || 'user'
+      });
+    }
 
-      const tags = storageGet(STORAGE_KEYS.TAGS);
-      if (!tags) storageSet(STORAGE_KEYS.TAGS, ['web', 'diseño', 'ui', 'backend', 'frontend', 'urgente']);
+    setIsLoading(false);
+  };
 
-      const savedUser = storageGet(STORAGE_KEYS.CURRENT_USER);
-      if (savedUser) setCurrentUser(savedUser);
-
-      const prefs = storageGet(STORAGE_KEYS.PREFERENCES);
-      if (prefs?.darkMode) setDarkMode(prefs.darkMode);
-
-      setIsLoading(false);
-    };
-    initApp();
-  }, []);
+  initApp();
+  const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    if (session?.user) {
+      setCurrentUser({
+        id: session.user.id,
+        email: session.user.email,
+        name: session.user.user_metadata?.name || session.user.email,
+        role: session.user.user_metadata?.role || 'user'
+      });
+    } else {
+      setCurrentUser(null);
+    }
+  });
+  return () => subscription.unsubscribe();
+}, []);
 
   const handleGetStarted = () => {
     setIsTransitioning(true);
@@ -286,30 +298,29 @@ function AppContent() {
     document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light');
   }, [darkMode]);
 
-  const handleLogin = (user, isNew = false) => {
-    setCurrentUser({ ...user, isNew });
-    storageSet(STORAGE_KEYS.CURRENT_USER, user);
-    const nombre = (user.name || user.email).split(' ')[0];
-    addToast(
-      isNew ? `¡Bienvenido, ${nombre}! Tu cuenta ha sido creada.` : `¡Bienvenido de vuelta, ${nombre}!`,
-      'success'
-    );
-  };
+const handleLogin = (user, isNew = false) => {
+  setCurrentUser({ ...user, isNew });
+  // ← ya no necesitas storageSet, Supabase maneja la sesión automáticamente
+  const nombre = (user.name || user.email).split(' ')[0];
+  addToast(
+    isNew ? `¡Bienvenido, ${nombre}! Tu cuenta ha sido creada.` : `¡Bienvenido de vuelta, ${nombre}!`,
+    'success'
+  );
+};
 
-  const handleLogout = () => {
-    setCurrentUser(null);
-    storageDelete(STORAGE_KEYS.CURRENT_USER);
-    addToast('Sesión cerrada correctamente', 'info');
-  };
+const handleLogout = async () => {
+  await supabase.auth.signOut(); // ← esto invalida el token en Supabase
+  setCurrentUser(null);          // ← el onAuthStateChange también lo limpia, pero esto es más inmediato
+  addToast('Sesión cerrada correctamente', 'info');
+};
 
-  const toggleDarkMode = () => {
-    const newMode = !darkMode;
-    setDarkMode(newMode);
-    const prefs = storageGet(STORAGE_KEYS.PREFERENCES) || {};
-    storageSet(STORAGE_KEYS.PREFERENCES, { ...prefs, darkMode: newMode });
-    addToast(`Modo ${newMode ? 'oscuro' : 'claro'} activado`, 'info');
-  };
-
+const toggleDarkMode = () => {
+  const newMode = !darkMode;
+  setDarkMode(newMode);
+  const prefs = storageGet(STORAGE_KEYS.PREFERENCES) || {};
+  storageSet(STORAGE_KEYS.PREFERENCES, { ...prefs, darkMode: newMode }); // ← este sí se queda en localStorage
+  addToast(`Modo ${newMode ? 'oscuro' : 'claro'} activado`, 'info');
+};
   if (isLoading) {
     return (
       <div style={{
@@ -787,6 +798,7 @@ function MainApp({ user, onLogout, darkMode, toggleDarkMode }) {
   const { addToast } = useToast();
   const [showProjectManagement, setShowProjectManagement] = useState(false);
   const [selectedProjectForManagement, setSelectedProjectForManagement] = useState(null);
+  const { currentWorkspace } = useApp();
 
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [isTablet, setIsTablet] = useState(window.innerWidth >= 768 && window.innerWidth < 1024);
@@ -807,8 +819,8 @@ useEffect(() => {
 }, []);
 
   useEffect(() => {
-    loadData();
-  }, []);
+  loadData();
+  }, [currentWorkspace]);
   // Migrar proyectos existentes para agregar roadmap
   useEffect(() => {
     const migrateProjects = () => {
@@ -832,42 +844,47 @@ useEffect(() => {
       migrateProjects();
     }
 }, [projects.length]); // Solo ejecutar cuando cambie la cantidad de proyectos
-  const loadData = () => {
-    setProjects(storageGet(STORAGE_KEYS.PROJECTS) || []);
-    setTasks(storageGet(STORAGE_KEYS.TASKS) || []);
-    setUsers(storageGet(STORAGE_KEYS.USERS) || []);
-    setComments(storageGet(STORAGE_KEYS.COMMENTS) || []);
-    setTags(storageGet(STORAGE_KEYS.TAGS) || []);
-  };
 
-  const saveProjects = (newProjects) => {
-    setProjects(newProjects);
-    storageSet(STORAGE_KEYS.PROJECTS, newProjects);
-    logActivity('projects_updated', `Proyectos actualizados`);
-  };
+const loadData = async () => {
+  try {
+    const [projectsData, usersData] = await Promise.all([
+      currentWorkspace ? dbProjects.getByWorkspace(currentWorkspace.id) : [],
+      dbUsers.getAll()
+    ]);
+    setProjects(projectsData || []);
+    setUsers(usersData || []);
+    setTags(['web', 'diseño', 'ui', 'backend', 'frontend', 'urgente']);
 
-  const saveTasks = (newTasks) => {
-    setTasks(newTasks);
-    storageSet(STORAGE_KEYS.TASKS, newTasks);
-    logActivity('tasks_updated', `Tareas actualizadas`);
-  };
+    // Cargar tareas de todos los proyectos
+    if (projectsData?.length > 0) {
+      const allTasks = await Promise.all(
+        projectsData.map(p => dbTasks.getByProject(p.id))
+      );
+      setTasks(allTasks.flat());
+    } else {
+      setTasks([]);
+    }
 
-  const saveComments = (newComments) => {
-    setComments(newComments);
-    storageSet(STORAGE_KEYS.COMMENTS, newComments);
-  };
+  } catch (err) {
+    console.error('Error cargando datos:', err);
+    addToast('Error cargando datos', 'error');
+  }
+};
 
-  const logActivity = (type, description) => {
-    const log = storageGet(STORAGE_KEYS.ACTIVITY_LOG) || [];
-    log.unshift({
-      id: Date.now(),
-      type,
-      description,
-      userId: user.id,
-      timestamp: new Date().toISOString()
-    });
-    storageSet(STORAGE_KEYS.ACTIVITY_LOG, log.slice(0, 100));
-  };
+const saveProjects = async (newProjects) => {
+  setProjects(newProjects);
+};
+
+const saveTasks = async (newTasks) => {
+  setTasks(newTasks);
+};
+
+const saveComments = async (newComments) => {
+  setComments(newComments);
+};
+
+const logActivity = async (type, description) => {
+};
 
   const handleViewChange = (view, label) => {
     setActiveView(view);
