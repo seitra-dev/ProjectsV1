@@ -156,3 +156,21 @@ export const storageGet = (key) => {
     return null;
   }
 };
+
+export const storageSet = (key, value) => {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+    return true;
+  } catch (e) {
+    return false;
+  }
+};
+
+export const storageDelete = (key) => {
+  try {
+    localStorage.removeItem(key);
+    return true;
+  } catch (e) {
+    return false;
+  }
+};

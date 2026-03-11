@@ -848,7 +848,7 @@ useEffect(() => {
 const loadData = async () => {
   try {
     const [projectsData, usersData] = await Promise.all([
-      currentWorkspace ? dbProjects.getByWorkspace(currentWorkspace.id) : [],
+      currentWorkspace ? dbProjects.getByWorkspace(currentWorkspace.id) : Promise.resolve([]),
       dbUsers.getAll()
     ]);
     setProjects(projectsData || []);
