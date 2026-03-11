@@ -103,9 +103,9 @@ export const AppProvider = ({ children }) => {
       });
 
       // Agregar el creador como miembro admin
-      if (currentUser?.id) {
-        await dbEnvironmentMembers.add(newEnv.id, currentUser.id, 'admin');
-      }
+      //if (currentUser?.id) {
+       // await dbEnvironmentMembers.add(newEnv.id, currentUser.id, 'admin');
+      //}
 
       // Agregar workspaces vacío
       const envWithWorkspaces = { ...newEnv, workspaces: [] };

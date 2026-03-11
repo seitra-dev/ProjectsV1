@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
-import { useApp } from '../../context/AppContext-OLD';
+import { useApp } from '../../context/AppContext';
 import { DESIGN_TOKENS } from '../../styles/tokens';
 
 const CreateListModal = ({ isOpen, onClose, onSave }) => {

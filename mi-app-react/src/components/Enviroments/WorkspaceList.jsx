@@ -5,7 +5,7 @@ import {
   MessageSquare, ListTodo, Folder, FileText, Trello,
   LayoutDashboard, Zap, FileInput, Layout
 } from 'lucide-react';
-import { useApp } from '../../context/AppContext-OLD.jsx';
+import { useApp } from '../../context/AppContext.jsx';
 import { DESIGN_TOKENS } from '../../styles/tokens.js';
 import {
   DndContext,
@@ -478,7 +478,7 @@ const SortableWorkspaceItem = ({
 // ============================================================================
 const WorkspaceList = ({ onCreateWorkspace, onSelectWorkspace, onOpenChat, onOpenBacklog, onCreateList }) => {
   const { currentEnvironment, currentWorkspace, deleteWorkspace, updateWorkspace } = useApp();
-  const [workspaces, setWorkspaces] = useState([]);
+  const workspaces = currentEnvironment?.workspaces || [];
   const [expandedWorkspaces, setExpandedWorkspaces] = useState({});
   const [editingWorkspace, setEditingWorkspace] = useState(null);
   const [contextMenu, setContextMenu] = useState(null);
@@ -510,11 +510,6 @@ const WorkspaceList = ({ onCreateWorkspace, onSelectWorkspace, onOpenChat, onOpe
     window.addEventListener('mouseup', onUp);
   }, [menuPos]);
 
-  // Sincronizar workspaces del entorno
-  useEffect(() => {
-    setWorkspaces(currentEnvironment?.workspaces || []);
-  }, [currentEnvironment]);
-
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, {
@@ -523,19 +518,16 @@ const WorkspaceList = ({ onCreateWorkspace, onSelectWorkspace, onOpenChat, onOpe
   );
 
   const handleDragEnd = (event) => {
-    const { active, over } = event;
+      const { active, over } = event;
+      if (!over || active.id === over.id) return;reordered
 
-    if (active.id !== over.id) {
-      setWorkspaces((items) => {
-        const oldIndex = items.findIndex((item) => item.id === active.id);
-        const newIndex = items.findIndex((item) => item.id === over.id);
-        
-        const reordered = arrayMove(items, oldIndex, newIndex);
-        // Aquí podrías guardar el orden en el backend o localStorage
-        return reordered;
-      });
-    }
-  };
+      const oldIndex = workspaces.findIndex(item => item.id === active.id);
+      const newIndex = workspaces.findIndex(item => item.id === over.id);
+      const reordered = arrayMove(workspaces, oldIndex, newIndex);
+      
+      // Actualiza el contexto directamente
+      updateWorkspace(active.id, { order: newIndex }); // o guarda el orden como prefieras
+    };
 
   // Cerrar menú al hacer clic fuera
   useEffect(() => {

@@ -3,7 +3,7 @@ import {
   ChevronDown, ChevronRight, Plus, Flag, X, GripVertical, 
   MoreVertical, Pencil, Trash2, Settings
 } from 'lucide-react';
-import { useApp } from '../context/AppContext-OLD';
+import { useApp } from '../context/AppContext';
 import { DESIGN_TOKENS } from '../styles/tokens';
 import {
   DndContext,
@@ -44,7 +44,7 @@ const STATUS_OPTIONS = {
 // ============================================================================
 // SORTABLE TASK ROW
 // ============================================================================
-const SortableTaskRow = ({ task, projects, users, weeks, onUpdate, onDelete }) => {
+const SortableTaskRow = ({ task, projects = [], users = [], weeks = [], onUpdate, onDelete }) => {
   const {
     attributes,
     listeners,
@@ -387,9 +387,9 @@ const SortableTaskRow = ({ task, projects, users, weeks, onUpdate, onDelete }) =
 function ListView({ 
   listId,
   listName: initialListName, 
-  tasks, 
-  projects, 
-  users, 
+  tasks = [], 
+  projects = [], 
+  users = [], 
   onTasksChange,
   onListNameChange,
   onListDelete
@@ -805,7 +805,7 @@ function ListView({
 // ============================================================================
 // NEW TASK ROW
 // ============================================================================
-const NewTaskRow = ({ projects, users, weeks, onSave, onCancel }) => {
+const NewTaskRow = ({ projects = [], users = [], weeks = [], onSave, onCancel }) => {
   const [taskData, setTaskData] = useState({
     title: '',
     projectId: null,
