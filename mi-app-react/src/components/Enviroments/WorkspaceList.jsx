@@ -5,7 +5,7 @@ import {
   MessageSquare, ListTodo, Folder, FileText, Trello,
   LayoutDashboard, Zap, FileInput, Layout
 } from 'lucide-react';
-import { useApp } from '../../context/AppContext.jsx';
+import { useApp } from '../../context/AppContext';
 import { DESIGN_TOKENS } from '../../styles/tokens.js';
 import {
   DndContext,

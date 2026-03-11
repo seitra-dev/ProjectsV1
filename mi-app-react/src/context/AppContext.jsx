@@ -36,6 +36,43 @@ export const AppProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // ==========================================================================
+  // HELPERS (compatibilidad con AppContext-OLD)
+  // ==========================================================================
+
+  const setCurrentEnvironmentById = async (envId) => {
+    if (!envId) {
+      setCurrentEnvironment(null);
+      setCurrentWorkspace(null);
+      return;
+    }
+
+    const env = environments.find((e) => e.id === envId);
+    if (!env) return;
+
+    // Cargar workspaces en caso de que aún no estén cargados
+    const workspaces = env.workspaces ?? (await dbWorkspaces.getByEnvironment(envId));
+    const envWithWorkspaces = { ...env, workspaces };
+
+    setCurrentEnvironment(envWithWorkspaces);
+    setEnvironments((prevEnvs) =>
+      prevEnvs.map((e) => (e.id === envId ? envWithWorkspaces : e))
+    );
+
+    // Resetear workspace al cambiar de entorno
+    setCurrentWorkspace(null);
+  };
+
+  const setCurrentWorkspaceById = (workspaceId) => {
+    if (!workspaceId) {
+      setCurrentWorkspace(null);
+      return;
+    }
+
+    const workspace = currentEnvironment?.workspaces?.find((w) => w.id === workspaceId);
+    setCurrentWorkspace(workspace || null);
+  };
+
   // ============================================================================
   // CARGAR DATOS INICIALES
   // ============================================================================
@@ -308,6 +345,9 @@ export const AppProvider = ({ children }) => {
     setEnvironments,
     setCurrentEnvironmentState,
     setCurrentWorkspaceState,
+    // Legacy-friendly setters (compatibilidad con AppContext-OLD)
+    setCurrentEnvironment: setCurrentEnvironmentById,
+    setCurrentWorkspace: setCurrentWorkspaceById,
     setCurrentUser,
 
     // Environments

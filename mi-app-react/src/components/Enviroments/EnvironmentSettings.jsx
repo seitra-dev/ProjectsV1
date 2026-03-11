@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, Upload, Trash2, AlertTriangle } from 'lucide-react';
-import { useApp } from '../../context/AppContext.jsx';
+import { useApp } from '../../context/AppContext';
 import { DESIGN_TOKENS } from '../../styles/tokens.js';
 
 // ============================================================================
