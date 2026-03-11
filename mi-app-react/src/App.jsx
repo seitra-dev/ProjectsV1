@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import { dbEnvironments, dbUsers } from './lib/database';
+import { supabase } from './lib/supabase';
 
 import { 
   Plus, Search, Filter, Calendar, Users, ChevronDown, ChevronUp, ChevronRight,
@@ -429,8 +429,6 @@ if (isTransitioning) {
 // ============================================================================
 // SEITRA LOGIN 
 // ============================================================================
-
-import { supabase } from '../lib/supabase'; // ajusta la ruta según tu proyecto
 
 function LoginScreen({ onLogin }) {
   const [isLogin, setIsLogin] = useState(true);
