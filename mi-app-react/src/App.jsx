@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { supabase } from './lib/supabase';
-import { dbProjects, dbTasks, dbUsers, dbComments } from '../lib/database';
+import { dbProjects, dbTasks, dbUsers, dbComments } from './lib/database';
 
 import { 
   Plus, Search, Filter, Calendar, Users, ChevronDown, ChevronUp, ChevronRight,

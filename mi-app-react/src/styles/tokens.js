@@ -144,15 +144,6 @@ export const DESIGN_TOKENS = {
 };
 
 export const STORAGE_KEYS = {
-  // Prefijos unificados a 'taskflow_'
-  USERS: 'taskflow_users',
-  PROJECTS: 'taskflow_projects',
-  TASKS: 'taskflow_tasks',
-  COMMENTS: 'taskflow_comments',
-  TAGS: 'taskflow_tags',
-  CURRENT_USER: 'taskflow_current_user',
-  PREFERENCES: 'taskflow_preferences',
-  WORKSPACES: 'taskflow_workspaces',
   ACTIVITY_LOG: 'taskflow_activity_log'
 };
 
@@ -163,23 +154,5 @@ export const storageGet = (key) => {
     return item ? JSON.parse(item) : null;
   } catch (e) {
     return null;
-  }
-};
-
-export const storageSet = (key, value) => {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-    return true;
-  } catch (e) {
-    return false;
-  }
-};
-
-export const storageDelete = (key) => {
-  try {
-    localStorage.removeItem(key);
-    return true;
-  } catch (e) {
-    return false;
   }
 };
