@@ -1,8 +1,3 @@
-// ============================================================================
-// APP CONTEXT CON SUPABASE
-// ============================================================================
-// Este contexto reemplaza localStorage por Supabase
-// ============================================================================
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { 
@@ -15,6 +10,7 @@ import {
   dbChatMessages,
   handleSupabaseError 
 } from '../lib/database';
+import { supabase } from '../lib/supabase';
 
 const AppContext = createContext();
 
@@ -123,26 +119,63 @@ export const AppProvider = ({ children }) => {
     };
 
     loadInitialData();
-  }, []);
+  }, []);useEffect(() => {
+  const { data: { subscription } } = supabase.auth.onAuthStateChange(
+    async (event, session) => {
+      if (session?.user) {
+        // Usuario autenticado — setear y cargar datos
+        setCurrentUser({
+          id: session.user.id,
+          email: session.user.email,
+          name: session.user.user_metadata?.name || session.user.email,
+          role: session.user.user_metadata?.role || 'user'
+        });
+
+        try {
+          const envs = await dbEnvironments.getAll();
+          setEnvironments(envs);
+
+          if (envs.length > 0) {
+            setCurrentEnvironment(envs[0]);
+            const workspaces = await dbWorkspaces.getByEnvironment(envs[0].id);
+            setEnvironments(prev =>
+              prev.map(env =>
+                env.id === envs[0].id ? { ...env, workspaces } : env
+              )
+            );
+          }
+        } catch (error) {
+          console.error('Error cargando datos iniciales:', error);
+        }
+
+      } else {
+        // Sin sesión — limpiar todo
+        setCurrentUser(null);
+        setEnvironments([]);
+        setCurrentEnvironment(null);
+        setCurrentWorkspace(null);
+      }
+
+      setIsLoading(false); // ← siempre al final, con o sin sesión
+    }
+  );
+
+  return () => subscription.unsubscribe();
+}, []);
 
   // ============================================================================
   // ENVIRONMENTS
   // ============================================================================
 
   const createEnvironment = async (data) => {
-    try {
-      const newEnv = await dbEnvironments.create({
-        name: data.name,
-        description: data.description || '',
-        color: data.color || '#6366f1',
-        icon: data.icon || '📊',
-        owner_id: null  // ← así hasta implementar auth real
-      });
-
-      // Agregar el creador como miembro admin
-      //if (currentUser?.id) {
-       // await dbEnvironmentMembers.add(newEnv.id, currentUser.id, 'admin');
-      //}
+  try {
+    const newEnv = await dbEnvironments.create({
+      name: data.name,
+      description: data.description || '',
+      color: data.color || '#6366f1',
+      icon: data.icon || '📊',
+      owner_id: currentUser?.id || null  // ← ahora sí tiene UUID real
+    });
 
       // Agregar workspaces vacío
       const envWithWorkspaces = { ...newEnv, workspaces: [] };

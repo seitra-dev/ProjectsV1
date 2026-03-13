@@ -233,6 +233,33 @@ const PRIORITY_OPTIONS = {
 };
 
 // ============================================================================
+// NORMALIZADORES: Supabase (snake_case) → Frontend (camelCase)
+// ============================================================================
+const normalizeProject = (p) => ({
+  ...p,
+  startDate:  p.startDate  ?? p.start_date  ?? '',
+  endDate:    p.endDate    ?? p.end_date    ?? '',
+  createdAt:  p.createdAt  ?? p.created_at  ?? '',
+  members:    p.members    ?? [],
+  tags:       p.tags       ?? [],
+  roadmap:    p.roadmap    ?? { phases: [], userStories: [], risks: [], meetings: [] },
+});
+
+const normalizeTask = (t) => ({
+  ...t,
+  projectId:      t.projectId      ?? t.project_id      ?? null,
+  parentId:       t.parentId       ?? t.parent_id        ?? null,
+  assigneeId:     t.assigneeId     ?? t.assignee_id      ?? null,
+  startDate:      t.startDate      ?? t.start_date       ?? '',
+  endDate:        t.endDate        ?? t.end_date         ?? '',
+  createdAt:      t.createdAt      ?? t.created_at       ?? '',
+  updatedAt:      t.updatedAt      ?? t.updated_at       ?? '',
+  estimatedHours: t.estimatedHours ?? t.estimated_hours  ?? 0,
+  progress:       t.progress       ?? 0,
+  tags:           t.tags           ?? [],
+});
+
+// ============================================================================
 // MAIN APP
 // ============================================================================
 function App() {
@@ -254,23 +281,10 @@ function AppContent() {
   const { addToast } = useToast();
 
   useEffect(() => {
-  const initApp = async () => {
-    const prefs = storageGet(STORAGE_KEYS.PREFERENCES);
-    if (prefs?.darkMode) setDarkMode(prefs.darkMode);
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session?.user) {
-      setCurrentUser({
-        id: session.user.id,
-        email: session.user.email,
-        name: session.user.user_metadata?.name || session.user.email,
-        role: session.user.user_metadata?.role || 'user'
-      });
-    }
+  const prefs = storageGet(STORAGE_KEYS.PREFERENCES);
+  if (prefs?.darkMode) setDarkMode(prefs.darkMode);
 
-    setIsLoading(false);
-  };
-
-  initApp();
+  // onAuthStateChange maneja TODO — incluyendo la carga inicial
   const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
     if (session?.user) {
       setCurrentUser({
@@ -282,7 +296,9 @@ function AppContent() {
     } else {
       setCurrentUser(null);
     }
+    setIsLoading(false); // ← siempre se llama, con o sin sesión
   });
+
   return () => subscription.unsubscribe();
 }, []);
 
@@ -309,9 +325,16 @@ const handleLogin = (user, isNew = false) => {
 };
 
 const handleLogout = async () => {
-  await supabase.auth.signOut(); // ← esto invalida el token en Supabase
-  setCurrentUser(null);          // ← el onAuthStateChange también lo limpia, pero esto es más inmediato
-  addToast('Sesión cerrada correctamente', 'info');
+  try {
+    await supabase.auth.signOut();
+  } catch (err) {
+    // AbortError u otros errores de Supabase no deben bloquear el logout
+    console.warn('signOut warning:', err.message);
+  } finally {
+    // Siempre limpiar el estado local, independientemente de errores
+    setCurrentUser(null);
+    addToast('Sesión cerrada correctamente', 'info');
+  }
 };
 
 const toggleDarkMode = () => {
@@ -449,10 +472,12 @@ function LoginScreen({ onLogin }) {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState(''); // ← NUEVO
 
   const switchMode = (toLogin) => {
     setIsLogin(toLogin);
     setError('');
+    setSuccess(''); // ← NUEVO
     setName('');
     setEmail('');
     setPassword('');
@@ -461,11 +486,11 @@ function LoginScreen({ onLogin }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setSuccess(''); // ← NUEVO
     setIsLoading(true);
 
     try {
       if (isLogin) {
-        // — INICIO DE SESIÓN —
         const { data, error } = await supabase.auth.signInWithPassword({
           email: email.trim(),
           password: password
@@ -517,14 +542,12 @@ function LoginScreen({ onLogin }) {
           return;
         }
 
-        const user = {
-          id: data.user.id,
-          email: data.user.email,
-          name: name.trim(),
-          role: 'user'
-        };
-
-        onLogin(user, true);
+        // ← CAMBIO CLAVE: no llamar onLogin(), mostrar éxito y volver al login
+        setSuccess('¡Cuenta creada! Ya puedes iniciar sesión.');
+        setIsLogin(true);
+        setName('');
+        setEmail('');
+        setPassword('');
       }
     } catch (err) {
       setError('Error de conexión. Intenta de nuevo.');
@@ -798,7 +821,7 @@ function MainApp({ user, onLogout, darkMode, toggleDarkMode }) {
   const { addToast } = useToast();
   const [showProjectManagement, setShowProjectManagement] = useState(false);
   const [selectedProjectForManagement, setSelectedProjectForManagement] = useState(null);
-  const { currentWorkspace } = useApp();
+  const { currentEnvironment, currentWorkspace, currentUser } = useApp();
 
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [isTablet, setIsTablet] = useState(window.innerWidth >= 768 && window.innerWidth < 1024);
@@ -851,16 +874,17 @@ const loadData = async () => {
       currentWorkspace ? dbProjects.getByWorkspace(currentWorkspace.id) : Promise.resolve([]),
       dbUsers.getAll()
     ]);
-    setProjects(projectsData || []);
+    const normalizedProjects = (projectsData || []).map(normalizeProject);
+    setProjects(normalizedProjects);
     setUsers(usersData || []);
     setTags(['web', 'diseño', 'ui', 'backend', 'frontend', 'urgente']);
 
     // Cargar tareas de todos los proyectos
-    if (projectsData?.length > 0) {
+    if (normalizedProjects.length > 0) {
       const allTasks = await Promise.all(
-        projectsData.map(p => dbTasks.getByProject(p.id))
+        normalizedProjects.map(p => dbTasks.getByProject(p.id))
       );
-      setTasks(allTasks.flat());
+      setTasks(allTasks.flat().map(normalizeTask));
     } else {
       setTasks([]);
     }
@@ -1699,7 +1723,7 @@ function ProjectCard({ project, onClick, index = 0 }) {
         fontWeight: DESIGN_TOKENS.typography.weight.medium
       }}>
         <span>
-          {new Date(project.startDate).toLocaleDateString('es-ES')} - {new Date(project.endDate).toLocaleDateString('es-ES')}
+          {project.startDate ? new Date(project.startDate).toLocaleDateString('es-ES') : '—'} - {project.endDate ? new Date(project.endDate).toLocaleDateString('es-ES') : '—'}
         </span>
         <div style={{ 
           display: 'flex', 
@@ -1710,7 +1734,7 @@ function ProjectCard({ project, onClick, index = 0 }) {
           borderRadius: DESIGN_TOKENS.border.radius.sm
         }}>
           <Users size={12} />
-          {project.members.length}
+          {project.members?.length ?? 0}
         </div>
       </div>
 
@@ -1739,14 +1763,10 @@ function ProjectsView({ projects, onProjectsChange, users, onSelectProject, togg
   const [filterStatus, setFilterStatus] = useState('all');
   const [sortBy, setSortBy] = useState('recent');
   const { addToast } = useToast();
-  const { currentEnvironment } = useApp();
+  const { currentEnvironment, currentWorkspace, currentUser } = useApp();
 
-  // Filtrar por entorno activo
-  const environmentProjects = currentEnvironment 
-    ? projects.filter(p => p.environmentId === currentEnvironment.id)
-    : projects;
-
-  const filteredProjects = environmentProjects
+  // loadData() ya filtra proyectos por workspace, no se necesita filtrar por environmentId aquí
+  const filteredProjects = projects
     .filter(p => filterStatus === 'all' || p.status === filterStatus)
     .sort((a, b) => {
       if (sortBy === 'recent') return new Date(b.createdAt) - new Date(a.createdAt);
@@ -1754,6 +1774,35 @@ function ProjectsView({ projects, onProjectsChange, users, onSelectProject, togg
       if (sortBy === 'deadline') return new Date(a.endDate) - new Date(b.endDate);
       return 0;
     });
+
+  const handleCreateProject = async (project) => {
+    try {
+      const payload = {
+        name: project.name,
+        description: project.description || '',
+        status: 'active',
+        color: project.color || '#6366f1',
+        start_date: project.startDate || new Date().toISOString(),
+        end_date: project.endDate || null,
+        workspace_id: currentWorkspace?.id || null,
+        owner_id: currentUser?.id || null,
+      };
+
+      // Solo incluir tags/members si no están vacíos, por si las columnas no existen
+      if (project.tags?.length) payload.tags = project.tags;
+      if (project.members?.length) payload.members = project.members;
+
+      const saved = await dbProjects.create(payload);
+
+      onProjectsChange([...projects, normalizeProject(saved)]);
+
+      setShowNewProject(false);
+      addToast('Proyecto creado exitosamente', 'success');
+    } catch (error) {
+      console.error('Error creando proyecto:', error);
+      addToast(`Error al crear el proyecto: ${error.message}`, 'error');
+    }
+  };
 
   return (
     <div style={{ padding: '2rem' }}>
@@ -1763,7 +1812,7 @@ function ProjectsView({ projects, onProjectsChange, users, onSelectProject, togg
             Proyectos
           </h2>
           <p style={{ color: '#64748b', margin: 0, fontSize: '0.9375rem', fontWeight: 500 }}>
-            {environmentProjects.length} proyecto{environmentProjects.length !== 1 ? 's' : ''} en total
+            {projects.length} proyecto{projects.length !== 1 ? 's' : ''} en total
           </p>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem' }}>
@@ -1815,10 +1864,15 @@ function ProjectsView({ projects, onProjectsChange, users, onSelectProject, togg
             onToggleFavorite={() => toggleFavorite(project.id)}
             onDuplicate={() => duplicateProject(project)}
             onOpenManagement={() => onOpenProjectManagement(project)}
-            onDelete={() => {
+            onDelete={async () => {
               if (confirm(`¿Eliminar proyecto "${project.name}"?`)) {
-                onProjectsChange(projects.filter(p => p.id !== project.id));
-                addToast('Proyecto eliminado', 'success');
+                try {
+                  await dbProjects.delete(project.id);
+                  onProjectsChange(projects.filter(p => p.id !== project.id));
+                  addToast('Proyecto eliminado', 'success');
+                } catch (err) {
+                  addToast(`Error al eliminar: ${err.message}`, 'error');
+                }
               }
             }}
           />
@@ -1826,30 +1880,12 @@ function ProjectsView({ projects, onProjectsChange, users, onSelectProject, togg
       </div>
 
       {showNewProject && (
-      <ProjectFormModal
-        users={users}
-        onSave={(project) => {
-          onProjectsChange([...projects, { 
-            ...project, 
-            id: Date.now(), 
-            environmentId: currentEnvironment?.id || null,
-            status: 'active',
-            favorite: false,
-            createdAt: new Date().toISOString(),
-            // Asegurar que roadmap existe
-            roadmap: project.roadmap || {
-              phases: [],
-              userStories: [],
-              risks: [],
-              meetings: []
-            }
-          }]);
-          setShowNewProject(false);
-          addToast('Proyecto creado exitosamente', 'success');
-        }}
-        onClose={() => setShowNewProject(false)}
-      />
-    )}
+  <ProjectFormModal
+    users={users}
+    onSave={handleCreateProject}  // ← así de simple
+    onClose={() => setShowNewProject(false)}
+  />
+  )}
     </div>
   );
 }
@@ -2046,43 +2082,88 @@ function ProjectDetailView({ project, tasks, onTasksChange, users, comments, onC
     if (mode === 'roadmap') setHeaderCollapsed(true);
   };
 
-  const projectTasks = tasks.filter(t => t.projectId === project.id);
-  const rootTasks = projectTasks.filter(t => !t.parentId);
+  const projectTasks = tasks.filter(t => (t.projectId ?? t.project_id) === project.id);
+  const rootTasks = projectTasks.filter(t => !(t.parentId ?? t.parent_id));
 
   const filteredTasks = rootTasks.filter(t => {
     if (filterStatus !== 'all' && t.status !== filterStatus) return false;
-    if (filterAssignee !== 'all' && t.assigneeId !== Number(filterAssignee)) return false;
+    if (filterAssignee !== 'all' && String(t.assigneeId) !== String(filterAssignee)) return false;
     return true;
   });
 
-  const handleAddTask = (task) => {
-    const newTask = {
-      ...task,
-      id: Date.now(),
-      projectId: project.id,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-    onTasksChange([...tasks, newTask]);
-    setShowNewTask(false);
-    addToast('Tarea creada exitosamente', 'success');
-  };
-
-  const handleUpdateTask = (updatedTask) => {
-    onTasksChange(tasks.map(t => t.id === updatedTask.id ? { ...updatedTask, updatedAt: new Date().toISOString() } : t));
-    setSelectedTask(null);
-    addToast('Tarea actualizada', 'success');
-  };
-
-  const handleDeleteTask = (taskId) => {
-    if (confirm('¿Eliminar esta tarea y todas sus subtareas?')) {
-      const deleteRecursive = (id) => {
-        const children = projectTasks.filter(t => t.parentId === id);
-        children.forEach(child => deleteRecursive(child.id));
-        return tasks.filter(t => t.id !== id);
+  const handleAddTask = async (taskFormData) => {
+    try {
+      const payload = {
+        title:           taskFormData.title,
+        description:     taskFormData.description || '',
+        start_date:      taskFormData.startDate   || null,
+        end_date:        taskFormData.endDate      || null,
+        priority:        taskFormData.priority     || 'medium',
+        status:          taskFormData.status       || 'todo',
+        assignee_id:     taskFormData.assigneeId   || null,
+        progress:        taskFormData.progress     || 0,
+        parent_id:       taskFormData.parentId     || null,
+        estimated_hours: taskFormData.estimatedHours || 0,
+        project_id:      project.id,
       };
-      onTasksChange(deleteRecursive(taskId));
-      addToast('Tarea eliminada', 'success');
+      const saved = await dbTasks.create(payload);
+      onTasksChange([...tasks, normalizeTask(saved)]);
+      setShowNewTask(false);
+      addToast('Tarea creada exitosamente', 'success');
+    } catch (error) {
+      console.error('Error creando tarea:', error);
+      addToast(`Error al crear la tarea: ${error.message}`, 'error');
+    }
+  };
+
+  const handleUpdateTask = async (taskFormData) => {
+    try {
+      const payload = {
+        title:           taskFormData.title,
+        description:     taskFormData.description || '',
+        start_date:      taskFormData.startDate   || null,
+        end_date:        taskFormData.endDate      || null,
+        priority:        taskFormData.priority,
+        status:          taskFormData.status,
+        assignee_id:     taskFormData.assigneeId  || null,
+        progress:        taskFormData.progress     || 0,
+        parent_id:       taskFormData.parentId     || null,
+        estimated_hours: taskFormData.estimatedHours || 0,
+      };
+      const saved = await dbTasks.update(taskFormData.id, payload);
+      const updated = normalizeTask(saved);
+      onTasksChange(tasks.map(t => t.id === updated.id ? updated : t));
+      setSelectedTask(null);
+      addToast('Tarea actualizada', 'success');
+    } catch (error) {
+      console.error('Error actualizando tarea:', error);
+      addToast(`Error al actualizar la tarea: ${error.message}`, 'error');
+    }
+  };
+
+  const handleDeleteTask = async (taskId) => {
+    if (confirm('¿Eliminar esta tarea y todas sus subtareas?')) {
+      try {
+        // Eliminar subtareas primero recursivamente
+        const deleteRecursive = async (id) => {
+          const children = projectTasks.filter(t => (t.parentId ?? t.parent_id) === id);
+          for (const child of children) await deleteRecursive(child.id);
+          await dbTasks.delete(id);
+        };
+        await deleteRecursive(taskId);
+        // Remover del estado local todas las tareas afectadas
+        const idsToRemove = new Set();
+        const collectIds = (id) => {
+          idsToRemove.add(id);
+          projectTasks.filter(t => (t.parentId ?? t.parent_id) === id).forEach(c => collectIds(c.id));
+        };
+        collectIds(taskId);
+        onTasksChange(tasks.filter(t => !idsToRemove.has(t.id)));
+        addToast('Tarea eliminada', 'success');
+      } catch (error) {
+        console.error('Error eliminando tarea:', error);
+        addToast(`Error al eliminar la tarea: ${error.message}`, 'error');
+      }
     }
   };
 
@@ -2220,7 +2301,7 @@ function ProjectDetailView({ project, tasks, onTasksChange, users, comments, onC
           <select value={filterAssignee} onChange={(e) => setFilterAssignee(e.target.value)} style={selectStyle}>
             <option value="all">Todos los asignados</option>
             {users.map(u => (
-              <option key={u.id} value={u.id}>{u.name}</option>
+              <option key={u.id} value={u.id}>{u.name || u.email}</option>
             ))}
           </select>
 
@@ -3814,7 +3895,7 @@ function TaskFormModal({ initialTask, users, tasks, onSave, onClose, tags }) {
           <FormField label="Tarea padre (para crear subtarea)">
             <select
               value={formData.parentId || ''}
-              onChange={(e) => setFormData(p => ({ ...p, parentId: e.target.value ? Number(e.target.value) : null }))}
+              onChange={(e) => setFormData(p => ({ ...p, parentId: e.target.value || null }))}
               style={selectStyle}
             >
               <option value="">Sin tarea padre</option>
@@ -3876,13 +3957,13 @@ function TaskFormModal({ initialTask, users, tasks, onSave, onClose, tags }) {
         <FormField label="Asignado a" required>
           <select
             value={formData.assigneeId}
-            onChange={(e) => setFormData(p => ({ ...p, assigneeId: Number(e.target.value) }))}
+            onChange={(e) => setFormData(p => ({ ...p, assigneeId: e.target.value || null }))}
             style={selectStyle}
-            required
           >
+            <option value="">Sin asignar</option>
             {users.map(u => (
               <option key={u.id} value={u.id}>
-                {u.avatar} {u.name}
+                {u.avatar} {u.name || u.email}
               </option>
             ))}
           </select>
