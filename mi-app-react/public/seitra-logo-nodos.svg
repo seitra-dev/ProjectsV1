@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <!-- Fondo circular con gradiente sutil -->
+    <radialGradient id="bgGrad" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#1e3a5f"/>
+      <stop offset="100%" stop-color="#12253d"/>
+    </radialGradient>
+
+    <!-- Glow suave para nodo central -->
+    <radialGradient id="centerGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Filtro blur para glow -->
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="1.5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Fondo circular azul marino -->
+  <circle cx="50" cy="50" r="50" fill="url(#bgGrad)"/>
+
+  <!-- Glow central suave -->
+  <circle cx="50" cy="50" r="32" fill="url(#centerGlow)"/>
+
+  <!-- ─── LÍNEAS DE CONEXIÓN (primero, debajo de los nodos) ─── -->
+
+  <!-- Línea central → nodo superior -->
+  <line x1="50" y1="50" x2="50" y2="24"
+        stroke="#ffffff" stroke-width="1.2"
+        stroke-linecap="round" opacity="0.35"/>
+
+  <!-- Línea central → nodo inferior izquierdo -->
+  <line x1="50" y1="50" x2="27" y2="67"
+        stroke="#ffffff" stroke-width="1.2"
+        stroke-linecap="round" opacity="0.35"/>
+
+  <!-- Línea central → nodo inferior derecho -->
+  <line x1="50" y1="50" x2="73" y2="67"
+        stroke="#ffffff" stroke-width="1.2"
+        stroke-linecap="round" opacity="0.35"/>
+
+  <!-- Líneas entre satélites (red) — más sutiles -->
+  <line x1="50" y1="24" x2="27" y2="67"
+        stroke="#ffffff" stroke-width="0.7"
+        stroke-linecap="round" opacity="0.15"/>
+  <line x1="27" y1="67" x2="73" y2="67"
+        stroke="#ffffff" stroke-width="0.7"
+        stroke-linecap="round" opacity="0.15"/>
+  <line x1="73" y1="67" x2="50" y2="24"
+        stroke="#ffffff" stroke-width="0.7"
+        stroke-linecap="round" opacity="0.15"/>
+
+  <!-- ─── NODOS SATÉLITES ─── -->
+
+  <!-- Satélite superior -->
+  <circle cx="50" cy="24" r="5.5"
+          fill="#ffffff" opacity="0.9" filter="url(#glow)"/>
+  <circle cx="50" cy="24" r="3"
+          fill="#1e3a5f"/>
+
+  <!-- Satélite inferior izquierdo -->
+  <circle cx="27" cy="67" r="5.5"
+          fill="#ffffff" opacity="0.9" filter="url(#glow)"/>
+  <circle cx="27" cy="67" r="3"
+          fill="#1e3a5f"/>
+
+  <!-- Satélite inferior derecho -->
+  <circle cx="73" cy="67" r="5.5"
+          fill="#ffffff" opacity="0.9" filter="url(#glow)"/>
+  <circle cx="73" cy="67" r="3"
+          fill="#1e3a5f"/>
+
+  <!-- ─── NODO CENTRAL ─── -->
+  <!-- Anillo exterior -->
+  <circle cx="50" cy="50" r="10"
+          fill="none" stroke="#ffffff"
+          stroke-width="1.2" opacity="0.3"/>
+  <!-- Nodo principal -->
+  <circle cx="50" cy="50" r="7.5"
+          fill="#ffffff" filter="url(#glow)"/>
+  <!-- Punto interior azul -->
+  <circle cx="50" cy="50" r="3.5"
+          fill="#1e3a5f"/>
+
+</svg>

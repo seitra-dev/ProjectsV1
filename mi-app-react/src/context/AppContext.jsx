@@ -1,14 +1,15 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { 
-  dbEnvironments, 
+import {
+  dbEnvironments,
   dbEnvironmentMembers,
-  dbWorkspaces, 
+  dbWorkspaces,
   dbProjects,
   dbTasks,
   dbComments,
   dbChatMessages,
-  handleSupabaseError 
+  dbLists,
+  handleSupabaseError
 } from '../lib/database';
 import { supabase } from '../lib/supabase';
 
@@ -31,6 +32,7 @@ export const AppProvider = ({ children }) => {
   const [currentWorkspace, setCurrentWorkspace] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [lists, setLists] = useState([]);
 
   // ==========================================================================
   // HELPERS (compatibilidad con AppContext-OLD)
@@ -72,91 +74,89 @@ export const AppProvider = ({ children }) => {
   // ============================================================================
   // CARGAR DATOS INICIALES
   // ============================================================================
-  useEffect(() => {
-    const loadInitialData = async () => {
-      try {
-        setIsLoading(true);
 
-        // Por ahora, usamos un usuario hardcodeado
-        // Después implementaremos autenticación real
-        const mockUser = {
-          id: null, // ← era 'temp-user-id'
-          email: 'user@seitra.com',
-          name: 'Usuario Demo',
-          avatar: '👤',
-          role: 'admin'
-        };
-        
-        setCurrentUser(mockUser);
+  // Helper: obtener usuario de localStorage sin pasar por el SDK
+  const getUserFromStorage = () => {
+    try {
+      const ref = import.meta.env.VITE_SUPABASE_URL?.split('//')[1]?.split('.')[0];
+      const raw = localStorage.getItem(`sb-${ref}-auth-token`);
+      if (!raw) return null;
+      const session = JSON.parse(raw);
+      if (!session?.user || !session?.access_token) return null;
+      return session.user;
+    } catch { return null; }
+  };
 
-        // Cargar entornos del usuario
-        // Por ahora cargamos todos, después filtraremos por usuario
-        const envs = await dbEnvironments.getAll();
-        setEnvironments(envs);
+  const loadEnvironments = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      console.log('[AppContext] SDK session:', session?.user?.email, '| uid:', session?.user?.id);
+      console.log('[AppContext] iniciando carga de entornos...');
+      const envs = await dbEnvironments.getAll();
+      console.log('[AppContext] entornos encontrados:', envs);
+      setEnvironments(envs);
 
-        // Si hay entornos, seleccionar el primero por defecto
-        if (envs.length > 0) {
-          setCurrentEnvironment(envs[0]);
-          
-          // Cargar workspaces del entorno
-          const workspaces = await dbWorkspaces.getByEnvironment(envs[0].id);
-          
-          // Actualizar el entorno con sus workspaces
-          setEnvironments(prevEnvs => 
-            prevEnvs.map(env => 
-              env.id === envs[0].id 
-                ? { ...env, workspaces }
-                : env
-            )
-          );
-        }
-
-      } catch (error) {
-        console.error('Error cargando datos iniciales:', error);
-      } finally {
-        setIsLoading(false);
+      if (envs.length > 0) {
+        setCurrentEnvironment(envs[0]);
+        console.log('[AppContext] llamando getByEnvironment con:', envs[0]?.id);
+        const workspaces = await dbWorkspaces.getByEnvironment(envs[0].id);
+        console.log('[AppContext] workspaces recibidos:', workspaces);
+        const loadedLists = await dbLists.getByEnvironment(envs[0].id);
+        setEnvironments(prev =>
+          prev.map(env =>
+            env.id === envs[0].id ? { ...env, workspaces } : env
+          )
+        );
+        console.log('[AppContext] setCurrentEnvironment con workspaces:', { ...envs[0], workspaces });
+        setCurrentEnvironment(prev => ({ ...prev, workspaces }));
+        setLists(loadedLists);
       }
-    };
+    } catch (error) {
+      console.error('[AppContext] Error cargando entornos:', error);
+    }
+  };
 
-    loadInitialData();
-  }, []);useEffect(() => {
+useEffect(() => {
+  // ── Fallback inmediato desde localStorage (no depende de onAuthStateChange) ──
+  const storedUser = getUserFromStorage();
+  if (storedUser) {
+    console.log('[AppContext] sesión encontrada en localStorage, cargando sin esperar SDK...');
+    setCurrentUser({
+      id: storedUser.id,
+      email: storedUser.email,
+      name: storedUser.user_metadata?.name || storedUser.email,
+      role: storedUser.user_metadata?.role || 'user',
+    });
+    loadEnvironments().finally(() => setIsLoading(false));
+  } else {
+    setIsLoading(false);
+  }
+
+  // ── Listener del SDK (complementario, por si el token se renueva) ──
   const { data: { subscription } } = supabase.auth.onAuthStateChange(
     async (event, session) => {
+      console.log('[AppContext] onAuthStateChange:', event, '| user:', session?.user?.email);
       if (session?.user) {
-        // Usuario autenticado — setear y cargar datos
         setCurrentUser({
           id: session.user.id,
           email: session.user.email,
           name: session.user.user_metadata?.name || session.user.email,
-          role: session.user.user_metadata?.role || 'user'
+          role: session.user.user_metadata?.role || 'user',
         });
-
-        try {
-          const envs = await dbEnvironments.getAll();
-          setEnvironments(envs);
-
-          if (envs.length > 0) {
-            setCurrentEnvironment(envs[0]);
-            const workspaces = await dbWorkspaces.getByEnvironment(envs[0].id);
-            setEnvironments(prev =>
-              prev.map(env =>
-                env.id === envs[0].id ? { ...env, workspaces } : env
-              )
-            );
+        // Solo recargar entornos si aún no se cargaron
+        setEnvironments(prev => {
+          if (prev.length === 0) {
+            loadEnvironments();
           }
-        } catch (error) {
-          console.error('Error cargando datos iniciales:', error);
-        }
-
-      } else {
-        // Sin sesión — limpiar todo
+          return prev;
+        });
+      } else if (event === 'SIGNED_OUT') {
         setCurrentUser(null);
         setEnvironments([]);
         setCurrentEnvironment(null);
         setCurrentWorkspace(null);
       }
-
-      setIsLoading(false); // ← siempre al final, con o sin sesión
+      setIsLoading(false);
     }
   );
 
@@ -174,7 +174,6 @@ export const AppProvider = ({ children }) => {
       description: data.description || '',
       color: data.color || '#6366f1',
       icon: data.icon || '📊',
-      owner_id: currentUser?.id || null  // ← ahora sí tiene UUID real
     });
 
       // Agregar workspaces vacío
@@ -264,25 +263,17 @@ export const AppProvider = ({ children }) => {
         created_by: currentUser?.id
       });
 
-      // Agregar el workspace al entorno correspondiente
+      // Recargar todos los workspaces del entorno desde Supabase (garantiza estado fresco)
+      const freshWorkspaces = await dbWorkspaces.getByEnvironment(envId);
+
       setEnvironments(prev =>
-        prev.map(env => {
-          if (env.id === envId) {
-            return {
-              ...env,
-              workspaces: [...(env.workspaces || []), newWorkspace]
-            };
-          }
-          return env;
-        })
+        prev.map(env =>
+          env.id === envId ? { ...env, workspaces: freshWorkspaces } : env
+        )
       );
 
-      // Si es el entorno actual, actualizar también
       if (currentEnvironment?.id === envId) {
-        setCurrentEnvironment(prev => ({
-          ...prev,
-          workspaces: [...(prev.workspaces || []), newWorkspace]
-        }));
+        setCurrentEnvironment(prev => ({ ...prev, workspaces: freshWorkspaces }));
       }
 
       return newWorkspace;
@@ -363,6 +354,27 @@ export const AppProvider = ({ children }) => {
   };
 
   // ============================================================================
+  // LISTAS
+  // ============================================================================
+
+  const createList = async (listData) => {
+    const newList = await dbLists.create(listData);
+    setLists(prev => [...prev, newList]);
+    return newList;
+  };
+
+  const updateList = async (listId, updates) => {
+    const updated = await dbLists.update(listId, updates);
+    setLists(prev => prev.map(l => l.id === listId ? { ...l, ...updated } : l));
+    return updated;
+  };
+
+  const deleteList = async (listId) => {
+    await dbLists.delete(listId);
+    setLists(prev => prev.filter(l => l.id !== listId));
+  };
+
+  // ============================================================================
   // VALOR DEL CONTEXTO
   // ============================================================================
 
@@ -373,6 +385,7 @@ export const AppProvider = ({ children }) => {
     currentWorkspace,
     currentUser,
     isLoading,
+    lists,
 
     // Setters
     setEnvironments,
@@ -392,6 +405,11 @@ export const AppProvider = ({ children }) => {
     createWorkspace,
     updateWorkspace,
     deleteWorkspace,
+
+    // Lists
+    createList,
+    updateList,
+    deleteList,
 
     // Database utilities (para que los componentes puedan usarlos directamente)
     db: {

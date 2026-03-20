@@ -140,10 +140,43 @@ export const DESIGN_TOKENS = {
     fast: '150ms cubic-bezier(0.4, 0, 0.2, 1)',
     normal: '250ms cubic-bezier(0.4, 0, 0.2, 1)',
     slow: '400ms cubic-bezier(0.4, 0, 0.2, 1)'
+  },
+
+  // ── PALETA MODO OSCURO ──────────────────────────────────────────────────────
+  dark: {
+    bg: {
+      base:    '#0f1117',
+      card:    '#1a1d27',
+      hover:   '#222636',
+      sidebar: '#13161f',
+      input:   '#1a1d27',
+    },
+    text: {
+      primary:   '#f0f2f8',
+      secondary: '#8b92a9',
+      subtle:    '#4a5068',
+    },
+    accent: {
+      primary: '#4f7cff',
+      success: '#34d399',
+      warning: '#fbbf24',
+      danger:  '#f87171',
+    },
+    border: {
+      subtle: '#2a2d3e',
+      active: '#3d4266',
+    },
   }
 };
 
 export const STORAGE_KEYS = {
+  PROJECTS: 'taskflow_projects',
+  TASKS: 'taskflow_tasks',
+  USERS: 'taskflow_users',
+  COMMENTS: 'taskflow_comments',
+  TAGS: 'taskflow_tags',
+  CURRENT_USER: 'taskflow_current_user',
+  PREFERENCES: 'taskflow_preferences',
   ACTIVITY_LOG: 'taskflow_activity_log'
 };
 

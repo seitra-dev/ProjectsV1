@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { ChevronDown, Plus, Settings, Users } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { DESIGN_TOKENS } from '/src/styles/tokens';
@@ -139,8 +139,11 @@ const EnvironmentSelector = ({ onCreateEnvironment, onOpenSettings }) => {
 
           {/* ENVIRONMENT LIST */}
           {environments.length > 0 ? (
-            <div style={{ marginBottom: '8px' }}>
-              {environments.map((env) => (
+            <div style={{ marginBottom: '8px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+              {environments.map((env) => {
+                const isSelected = currentEnvironment?.id === env.id;
+                const accentColor = env.color || DESIGN_TOKENS.primary.base;
+                return (
                 <button
                   key={env.id}
                   onClick={() => handleSelectEnvironment(env.id)}
@@ -148,55 +151,74 @@ const EnvironmentSelector = ({ onCreateEnvironment, onOpenSettings }) => {
                     width: '100%',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '12px',
-                    padding: '10px 12px',
-                    background: currentEnvironment?.id === env.id 
-                      ? 'rgba(0, 102, 255, 0.06)' 
-                      : 'transparent',
+                    gap: '10px',
+                    padding: '8px 10px',
+                    background: isSelected ? `${accentColor}12` : 'transparent',
                     border: 'none',
-                    borderRadius: DESIGN_TOKENS.border.radius.sm,
+                    borderLeft: `3px solid ${isSelected ? accentColor : 'transparent'}`,
+                    borderRadius: '8px',
                     cursor: 'pointer',
                     transition: `all ${DESIGN_TOKENS.transition.fast}`,
-                    textAlign: 'left'
+                    textAlign: 'left',
                   }}
                   onMouseEnter={(e) => {
-                    if (currentEnvironment?.id !== env.id) {
-                      e.currentTarget.style.background = 'rgba(0, 0, 0, 0.03)';
+                    if (!isSelected) {
+                      e.currentTarget.style.background = `${accentColor}08`;
+                      e.currentTarget.style.borderLeftColor = `${accentColor}50`;
                     }
                   }}
                   onMouseLeave={(e) => {
-                    if (currentEnvironment?.id !== env.id) {
+                    if (!isSelected) {
                       e.currentTarget.style.background = 'transparent';
+                      e.currentTarget.style.borderLeftColor = 'transparent';
                     }
                   }}
                 >
-                  <span style={{ fontSize: '18px' }}>{env.icon || '📁'}</span>
-                  <div style={{ flex: 1 }}>
+                  <div style={{
+                    width: '30px',
+                    height: '30px',
+                    borderRadius: '8px',
+                    background: isSelected ? accentColor : `${accentColor}20`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '15px',
+                    flexShrink: 0,
+                    transition: `all ${DESIGN_TOKENS.transition.fast}`,
+                  }}>
+                    {env.icon || '📁'}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{
-                      fontSize: DESIGN_TOKENS.typography.size.base,
-                      fontWeight: DESIGN_TOKENS.typography.weight.medium,
-                      color: DESIGN_TOKENS.neutral[800],
-                      marginBottom: '2px'
+                      fontSize: DESIGN_TOKENS.typography.size.sm,
+                      fontWeight: isSelected ? DESIGN_TOKENS.typography.weight.semibold : DESIGN_TOKENS.typography.weight.medium,
+                      color: isSelected ? accentColor : 'var(--text-primary, #0f172a)',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
                     }}>
                       {env.name}
                     </div>
                     <div style={{
                       fontSize: DESIGN_TOKENS.typography.size.xs,
-                      color: DESIGN_TOKENS.neutral[400]
+                      color: 'var(--text-subtle, #94a3b8)',
                     }}>
                       {env.workspaces?.length || 0} espacios
                     </div>
                   </div>
-                  {currentEnvironment?.id === env.id && (
+                  {isSelected && (
                     <div style={{
-                      width: '6px',
-                      height: '6px',
+                      width: '7px',
+                      height: '7px',
                       borderRadius: '50%',
-                      background: DESIGN_TOKENS.primary.base
+                      background: accentColor,
+                      flexShrink: 0,
+                      boxShadow: `0 0 0 2px ${accentColor}30`,
                     }} />
                   )}
                 </button>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div style={{

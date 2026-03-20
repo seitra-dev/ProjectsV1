@@ -5,6 +5,7 @@ import { DESIGN_TOKENS } from '/src/styles/tokens';
 import WorkspaceList from './Enviroments/WorkspaceList';
 import CreateWorkspaceModal from './Enviroments/CreateWorkspaceModal';
 import CreateListModal from './Enviroments/CreateListModal';
+import { useApp } from '../context/AppContext';
 
 const sidebarStyle = {
   background: 'var(--bg-sidebar)',
@@ -46,9 +47,11 @@ const sidebarFooterStyle = {
   borderBottomRightRadius: '24px',
 };
 
-function Sidebar({ isOpen, activeView, onViewChange, projects, onProjectSelect, user, toggleFavorite, isMobile, onClose }) {
+function Sidebar({ isOpen, activeView, onViewChange, projects, onProjectSelect, user, toggleFavorite, isMobile, onClose, onSelectList }) {
+  const { setCurrentWorkspaceState } = useApp();
   const [showCreateWorkspace, setShowCreateWorkspace] = useState(false);
   const [showCreateList, setShowCreateList] = useState(false);
+  const [createListWorkspace, setCreateListWorkspace] = useState(null);
 
   const menuItems = [
     { id: 'dashboard', icon: <Home size={19} />, label: 'Dashboard' },
@@ -63,7 +66,8 @@ function Sidebar({ isOpen, activeView, onViewChange, projects, onProjectSelect, 
   const collapsed = !isOpen && !isMobile;
 
   const handleSelectWorkspace = (workspace) => {
-    onViewChange('backlog', 'Backlog');
+    setCurrentWorkspaceState(workspace);
+    onViewChange('workspace', workspace.name);
     if (isMobile) onClose();
   };
 
@@ -211,12 +215,16 @@ function Sidebar({ isOpen, activeView, onViewChange, projects, onProjectSelect, 
 
           {(!collapsed || isMobile) && (
             <div style={{ marginBottom: '20px', marginTop: '10px' }}>
-              <WorkspaceList 
+              <WorkspaceList
                 onCreateWorkspace={() => setShowCreateWorkspace(true)}
                 onSelectWorkspace={handleSelectWorkspace}
                 onOpenChat={() => onViewChange('chat', 'Chat del Equipo')}
                 onOpenBacklog={() => onViewChange('backlog', 'Backlog')}
-                onCreateList={() => setShowCreateList(true)}  // ← NUEVO
+                onCreateList={(ws) => { setCreateListWorkspace(ws || null); setShowCreateList(true); }}
+                onSelectList={(list) => {
+                  onSelectList && onSelectList(list);
+                  if (isMobile) onClose();
+                }}
               />
             </div>
           )}
@@ -271,10 +279,13 @@ function Sidebar({ isOpen, activeView, onViewChange, projects, onProjectSelect, 
       {createPortal(
         <CreateListModal
           isOpen={showCreateList}
-          onClose={() => setShowCreateList(false)}
-          onSave={(listData) => {
+          onClose={() => { setShowCreateList(false); setCreateListWorkspace(null); }}
+          preselectedWorkspaceId={createListWorkspace?.id}
+          onSave={(newList) => {
             setShowCreateList(false);
-            onViewChange('list', listData.name);
+            setCreateListWorkspace(null);
+            onSelectList && onSelectList(newList);
+            if (isMobile) onClose();
           }}
         />,
         document.body

@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { dbUsers, dbProjects, dbTasks, dbComments } from './lib/database';
 import { supabase } from './lib/supabase';
-import { dbProjects, dbTasks, dbUsers, dbComments } from './lib/database';
+import { auth } from './lib/auth'; 
 
 import { 
   Plus, Search, Filter, Calendar, Users, ChevronDown, ChevronUp, ChevronRight,
@@ -17,7 +18,7 @@ import {
 } from 'lucide-react';
 
 import Sidebar from './components/Sidebar';
-import { DESIGN_TOKENS, STORAGE_KEYS, storageGet, storageSet, } from './styles/tokens';
+import { DESIGN_TOKENS, STORAGE_KEYS, storageGet, storageSet } from './styles/tokens';
 import ProjectRoadmap from './components/ProjectRoadmap';
 import EnvironmentSelector from "./components/Enviroments/EnvironmentSelector";
 import CreateEnvironmentModal from "./components/Enviroments/CreateEnvironmentModal";
@@ -25,7 +26,10 @@ import EnvironmentSettings from "./components/Enviroments/EnvironmentSettings";
 import { AppProvider, useApp } from './context/AppContext';
 import TeamChatView from './components/TeamChatView';
 import ListView from './components/ListView';
+import BacklogView from './components/BacklogView';
 import LandingPage from './components/LandingPage';
+import SeitraAssistant from './components/SeitraAssistant';
+import CreateListModal from './components/Enviroments/CreateListModal';
 
 
 // ============================================================================
@@ -33,11 +37,13 @@ import LandingPage from './components/LandingPage';
 // ============================================================================
 const ToastContext = React.createContext();
 
+let _toastCounter = 0;
+
 function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([]);
 
   const addToast = useCallback((message, type = 'info', duration = 3000) => {
-    const id = Date.now();
+    const id = ++_toastCounter;
     setToasts(prev => [...prev, { id, message, type, duration }]);
     
     if (duration > 0) {
@@ -233,33 +239,6 @@ const PRIORITY_OPTIONS = {
 };
 
 // ============================================================================
-// NORMALIZADORES: Supabase (snake_case) → Frontend (camelCase)
-// ============================================================================
-const normalizeProject = (p) => ({
-  ...p,
-  startDate:  p.startDate  ?? p.start_date  ?? '',
-  endDate:    p.endDate    ?? p.end_date    ?? '',
-  createdAt:  p.createdAt  ?? p.created_at  ?? '',
-  members:    p.members    ?? [],
-  tags:       p.tags       ?? [],
-  roadmap:    p.roadmap    ?? { phases: [], userStories: [], risks: [], meetings: [] },
-});
-
-const normalizeTask = (t) => ({
-  ...t,
-  projectId:      t.projectId      ?? t.project_id      ?? null,
-  parentId:       t.parentId       ?? t.parent_id        ?? null,
-  assigneeId:     t.assigneeId     ?? t.assignee_id      ?? null,
-  startDate:      t.startDate      ?? t.start_date       ?? '',
-  endDate:        t.endDate        ?? t.end_date         ?? '',
-  createdAt:      t.createdAt      ?? t.created_at       ?? '',
-  updatedAt:      t.updatedAt      ?? t.updated_at       ?? '',
-  estimatedHours: t.estimatedHours ?? t.estimated_hours  ?? 0,
-  progress:       t.progress       ?? 0,
-  tags:           t.tags           ?? [],
-});
-
-// ============================================================================
 // MAIN APP
 // ============================================================================
 function App() {
@@ -273,34 +252,49 @@ function App() {
 }
 
 function AppContent() {
-  const [showLanding, setShowLanding] = useState(true);
   const [isTransitioning, setIsTransitioning] = useState(false);
-  const [currentUser, setCurrentUser] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
   const [darkMode, setDarkMode] = useState(false);
   const { addToast } = useToast();
 
-  useEffect(() => {
-  const prefs = storageGet(STORAGE_KEYS.PREFERENCES);
-  if (prefs?.darkMode) setDarkMode(prefs.darkMode);
-
-  // onAuthStateChange maneja TODO — incluyendo la carga inicial
-  const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-    if (session?.user) {
-      setCurrentUser({
-        id: session.user.id,
-        email: session.user.email,
-        name: session.user.user_metadata?.name || session.user.email,
-        role: session.user.user_metadata?.role || 'user'
-      });
-    } else {
-      setCurrentUser(null);
-    }
-    setIsLoading(false); // ← siempre se llama, con o sin sesión
+  // Leer sesión de localStorage de forma sincrónica — sin loading screen, sin async
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      const ref = import.meta.env.VITE_SUPABASE_URL?.split('//')[1]?.split('.')[0];
+      const raw = localStorage.getItem(`sb-${ref}-auth-token`);
+      if (!raw) return null;
+      const session = JSON.parse(raw);
+      if (!session?.access_token || !session?.user) return null;
+      const u = session.user;
+      return { id: u.id, email: u.email, name: u.user_metadata?.name || u.email, role: u.user_metadata?.role || 'user', avatar: '👤' };
+    } catch { return null; }
   });
 
-  return () => subscription.unsubscribe();
-}, []);
+  // Mostrar landing solo si no hay sesión guardada
+  const [showLanding, setShowLanding] = useState(() => {
+    try {
+      const ref = import.meta.env.VITE_SUPABASE_URL?.split('//')[1]?.split('.')[0];
+      const raw = localStorage.getItem(`sb-${ref}-auth-token`);
+      if (!raw) return true;
+      const session = JSON.parse(raw);
+      return !(session?.access_token && session?.user);
+    } catch { return true; }
+  });
+
+  useEffect(() => {
+    const prefs = storageGet(STORAGE_KEYS.PREFERENCES);
+    if (prefs?.darkMode) setDarkMode(prefs.darkMode);
+  }, []);
+
+  // Escuchar cierre de sesión
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT') {
+        setCurrentUser(null);
+        setShowLanding(true);
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, []);
 
   const handleGetStarted = () => {
     setIsTransitioning(true);
@@ -314,61 +308,30 @@ function AppContent() {
     document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light');
   }, [darkMode]);
 
-const handleLogin = (user, isNew = false) => {
-  setCurrentUser({ ...user, isNew });
-  // ← ya no necesitas storageSet, Supabase maneja la sesión automáticamente
-  const nombre = (user.name || user.email).split(' ')[0];
-  addToast(
-    isNew ? `¡Bienvenido, ${nombre}! Tu cuenta ha sido creada.` : `¡Bienvenido de vuelta, ${nombre}!`,
-    'success'
-  );
-};
-
-const handleLogout = async () => {
-  try {
-    await supabase.auth.signOut();
-  } catch (err) {
-    // AbortError u otros errores de Supabase no deben bloquear el logout
-    console.warn('signOut warning:', err.message);
-  } finally {
-    // Siempre limpiar el estado local, independientemente de errores
-    setCurrentUser(null);
-    addToast('Sesión cerrada correctamente', 'info');
-  }
-};
-
-const toggleDarkMode = () => {
-  const newMode = !darkMode;
-  setDarkMode(newMode);
-  const prefs = storageGet(STORAGE_KEYS.PREFERENCES) || {};
-  storageSet(STORAGE_KEYS.PREFERENCES, { ...prefs, darkMode: newMode }); // ← este sí se queda en localStorage
-  addToast(`Modo ${newMode ? 'oscuro' : 'claro'} activado`, 'info');
-};
-  if (isLoading) {
-    return (
-      <div style={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-        fontFamily: DESIGN_TOKENS.typography.fontFamily
-      }}>
-        <style>{`@keyframes spin { to { transform: rotate(360deg); }}`}</style>
-        <div style={{ textAlign: 'center', color: 'white' }}>
-          <div style={{
-            width: 50, height: 50,
-            border: '4px solid rgba(255,255,255,0.3)',
-            borderTopColor: 'white',
-            borderRadius: '50%',
-            margin: '0 auto 1rem',
-            animation: 'spin 1s linear infinite'
-          }} />
-          <div style={{ fontSize: '1.25rem', fontWeight: 600 }}>Cargando SEITRA...</div>
-        </div>
-      </div>
+  const handleLogin = (user, isNew = false) => {
+    setCurrentUser({ ...user, isNew });
+    setShowLanding(false);
+    const nombre = (user.name || user.email).split(' ')[0];
+    addToast(
+      isNew ? `¡Bienvenido, ${nombre}! Tu cuenta ha sido creada.` : `¡Bienvenido de vuelta, ${nombre}!`,
+      'success'
     );
-  }
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setCurrentUser(null);
+    setShowLanding(true);
+    addToast('Sesión cerrada correctamente', 'info');
+  };
+
+  const toggleDarkMode = () => {
+    const newMode = !darkMode;
+    setDarkMode(newMode);
+    const prefs = storageGet(STORAGE_KEYS.PREFERENCES) || {};
+    storageSet(STORAGE_KEYS.PREFERENCES, { ...prefs, darkMode: newMode });
+    addToast(`Modo ${newMode ? 'oscuro' : 'claro'} activado`, 'info');
+  };
 
 // Pantalla de transición optimizada
 if (isTransitioning) {
@@ -472,86 +435,178 @@ function LoginScreen({ onLogin }) {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState(''); // ← NUEVO
 
   const switchMode = (toLogin) => {
     setIsLogin(toLogin);
     setError('');
-    setSuccess(''); // ← NUEVO
     setName('');
     setEmail('');
     setPassword('');
   };
 
+  // ============================================================================
+  // NUEVO: GOOGLE SIGN-IN
+  // ============================================================================
+  const handleGoogleSignIn = async () => {
+    try {
+      setIsLoading(true);
+      setError('');
+      await auth.signInWithGoogle();
+      // Supabase redirigirá a Google automáticamente
+      // Cuando vuelva, tu App.jsx detectará el usuario
+    } catch (err) {
+      console.error('[Google Login] Error:', err);
+      setError('Error al iniciar sesión con Google');
+      setIsLoading(false);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    setSuccess(''); // ← NUEVO
     setIsLoading(true);
 
     try {
       if (isLogin) {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email: email.trim(),
-          password: password
-        });
-
-        if (error) {
-          if (error.message.includes('Invalid login credentials')) {
-            setError('Correo o contraseña incorrectos.');
-          } else {
-            setError(error.message);
-          }
-          return;
+        // 0. Pre-check de conectividad (5s) — detecta red bloqueada o proyecto pausado
+        console.log('[Login] Verificando conectividad con Supabase...');
+        try {
+          const ctrl = new AbortController();
+          const connTimer = setTimeout(() => ctrl.abort(), 5000);
+          const resp = await fetch(
+            `${import.meta.env.VITE_SUPABASE_URL}/auth/v1/health`,
+            { signal: ctrl.signal }
+          );
+          clearTimeout(connTimer);
+          console.log('[Login] Servidor alcanzable, status:', resp.status);
+        } catch (connErr) {
+          console.error('[Login] Sin conectividad:', connErr.message);
+          throw new Error(
+            'No se puede conectar a Supabase. Posibles causas: la red corporativa bloquea supabase.co, o el proyecto está pausado en el dashboard.'
+          );
         }
 
-        const user = {
-          id: data.user.id,
-          email: data.user.email,
-          name: data.user.user_metadata?.name || data.user.email,
-          role: data.user.user_metadata?.role || 'user'
-        };
+        // 1. Autenticar con fetch directo (bypasea el SDK que se cuelga en esta red)
+        console.log('[Login] Iniciando autenticación directa...');
+        const SUPA_URL = import.meta.env.VITE_SUPABASE_URL;
+        const SUPA_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-        onLogin(user, false);
+        const tokenResp = await Promise.race([
+          fetch(`${SUPA_URL}/auth/v1/token?grant_type=password`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': SUPA_KEY,
+            },
+            body: JSON.stringify({ email: email.trim().toLowerCase(), password })
+          }),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Sin respuesta del servidor (10s). Verifica tu conexión.')), 10000)
+          )
+        ]);
+
+        console.log('[Login] Respuesta status:', tokenResp.status);
+        const tokenData = await tokenResp.json();
+        console.log('[Login] Respuesta keys:', Object.keys(tokenData));
+
+        if (!tokenResp.ok) {
+          const errMsg = tokenData.error_description || tokenData.message || tokenData.error || 'Credenciales incorrectas';
+          throw new Error(errMsg);
+        }
+
+        // Guardar sesión en localStorage directamente (sin await setSession que cuelga)
+        // El cliente Supabase lee de localStorage para autenticar las queries REST
+        const authUser = tokenData.user;
+        try {
+          const ref = SUPA_URL.split('//')[1]?.split('.')[0];
+          localStorage.setItem(`sb-${ref}-auth-token`, JSON.stringify({
+            access_token: tokenData.access_token,
+            refresh_token: tokenData.refresh_token,
+            expires_at: tokenData.expires_at,
+            expires_in: tokenData.expires_in,
+            token_type: 'bearer',
+            user: authUser
+          }));
+        } catch (e) {
+          console.warn('[Login] No se pudo guardar sesión en localStorage:', e);
+        }
+        // Sync background (fire & forget — no bloqueamos el login)
+        supabase.auth.setSession({
+          access_token: tokenData.access_token,
+          refresh_token: tokenData.refresh_token
+        }).catch(() => {});
+
+        // 2. Cargar perfil desde la tabla users
+        console.log('[Login] Buscando perfil en tabla users...');
+        let userProfile = null;
+        try {
+          userProfile = await Promise.race([
+            dbUsers.getByEmail(email.trim().toLowerCase()),
+            new Promise(resolve => setTimeout(() => resolve(null), 6000))
+          ]);
+          console.log('[Login] Perfil:', userProfile ? `encontrado → ${userProfile.name}` : 'no encontrado, usando datos del token');
+        } catch (profileErr) {
+          console.warn('[Login] Error cargando perfil:', profileErr.message);
+        }
+
+        onLogin(userProfile || {
+          id: authUser.id,
+          email: authUser.email,
+          name: authUser.user_metadata?.name || authUser.email,
+          role: 'user',
+          avatar: '👤'
+        }, false);
 
       } else {
-        // — REGISTRO —
+        // — REGISTRO con Supabase Auth —
         if (!name.trim()) {
           setError('El nombre completo es requerido.');
           return;
         }
-        if (password.length < 6) {
-          setError('La contraseña debe tener al menos 6 caracteres.');
-          return;
-        }
 
         const { data, error } = await supabase.auth.signUp({
-          email: email.trim(),
-          password: password,
-          options: {
-            data: { name: name.trim() }
-          }
+          email: email.trim().toLowerCase(),
+          password,
+          options: { data: { name: name.trim() } }
         });
+        if (error) throw error;
 
-        if (error) {
-          if (error.message.includes('already registered')) {
-            setError('Ya existe una cuenta con ese correo. Inicia sesión.');
-          } else {
-            setError(error.message);
-          }
-          return;
+        // Crear perfil en tabla users
+        let newUser = null;
+        try {
+          newUser = await dbUsers.create({
+            id: data.user.id,
+            name: name.trim(),
+            email: email.trim().toLowerCase(),
+            role: 'user',
+            avatar: '👤',
+          });
+        } catch {
+          // Si falla la inserción en users, igualmente dejamos entrar con datos del token
+          newUser = null;
         }
 
-        // ← CAMBIO CLAVE: no llamar onLogin(), mostrar éxito y volver al login
-        setSuccess('¡Cuenta creada! Ya puedes iniciar sesión.');
-        setIsLogin(true);
-        setName('');
-        setEmail('');
-        setPassword('');
+        onLogin(newUser || {
+          id: data.user.id,
+          email: email.trim().toLowerCase(),
+          name: name.trim(),
+          role: 'user',
+          avatar: '👤'
+        }, true);
       }
     } catch (err) {
-      setError('Error de conexión. Intenta de nuevo.');
-      console.error(err);
+      const msg = err.message || 'Error de autenticación';
+      if (msg.includes('Invalid login credentials')) {
+        setError('Correo o contraseña incorrectos.');
+      } else if (msg.includes('Email not confirmed')) {
+        setError('Debes confirmar tu correo antes de iniciar sesión.');
+      } else if (msg.includes('already registered') || msg.includes('already been registered')) {
+        setError('Ya existe una cuenta con ese correo. Inicia sesión.');
+      } else if (msg.includes('Password should be at least')) {
+        setError('La contraseña debe tener al menos 6 caracteres.');
+      } else {
+        setError(msg);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -725,13 +780,13 @@ return (
               {!isLogin && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                   <label style={{ color: '#475569', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Nombre completo</label>
-                  <input type="text" required={!isLogin} value={name} onChange={(e) => setName(e.target.value)} className="input-pro" placeholder="Ej. María González" />
+                  <input type="text" required={!isLogin} value={name} onChange={(e) => setName(e.target.value)} className="input-pro" />
                 </div>
               )}
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                 <label style={{ color: '#475569', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Correo corporativo</label>
-                <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="input-pro" placeholder="admin@seitra.com" />
+                <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="input-pro" />
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
@@ -768,15 +823,32 @@ return (
               <div style={{ flex: 1, height: '1px', background: '#e2e8f0' }} />
             </div>
 
-            {/* SOCIAL LOGIN */}
+            {/* SOCIAL LOGIN - ✅ GOOGLE AHORA FUNCIONA */}
             <div style={{ display: 'flex', gap: '0.6rem' }}>
-              <button type="button" style={{
-                flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-                padding: '0.7rem 1rem', borderRadius: '12px', border: '1.5px solid #e2e8f0', background: 'white',
-                color: '#1e293b', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer', transition: 'all 0.2s ease'
-              }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = '#cbd5e1'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)'; }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = 'none'; }}
+              <button 
+                type="button" 
+                onClick={handleGoogleSignIn}
+                disabled={isLoading}
+                style={{
+                  flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                  padding: '0.7rem 1rem', borderRadius: '12px', border: '1.5px solid #e2e8f0', background: 'white',
+                  color: '#1e293b', fontWeight: 600, fontSize: '0.85rem', 
+                  cursor: isLoading ? 'not-allowed' : 'pointer', 
+                  transition: 'all 0.2s ease',
+                  opacity: isLoading ? 0.6 : 1
+                }}
+                onMouseEnter={e => { 
+                  if (!isLoading) {
+                    e.currentTarget.style.borderColor = '#cbd5e1'; 
+                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)'; 
+                  }
+                }}
+                onMouseLeave={e => { 
+                  if (!isLoading) {
+                    e.currentTarget.style.borderColor = '#e2e8f0'; 
+                    e.currentTarget.style.boxShadow = 'none'; 
+                  }
+                }}
               >
                 <svg width="16" height="16" viewBox="0 0 48 48" fill="none"><path d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z" fill="#FFC107"/><path d="M6.306 14.691l6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 16.318 4 9.656 8.337 6.306 14.691z" fill="#FF3D00"/><path d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238A11.91 11.91 0 0 1 24 36c-5.202 0-9.619-3.317-11.283-7.946l-6.522 5.025C9.505 39.556 16.227 44 24 44z" fill="#4CAF50"/><path d="M43.611 20.083H42V20H24v8h11.303a12.04 12.04 0 0 1-4.087 5.571l.003-.002 6.19 5.238C36.971 39.205 44 34 44 24c0-1.341-.138-2.65-.389-3.917z" fill="#1976D2"/></svg>
                 Google
@@ -805,6 +877,8 @@ return (
 // MAIN APP DASHBOARD
 // ============================================================================
 function MainApp({ user, onLogout, darkMode, toggleDarkMode }) {
+  const { addToast } = useToast();
+  const { currentWorkspace, currentEnvironment, lists } = useApp();
   const [activeView, setActiveView] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [projects, setProjects] = useState([]);
@@ -814,14 +888,13 @@ function MainApp({ user, onLogout, darkMode, toggleDarkMode }) {
   const [tags, setTags] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedProject, setSelectedProject] = useState(null);
+  const [selectedList, setSelectedList] = useState(null);
   const [selectedTask, setSelectedTask] = useState(null);
   const [showTaskDetail, setShowTaskDetail] = useState(false);
   const [breadcrumbs, setBreadcrumbs] = useState([{ label: 'Dashboard', view: 'dashboard' }]);
   const [showShortcuts, setShowShortcuts] = useState(false);
-  const { addToast } = useToast();
   const [showProjectManagement, setShowProjectManagement] = useState(false);
   const [selectedProjectForManagement, setSelectedProjectForManagement] = useState(null);
-  const { currentEnvironment, currentWorkspace, currentUser } = useApp();
 
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [isTablet, setIsTablet] = useState(window.innerWidth >= 768 && window.innerWidth < 1024);
@@ -842,77 +915,191 @@ useEffect(() => {
 }, []);
 
   useEffect(() => {
-  loadData();
-  }, [currentWorkspace]);
-  // Migrar proyectos existentes para agregar roadmap
-  useEffect(() => {
-    const migrateProjects = () => {
-      const needsMigration = projects.some(p => !p.roadmap);
-      if (needsMigration) {
-        const migrated = projects.map(p => ({
-          ...p,
-          roadmap: p.roadmap || {
-            phases: [],
-            userStories: [],
-            risks: [],
-            meetings: []
-          }
-        }));
-        saveProjects(migrated);
-        addToast('Proyectos actualizados con nueva estructura', 'info');
+    loadData();
+  }, [currentEnvironment?.id]);
+  const loadData = async () => {
+    console.log('[loadData] iniciando... currentEnvironment:', currentEnvironment?.id);
+    // allSettled: cada recurso carga de forma independiente — si uno falla, los demás siguen
+    const projectsPromise = currentEnvironment?.id
+      ? dbProjects.getByEnvironment(currentEnvironment.id)
+      : dbProjects.getAll();
+    const [projectsResult, tasksResult, usersResult] = await Promise.allSettled([
+      projectsPromise,
+      dbTasks.getAll(),
+      dbUsers.getAll(),
+    ]);
+
+    if (projectsResult.status === 'fulfilled') {
+      console.log('[loadData] projects:', projectsResult.value?.length);
+      setProjects(projectsResult.value);
+    } else console.error('[loadData] Error cargando proyectos:', projectsResult.reason);
+
+    if (tasksResult.status === 'fulfilled') setTasks(tasksResult.value);
+    else console.error('Error cargando tareas:', tasksResult.reason);
+
+    if (usersResult.status === 'fulfilled') {
+      const usersData = usersResult.value;
+      console.log('[loadData] users resultado:', usersData);
+      if (!usersData || usersData.length === 0) {
+        setUsers(user ? [user] : []);
+      } else {
+        setUsers(usersData);
       }
+    } else {
+      console.error('[loadData] Error cargando usuarios:', usersResult.reason);
+      setUsers(user ? [user] : []);
+    }
+
+    setTags(['web', 'diseño', 'ui', 'backend', 'frontend', 'urgente']);
+  };
+
+  // Proyectos - CRUD individual
+  const createProject = async (projectData) => {
+    console.log('[handleCreateProject] INICIO', projectData?.name);
+    // Validar que leaderId existe en public.users (evita FK violation con auth UUID)
+    const validLeader = users.find(u => u.id === projectData.leaderId);
+    const safeLeaderId = validLeader ? projectData.leaderId : (users[0]?.id || null);
+    const members = projectData.members?.length > 0
+      ? projectData.members.filter(id => users.some(u => u.id === id))
+      : (safeLeaderId ? [safeLeaderId] : []);
+    const payload = {
+      ...projectData,
+      workspaceId: projectData.workspaceId || currentWorkspace?.id || null,
+      environmentId: projectData.environmentId || currentEnvironment?.id || null,
+      leaderId: safeLeaderId,
+      members,
     };
 
-    if (projects.length > 0) {
-      migrateProjects();
-    }
-}, [projects.length]); // Solo ejecutar cuando cambie la cantidad de proyectos
-
-const loadData = async () => {
-  try {
-    const [projectsData, usersData] = await Promise.all([
-      currentWorkspace ? dbProjects.getByWorkspace(currentWorkspace.id) : Promise.resolve([]),
-      dbUsers.getAll()
-    ]);
-    const normalizedProjects = (projectsData || []).map(normalizeProject);
-    setProjects(normalizedProjects);
-    setUsers(usersData || []);
-    setTags(['web', 'diseño', 'ui', 'backend', 'frontend', 'urgente']);
-
-    // Cargar tareas de todos los proyectos
-    if (normalizedProjects.length > 0) {
-      const allTasks = await Promise.all(
-        normalizedProjects.map(p => dbTasks.getByProject(p.id))
+    console.log('[handleCreateProject] payload listo, llamando dbProjects.create:', JSON.stringify(payload));
+    try {
+      const createPromise = dbProjects.create(payload);
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Timeout: insert tardó más de 10s')), 10000)
       );
-      setTasks(allTasks.flat().map(normalizeTask));
-    } else {
-      setTasks([]);
+      const created = await Promise.race([createPromise, timeoutPromise]);
+      console.log('[handleCreateProject] proyecto creado OK:', created?.id);
+      setProjects(prev => prev.some(p => p.id === created.id) ? prev : [created, ...prev]);
+      logActivity('project_created', `Proyecto creado: ${created.name}`);
+      return created;
+    } catch (error) {
+      console.error('[handleCreateProject] ERROR →', error?.message, error?.code, error?.details, error?.hint);
+      addToast(`Error al crear el proyecto: ${error?.message || 'desconocido'}`, 'error');
+      throw error;
     }
+  };
 
-  } catch (err) {
-    console.error('Error cargando datos:', err);
-    addToast('Error cargando datos', 'error');
-  }
-};
+  const updateProject = async (id, updates) => {
+    try {
+      const updated = await dbProjects.update(id, updates);
+      setProjects(prev => prev.map(p => p.id === id ? updated : p));
+      if (selectedProject?.id === id) setSelectedProject(updated);
+      logActivity('project_updated', `Proyecto actualizado: ${updated.name}`);
+      return updated;
+    } catch (error) {
+      console.error('Error actualizando proyecto:', error);
+      addToast('Error al actualizar el proyecto', 'error');
+      throw error;
+    }
+  };
 
-const saveProjects = async (newProjects) => {
-  setProjects(newProjects);
-};
+  const deleteProject = async (id) => {
+    try {
+      await dbProjects.delete(id);
+      setProjects(prev => prev.filter(p => p.id !== id));
+      logActivity('project_deleted', `Proyecto eliminado`);
+    } catch (error) {
+      console.error('Error eliminando proyecto:', error);
+      addToast('Error al eliminar el proyecto', 'error');
+      throw error;
+    }
+  };
 
-const saveTasks = async (newTasks) => {
-  setTasks(newTasks);
-};
+  // Tareas - CRUD individual
+  const createTask = async (taskData) => {
+    try {
+      const created = await dbTasks.create(taskData);
+      setTasks(prev => [created, ...prev]);
+      logActivity('task_created', `Tarea creada: ${created.title}`);
+      return created;
+    } catch (error) {
+      console.error('Error creando tarea:', error);
+      addToast('Error al crear la tarea', 'error');
+      throw error;
+    }
+  };
 
-const saveComments = async (newComments) => {
-  setComments(newComments);
-};
+  const updateTask = async (id, updates) => {
+    try {
+      const updated = await dbTasks.update(id, updates);
+      setTasks(prev => prev.map(t => t.id === id ? updated : t));
+      if (selectedTask?.id === id) setSelectedTask(updated);
+      logActivity('task_updated', `Tarea actualizada: ${updated.title}`);
+      return updated;
+    } catch (error) {
+      console.error('Error actualizando tarea:', error);
+      addToast('Error al actualizar la tarea', 'error');
+      throw error;
+    }
+  };
 
-const logActivity = async (type, description) => {
-};
+  const deleteTask = async (id) => {
+    try {
+      // Eliminar subtareas primero
+      const subtasks = tasks.filter(t => t.parentId === id);
+      for (const sub of subtasks) {
+        await deleteTask(sub.id);
+      }
+      await dbTasks.delete(id);
+      setTasks(prev => prev.filter(t => t.id !== id));
+      logActivity('task_deleted', `Tarea eliminada`);
+    } catch (error) {
+      console.error('Error eliminando tarea:', error);
+      addToast('Error al eliminar la tarea', 'error');
+      throw error;
+    }
+  };
+
+  // Comentarios
+  const createComment = async (commentData) => {
+    try {
+      const created = await dbComments.create(commentData);
+      setComments(prev => [...prev, created]);
+      return created;
+    } catch (error) {
+      console.error('Error creando comentario:', error);
+      addToast('Error al agregar el comentario', 'error');
+      throw error;
+    }
+  };
+
+  const saveComments = (newComments) => {
+    setComments(newComments);
+  };
+
+  const logActivity = (type, description) => {
+    const log = storageGet(STORAGE_KEYS.ACTIVITY_LOG) || [];
+    log.unshift({
+      id: Date.now(),
+      type,
+      description,
+      userId: user.id,
+      timestamp: new Date().toISOString()
+    });
+    storageSet(STORAGE_KEYS.ACTIVITY_LOG, log.slice(0, 100));
+  };
 
   const handleViewChange = (view, label) => {
     setActiveView(view);
     setBreadcrumbs([{ label: label || view, view }]);
+    setSelectedProject(null);
+    setSelectedTask(null);
+    if (view !== 'list') setSelectedList(null);
+  };
+
+  const handleSelectList = (list) => {
+    setSelectedList(list);
+    setActiveView('list');
+    setBreadcrumbs([{ label: list.name, view: 'list' }]);
     setSelectedProject(null);
     setSelectedTask(null);
   };
@@ -931,10 +1118,9 @@ const logActivity = async (type, description) => {
     setShowProjectManagement(true);
   };
 
-  const handleProjectUpdate = (updatedProject) => {
-  saveProjects(projects.map(p => p.id === updatedProject.id ? updatedProject : p));
-  setSelectedProject(updatedProject);
-};
+  const handleProjectUpdate = async (updatedProject) => {
+    await updateProject(updatedProject.id, updatedProject);
+  };
   const handleTaskClick = (task) => {
     setSelectedTask(task);
     setShowTaskDetail(true);
@@ -950,22 +1136,16 @@ const logActivity = async (type, description) => {
     }
   };
 
-  const toggleFavorite = (projectId) => {
-    const updated = projects.map(p => 
-      p.id === projectId ? { ...p, favorite: !p.favorite } : p
-    );
-    saveProjects(updated);
+  const toggleFavorite = async (projectId) => {
+    const project = projects.find(p => p.id === projectId);
+    if (!project) return;
+    await updateProject(projectId, { favorite: !project.favorite });
     addToast('Favorito actualizado', 'success');
   };
 
-  const duplicateProject = (project) => {
-    const copy = {
-      ...project,
-      id: Date.now(),
-      name: `${project.name} (Copia)`,
-      createdAt: new Date().toISOString()
-    };
-    saveProjects([...projects, copy]);
+  const duplicateProject = async (project) => {
+    const { id, createdAt, updatedAt, environmentId, ...rest } = project;
+    await createProject({ ...rest, name: `${project.name} (Copia)` });
     addToast('Proyecto duplicado', 'success');
   };
 
@@ -1096,7 +1276,7 @@ const logActivity = async (type, description) => {
 
   return (
     <div style={dashboardContainerStyle}>
-      <Sidebar 
+      <Sidebar
         isOpen={sidebarOpen}
         activeView={activeView}
         onViewChange={handleViewChange}
@@ -1106,6 +1286,7 @@ const logActivity = async (type, description) => {
         toggleFavorite={toggleFavorite}
         isMobile={isMobile}
         onClose={() => setSidebarOpen(false)}
+        onSelectList={handleSelectList}
       />
 
       <div style={mainContentWrapperStyle}>
@@ -1135,16 +1316,22 @@ const logActivity = async (type, description) => {
             />
           )}
 
-          {activeView === 'list' && (
-            <ListView 
-              listId={Date.now()}
-              listName={breadcrumbs[breadcrumbs.length - 1]?.label || 'Lista'}
-              tasks={tasks}
+          {activeView === 'list' && selectedList && (
+            <ListView
+              listId={selectedList.id}
+              listName={selectedList.name}
+              tasks={tasks.filter(t => t.listId === selectedList.id)}
               projects={projects}
               users={users}
-              onTasksChange={saveTasks}
+              onTasksChange={(newTasks) => {
+                setTasks(prev => [
+                  ...prev.filter(t => t.listId !== selectedList.id),
+                  ...newTasks
+                ]);
+              }}
               onListNameChange={(id, name) => {
-                setBreadcrumbs(breadcrumbs.map((b, i) => 
+                setSelectedList(prev => ({ ...prev, name }));
+                setBreadcrumbs(breadcrumbs.map((b, i) =>
                   i === breadcrumbs.length - 1 ? { ...b, label: name } : b
                 ));
               }}
@@ -1155,10 +1342,12 @@ const logActivity = async (type, description) => {
           )}
 
           {activeView === 'projects' && (
-            <ProjectsView 
+            <ProjectsView
               projects={projects}
-              onProjectsChange={saveProjects}
+              createProject={createProject}
+              deleteProject={deleteProject}
               users={users}
+              currentUser={user}
               onSelectProject={handleProjectSelect}
               toggleFavorite={toggleFavorite}
               duplicateProject={duplicateProject}
@@ -1167,32 +1356,48 @@ const logActivity = async (type, description) => {
             />
           )}
 
+          {activeView === 'workspace' && (
+            <WorkspaceView
+              workspace={currentWorkspace}
+              lists={(lists || []).filter(l => l.workspace_id === currentWorkspace?.id)}
+              onSelectList={handleSelectList}
+            />
+          )}
+
           {activeView === 'project-detail' && selectedProject && (
-            <ProjectDetailView 
+            <ProjectDetailView
               project={selectedProject}
               tasks={tasks}
-              onTasksChange={saveTasks}
+              projects={projects}
+              onTaskCreate={createTask}
+              onTaskUpdate={updateTask}
+              onTaskDelete={deleteTask}
               users={users}
               comments={comments}
               onCommentsChange={saveComments}
               tags={tags}
               onTaskClick={handleTaskClick}
-              onProjectUpdate={handleProjectUpdate} 
+              onProjectUpdate={handleProjectUpdate}
             />
             
           )}
           {activeView === 'chat' && (
-            <TeamChatView 
+            <TeamChatView
               user={user}
               isMobile={isMobile}
             />
           )}
 
+          {activeView === 'backlog' && (
+            <BacklogView />
+          )}
+
           {activeView === 'tasks' && (
-            <AllTasksView 
+            <AllTasksView
               tasks={tasks}
               projects={projects}
               users={users}
+              currentUser={user}
               onTaskClick={handleTaskClick}
             />
           )}
@@ -1214,20 +1419,16 @@ const logActivity = async (type, description) => {
           users={users}
           comments={comments.filter(c => c.taskId === selectedTask.id)}
           onClose={() => setShowTaskDetail(false)}
-          onUpdate={(updated) => {
-            saveTasks(tasks.map(t => t.id === updated.id ? updated : t));
-            setSelectedTask(updated);
+          onUpdate={async (updated) => {
+            await updateTask(updated.id, updated);
             addToast('Tarea actualizada', 'success');
           }}
-          onAddComment={(comment) => {
-            const newComment = {
-              ...comment,
-              id: Date.now(),
+          onAddComment={async (comment) => {
+            await createComment({
               taskId: selectedTask.id,
               userId: user.id,
-              createdAt: new Date().toISOString()
-            };
-            saveComments([...comments, newComment]);
+              content: comment.content || comment,
+            });
             addToast('Comentario agregado', 'success');
           }}
         />
@@ -1325,17 +1526,17 @@ function TopBar({ user, onLogout, onMenuClick, searchQuery, onSearchChange, dark
               padding: '4px 2px',
             }}
           >
-            <Sun size={13} style={{ color: darkMode ? '#64748b' : '#f59e0b', transition: 'color 0.3s', flexShrink: 0 }} />
+            <Sun size={13} style={{ color: darkMode ? '#4a5068' : '#f59e0b', transition: 'color 0.3s', flexShrink: 0 }} />
             <div style={{
               width: '40px',
               height: '22px',
               borderRadius: '11px',
               background: darkMode
-                ? 'linear-gradient(135deg, #15066c 0%, #0455c7 100%)'
+                ? 'linear-gradient(135deg, #4f7cff 0%, #3b63e0 100%)'
                 : 'rgba(15,23,42,0.12)',
               position: 'relative',
               transition: 'background 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
-              boxShadow: darkMode ? '0 0 10px rgba(4,85,199,0.4)' : 'inset 0 1px 3px rgba(0,0,0,0.1)',
+              boxShadow: darkMode ? '0 0 12px rgba(79,124,255,0.35)' : 'inset 0 1px 3px rgba(0,0,0,0.1)',
               flexShrink: 0,
             }}>
               <div style={{
@@ -1345,12 +1546,12 @@ function TopBar({ user, onLogout, onMenuClick, searchQuery, onSearchChange, dark
                 width: '16px',
                 height: '16px',
                 borderRadius: '50%',
-                background: 'white',
+                background: '#f0f2f8',
                 transition: 'left 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
-                boxShadow: '0 1px 4px rgba(0,0,0,0.2)',
+                boxShadow: '0 1px 4px rgba(0,0,0,0.3)',
               }} />
             </div>
-            <Moon size={13} style={{ color: darkMode ? '#818cf8' : '#64748b', transition: 'color 0.3s', flexShrink: 0 }} />
+            <Moon size={13} style={{ color: darkMode ? '#4f7cff' : '#64748b', transition: 'color 0.3s', flexShrink: 0 }} />
           </div>
 
           <button onClick={onLogout} style={iconButtonStyle} title="Cerrar sesión"
@@ -1612,13 +1813,13 @@ function TaskCardCompact({ task, onClick }) {
         </span>
         <span style={{
           padding: '0.25rem 0.5rem',
-          background: STATUS_OPTIONS[task.status].bg,
-          color: STATUS_OPTIONS[task.status].color,
+          background: (STATUS_OPTIONS[task.status] || STATUS_OPTIONS.todo).bg,
+          color: (STATUS_OPTIONS[task.status] || STATUS_OPTIONS.todo).color,
           borderRadius: '4px',
           fontSize: '0.7rem',
           fontWeight: 600
         }}>
-          {STATUS_OPTIONS[task.status].label}
+          {(STATUS_OPTIONS[task.status] || STATUS_OPTIONS.todo).label}
         </span>
       </div>
     </div>
@@ -1723,7 +1924,7 @@ function ProjectCard({ project, onClick, index = 0 }) {
         fontWeight: DESIGN_TOKENS.typography.weight.medium
       }}>
         <span>
-          {project.startDate ? new Date(project.startDate).toLocaleDateString('es-ES') : '—'} - {project.endDate ? new Date(project.endDate).toLocaleDateString('es-ES') : '—'}
+          {new Date(project.startDate).toLocaleDateString('es-ES')} - {new Date(project.endDate).toLocaleDateString('es-ES')}
         </span>
         <div style={{ 
           display: 'flex', 
@@ -1756,17 +1957,142 @@ function ProjectCard({ project, onClick, index = 0 }) {
 
 
 // ============================================================================
+// WORKSPACE VIEW
+// ============================================================================
+function WorkspaceView({ workspace, lists = [], onSelectList }) {
+  const [showCreateList, setShowCreateList] = useState(false);
+
+  if (!workspace) {
+    return (
+      <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>
+        <div style={{ fontSize: '48px', marginBottom: '16px', opacity: 0.3 }}>📂</div>
+        <div style={{ fontSize: '16px', fontWeight: 600 }}>Ningún espacio seleccionado</div>
+      </div>
+    );
+  }
+
+  const wsColor = workspace.settings?.color || '#0066ff';
+
+  return (
+    <div style={{ padding: '32px', maxWidth: '900px', margin: '0 auto' }}>
+      {/* HEADER */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '32px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <div style={{
+            width: '14px', height: '14px', borderRadius: '50%',
+            background: wsColor, boxShadow: `0 0 0 4px ${wsColor}25`, flexShrink: 0,
+          }} />
+          <div>
+            <h1 style={{ margin: 0, fontSize: '28px', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.5px' }}>
+              {workspace.name}
+            </h1>
+            {workspace.description && (
+              <p style={{ margin: '4px 0 0', fontSize: '14px', color: '#64748b' }}>{workspace.description}</p>
+            )}
+          </div>
+        </div>
+        <button
+          onClick={() => setShowCreateList(true)}
+          style={{
+            padding: '8px 18px', background: wsColor, color: 'white',
+            border: 'none', borderRadius: '8px', fontSize: '13px',
+            fontWeight: 600, cursor: 'pointer', flexShrink: 0,
+          }}
+        >
+          + Nueva lista
+        </button>
+      </div>
+
+      {/* LISTS */}
+      {lists.length === 0 ? (
+        <div style={{
+          textAlign: 'center', padding: '64px 32px',
+          border: '2px dashed #e2e8f0', borderRadius: '16px', background: '#f8fafc',
+        }}>
+          <div style={{ fontSize: '48px', marginBottom: '16px', opacity: 0.4 }}>📋</div>
+          <div style={{ fontSize: '18px', fontWeight: 700, color: '#334155', marginBottom: '8px' }}>
+            Este espacio está vacío
+          </div>
+          <div style={{ fontSize: '14px', color: '#94a3b8', marginBottom: '24px' }}>
+            Crea una lista para empezar a organizar tareas en este espacio
+          </div>
+          <button
+            onClick={() => setShowCreateList(true)}
+            style={{
+              padding: '10px 24px', background: wsColor, color: 'white',
+              border: 'none', borderRadius: '8px', fontSize: '14px',
+              fontWeight: 600, cursor: 'pointer',
+            }}
+          >
+            + Crear lista
+          </button>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '16px' }}>
+          {lists.map(list => (
+            <div
+              key={list.id}
+              onClick={() => onSelectList && onSelectList(list)}
+              style={{
+                padding: '20px', borderRadius: '12px',
+                border: '1px solid #e2e8f0', background: 'white',
+                boxShadow: '0 1px 4px rgba(0,0,0,0.05)', cursor: 'pointer', transition: 'all 0.2s',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.1)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.boxShadow = '0 1px 4px rgba(0,0,0,0.05)'; e.currentTarget.style.transform = 'none'; }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: wsColor }} />
+                <span style={{ fontSize: '15px', fontWeight: 600, color: '#0f172a' }}>{list.name}</span>
+              </div>
+              {list.description && (
+                <p style={{ margin: 0, fontSize: '13px', color: '#64748b' }}>{list.description}</p>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <CreateListModal
+        isOpen={showCreateList}
+        onClose={() => setShowCreateList(false)}
+        preselectedWorkspaceId={workspace.id}
+        onSave={(newList) => {
+          setShowCreateList(false);
+          onSelectList && onSelectList(newList);
+        }}
+      />
+    </div>
+  );
+}
+
+// ============================================================================
 // PROJECTS VIEW
 // ============================================================================
-function ProjectsView({ projects, onProjectsChange, users, onSelectProject, toggleFavorite, duplicateProject, exportData, onOpenProjectManagement }) {
+function ProjectsView({ projects, createProject, deleteProject, users, currentUser, onSelectProject, toggleFavorite, duplicateProject, exportData, onOpenProjectManagement }) {
   const [showNewProject, setShowNewProject] = useState(false);
   const [filterStatus, setFilterStatus] = useState('all');
   const [sortBy, setSortBy] = useState('recent');
+  const [pendingDeleteProject, setPendingDeleteProject] = useState(null); // { id, name }
+  const [deletingProject, setDeletingProject] = useState(false);
   const { addToast } = useToast();
-  const { currentEnvironment, currentWorkspace, currentUser } = useApp();
+  const { currentEnvironment, currentWorkspace } = useApp();
 
-  // loadData() ya filtra proyectos por workspace, no se necesita filtrar por environmentId aquí
-  const filteredProjects = projects
+  // Filtrar por entorno activo
+  const environmentProjects = currentEnvironment
+    ? projects.filter(p =>
+        p.environmentId === currentEnvironment.id || p.environmentId == null
+      )
+    : projects;
+
+  console.log(
+    '[ProjectsView] projects total:', projects.length,
+    '| environmentId actual:', currentEnvironment?.id,
+    '| projects en vista:', environmentProjects.length,
+    '| sample environmentId:', projects[0]?.environmentId
+  );
+
+  const filteredProjects = environmentProjects
     .filter(p => filterStatus === 'all' || p.status === filterStatus)
     .sort((a, b) => {
       if (sortBy === 'recent') return new Date(b.createdAt) - new Date(a.createdAt);
@@ -1774,35 +2100,6 @@ function ProjectsView({ projects, onProjectsChange, users, onSelectProject, togg
       if (sortBy === 'deadline') return new Date(a.endDate) - new Date(b.endDate);
       return 0;
     });
-
-  const handleCreateProject = async (project) => {
-    try {
-      const payload = {
-        name: project.name,
-        description: project.description || '',
-        status: 'active',
-        color: project.color || '#6366f1',
-        start_date: project.startDate || new Date().toISOString(),
-        end_date: project.endDate || null,
-        workspace_id: currentWorkspace?.id || null,
-        owner_id: currentUser?.id || null,
-      };
-
-      // Solo incluir tags/members si no están vacíos, por si las columnas no existen
-      if (project.tags?.length) payload.tags = project.tags;
-      if (project.members?.length) payload.members = project.members;
-
-      const saved = await dbProjects.create(payload);
-
-      onProjectsChange([...projects, normalizeProject(saved)]);
-
-      setShowNewProject(false);
-      addToast('Proyecto creado exitosamente', 'success');
-    } catch (error) {
-      console.error('Error creando proyecto:', error);
-      addToast(`Error al crear el proyecto: ${error.message}`, 'error');
-    }
-  };
 
   return (
     <div style={{ padding: '2rem' }}>
@@ -1812,7 +2109,7 @@ function ProjectsView({ projects, onProjectsChange, users, onSelectProject, togg
             Proyectos
           </h2>
           <p style={{ color: '#64748b', margin: 0, fontSize: '0.9375rem', fontWeight: 500 }}>
-            {projects.length} proyecto{projects.length !== 1 ? 's' : ''} en total
+            {environmentProjects.length} proyecto{environmentProjects.length !== 1 ? 's' : ''} en total
           </p>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem' }}>
@@ -1864,28 +2161,57 @@ function ProjectsView({ projects, onProjectsChange, users, onSelectProject, togg
             onToggleFavorite={() => toggleFavorite(project.id)}
             onDuplicate={() => duplicateProject(project)}
             onOpenManagement={() => onOpenProjectManagement(project)}
-            onDelete={async () => {
-              if (confirm(`¿Eliminar proyecto "${project.name}"?`)) {
-                try {
-                  await dbProjects.delete(project.id);
-                  onProjectsChange(projects.filter(p => p.id !== project.id));
-                  addToast('Proyecto eliminado', 'success');
-                } catch (err) {
-                  addToast(`Error al eliminar: ${err.message}`, 'error');
-                }
-              }
-            }}
+            onDelete={() => setPendingDeleteProject({ id: project.id, name: project.name })}
           />
         ))}
       </div>
 
       {showNewProject && (
-  <ProjectFormModal
-    users={users}
-    onSave={handleCreateProject}  // ← así de simple
-    onClose={() => setShowNewProject(false)}
-  />
-  )}
+        <ProjectFormModal
+          users={users}
+          currentUser={currentUser}
+          onSave={async (project) => {
+            console.log('[ProjectsView] onSave recibido, environmentId:', currentEnvironment?.id, '| project.name:', project.name);
+            try {
+              await createProject({
+                ...project,
+                environmentId: currentEnvironment?.id || null,
+                status: project.status || 'active',
+                favorite: false,
+                roadmap: project.roadmap || { phases: [], userStories: [], risks: [], meetings: [] }
+              });
+              setShowNewProject(false);
+              addToast('Proyecto creado exitosamente', 'success');
+            } catch (err) {
+              console.error('[ProjectsView] onSave error:', err);
+              addToast('Error al crear el proyecto', 'error');
+            }
+          }}
+          onClose={() => setShowNewProject(false)}
+        />
+      )}
+
+      {pendingDeleteProject && (
+        <ConfirmDeleteModal
+          title="Eliminar proyecto"
+          message={`¿Estás seguro de que quieres eliminar "${pendingDeleteProject.name}"? Se eliminarán todas sus tareas asociadas y esta acción no se puede deshacer.`}
+          confirmLabel="Eliminar proyecto"
+          loading={deletingProject}
+          onConfirm={async () => {
+            setDeletingProject(true);
+            try {
+              await deleteProject(pendingDeleteProject.id);
+              addToast('Proyecto eliminado correctamente', 'success');
+              setPendingDeleteProject(null);
+            } catch {
+              addToast('Error al eliminar el proyecto', 'error');
+            } finally {
+              setDeletingProject(false);
+            }
+          }}
+          onCancel={() => setPendingDeleteProject(null)}
+        />
+      )}
     </div>
   );
 }
@@ -1997,7 +2323,7 @@ function ProjectCardExtended({ project, onClick, onToggleFavorite, onDuplicate, 
           <span>{new Date(project.endDate).toLocaleDateString('es-ES')}</span>
           <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
             <Users size={12} />
-            {project.members.length} miembros
+            {project.members?.length ?? 0} miembros
           </span>
         </div>
       </div>
@@ -2067,7 +2393,7 @@ function ProjectCardExtended({ project, onClick, onToggleFavorite, onDuplicate, 
 // ============================================================================
 // PROJECT DETAIL VIEW
 // ============================================================================
-function ProjectDetailView({ project, tasks, onTasksChange, users, comments, onCommentsChange, tags, onTaskClick, onProjectUpdate }) {
+function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTaskUpdate, onTaskDelete, users, comments, onCommentsChange, tags, onTaskClick, onProjectUpdate }) {
   const [viewMode, setViewMode] = useState('list');
   const [showNewTask, setShowNewTask] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
@@ -2075,6 +2401,9 @@ function ProjectDetailView({ project, tasks, onTasksChange, users, comments, onC
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterAssignee, setFilterAssignee] = useState('all');
   const [headerCollapsed, setHeaderCollapsed] = useState(false);
+  const [pendingDeleteTask, setPendingDeleteTask] = useState(null); // { id, title }
+  const [deletingTask, setDeletingTask] = useState(false);
+  const [liveTasks, setLiveTasks] = useState(null);
   const { addToast } = useToast();
 
   const handleViewMode = (mode) => {
@@ -2082,89 +2411,41 @@ function ProjectDetailView({ project, tasks, onTasksChange, users, comments, onC
     if (mode === 'roadmap') setHeaderCollapsed(true);
   };
 
-  const projectTasks = tasks.filter(t => (t.projectId ?? t.project_id) === project.id);
-  const rootTasks = projectTasks.filter(t => !(t.parentId ?? t.parent_id));
+  const projectTasks = tasks.filter(t => t.projectId === project.id);
+
+  // When project changes or external tasks update, reset live tasks
+  const effectiveTasks = liveTasks !== null ? liveTasks : projectTasks;
+  const rootTasks = effectiveTasks.filter(t => !t.parentId);
 
   const filteredTasks = rootTasks.filter(t => {
     if (filterStatus !== 'all' && t.status !== filterStatus) return false;
-    if (filterAssignee !== 'all' && String(t.assigneeId) !== String(filterAssignee)) return false;
+    if (filterAssignee !== 'all' && t.assigneeId !== Number(filterAssignee)) return false;
     return true;
   });
 
-  const handleAddTask = async (taskFormData) => {
+  const handleAddTask = async (task) => {
     try {
-      const payload = {
-        title:           taskFormData.title,
-        description:     taskFormData.description || '',
-        start_date:      taskFormData.startDate   || null,
-        end_date:        taskFormData.endDate      || null,
-        priority:        taskFormData.priority     || 'medium',
-        status:          taskFormData.status       || 'todo',
-        assignee_id:     taskFormData.assigneeId   || null,
-        progress:        taskFormData.progress     || 0,
-        parent_id:       taskFormData.parentId     || null,
-        estimated_hours: taskFormData.estimatedHours || 0,
-        project_id:      project.id,
-      };
-      const saved = await dbTasks.create(payload);
-      onTasksChange([...tasks, normalizeTask(saved)]);
+      await onTaskCreate({ ...task, projectId: project.id });
       setShowNewTask(false);
       addToast('Tarea creada exitosamente', 'success');
-    } catch (error) {
-      console.error('Error creando tarea:', error);
-      addToast(`Error al crear la tarea: ${error.message}`, 'error');
+    } catch {
+      addToast('Error al crear la tarea', 'error');
     }
   };
 
-  const handleUpdateTask = async (taskFormData) => {
+  const handleUpdateTask = async (updatedTask) => {
     try {
-      const payload = {
-        title:           taskFormData.title,
-        description:     taskFormData.description || '',
-        start_date:      taskFormData.startDate   || null,
-        end_date:        taskFormData.endDate      || null,
-        priority:        taskFormData.priority,
-        status:          taskFormData.status,
-        assignee_id:     taskFormData.assigneeId  || null,
-        progress:        taskFormData.progress     || 0,
-        parent_id:       taskFormData.parentId     || null,
-        estimated_hours: taskFormData.estimatedHours || 0,
-      };
-      const saved = await dbTasks.update(taskFormData.id, payload);
-      const updated = normalizeTask(saved);
-      onTasksChange(tasks.map(t => t.id === updated.id ? updated : t));
+      await onTaskUpdate(updatedTask.id, updatedTask);
       setSelectedTask(null);
       addToast('Tarea actualizada', 'success');
-    } catch (error) {
-      console.error('Error actualizando tarea:', error);
-      addToast(`Error al actualizar la tarea: ${error.message}`, 'error');
+    } catch {
+      addToast('Error al actualizar la tarea', 'error');
     }
   };
 
-  const handleDeleteTask = async (taskId) => {
-    if (confirm('¿Eliminar esta tarea y todas sus subtareas?')) {
-      try {
-        // Eliminar subtareas primero recursivamente
-        const deleteRecursive = async (id) => {
-          const children = projectTasks.filter(t => (t.parentId ?? t.parent_id) === id);
-          for (const child of children) await deleteRecursive(child.id);
-          await dbTasks.delete(id);
-        };
-        await deleteRecursive(taskId);
-        // Remover del estado local todas las tareas afectadas
-        const idsToRemove = new Set();
-        const collectIds = (id) => {
-          idsToRemove.add(id);
-          projectTasks.filter(t => (t.parentId ?? t.parent_id) === id).forEach(c => collectIds(c.id));
-        };
-        collectIds(taskId);
-        onTasksChange(tasks.filter(t => !idsToRemove.has(t.id)));
-        addToast('Tarea eliminada', 'success');
-      } catch (error) {
-        console.error('Error eliminando tarea:', error);
-        addToast(`Error al eliminar la tarea: ${error.message}`, 'error');
-      }
-    }
+  const handleDeleteTask = (taskId) => {
+    const task = tasks.find(t => t.id === taskId);
+    setPendingDeleteTask({ id: taskId, title: task?.title || 'esta tarea' });
   };
 
   const projectProgress = projectTasks.length > 0
@@ -2301,7 +2582,7 @@ function ProjectDetailView({ project, tasks, onTasksChange, users, comments, onC
           <select value={filterAssignee} onChange={(e) => setFilterAssignee(e.target.value)} style={selectStyle}>
             <option value="all">Todos los asignados</option>
             {users.map(u => (
-              <option key={u.id} value={u.id}>{u.name || u.email}</option>
+              <option key={u.id} value={u.id}>{u.name}</option>
             ))}
           </select>
 
@@ -2315,14 +2596,14 @@ function ProjectDetailView({ project, tasks, onTasksChange, users, comments, onC
       {/* RENDERIZADO DINÁMICO DE VISTAS */}
       {viewMode === 'list' && (
         <ListView
-          tasks={filteredTasks}
-          allTasks={projectTasks}
+          listId={null}
+          listName={project.name}
+          tasks={effectiveTasks}
+          projects={projects}
           users={users}
-          expanded={expandedTasks}
-          onToggle={(id) => setExpandedTasks(p => ({ ...p, [id]: !p[id] }))}
-          onEdit={setSelectedTask}
-          onDelete={handleDeleteTask}
-          onTaskClick={onTaskClick}
+          onTasksChange={setLiveTasks}
+          onListNameChange={() => {}}
+          onListDelete={() => {}}
         />
       )}
 
@@ -2353,6 +2634,28 @@ function ProjectDetailView({ project, tasks, onTasksChange, users, comments, onC
 
       {selectedTask && (
         <TaskFormModal initialTask={selectedTask} users={users} tasks={projectTasks} onSave={handleUpdateTask} onClose={() => setSelectedTask(null)} tags={tags} />
+      )}
+
+      {pendingDeleteTask && (
+        <ConfirmDeleteModal
+          title="Eliminar tarea"
+          message={`¿Estás seguro de que quieres eliminar "${pendingDeleteTask.title}"? También se eliminarán sus subtareas. Esta acción no se puede deshacer.`}
+          confirmLabel="Eliminar tarea"
+          loading={deletingTask}
+          onConfirm={async () => {
+            setDeletingTask(true);
+            try {
+              await onTaskDelete(pendingDeleteTask.id);
+              addToast('Tarea eliminada correctamente', 'success');
+              setPendingDeleteTask(null);
+            } catch {
+              addToast('Error al eliminar la tarea', 'error');
+            } finally {
+              setDeletingTask(false);
+            }
+          }}
+          onCancel={() => setPendingDeleteTask(null)}
+        />
       )}
     </div>
   );
@@ -2402,8 +2705,7 @@ function ViewButton({ label, icon, active, onClick }) {
 // LIST VIEW
 // ============================================================================
 
-/* COMENTADO - AHORA SE USA EL COMPONENTE IMPORTADO
-function ListView({ tasks, allTasks, users, expanded, onToggle, onEdit, onDelete, onTaskClick }) {
+function ProjectTaskList({ tasks, allTasks, users, expanded, onToggle, onEdit, onDelete, onTaskClick }) {
   return (
     <div style={{
       background: 'white',
@@ -2437,7 +2739,6 @@ function ListView({ tasks, allTasks, users, expanded, onToggle, onEdit, onDelete
     </div>
   );
 }
-*/
 
 function TaskRow({ task, allTasks, users, expanded, onToggle, onEdit, onDelete, onTaskClick, level, allExpanded, onToggleTask }) {
   const subtasks = allTasks.filter(t => t.parentId === task.id);
@@ -2718,7 +3019,7 @@ function TableView({ tasks = [], users = [], onEdit, onTaskClick }) {
                   {/* Fechas combinadas */}
                   <td style={tdStyle}>
                     <div style={{ fontSize: '12px', color: DESIGN_TOKENS.neutral[500] }}>
-                      {new Date(task.startDate).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })} - {new Date(task.endDate).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
+                      {formatDate(task.startDate)} - {formatDate(task.endDate)}
                     </div>
                   </td>
 
@@ -2867,31 +3168,236 @@ function RoadmapView({ project }) {
 // ============================================================================
 // ALL TASKS VIEW
 // ============================================================================
-function AllTasksView({ tasks, projects, users, onTaskClick }) {
+function ProjectPillDropdown({ projects, value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const filtered = projects.filter(p =>
+    p.name.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const selected = value === 'all' ? null : projects.find(p => String(p.id) === String(value));
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      {/* TRIGGER */}
+      <button
+        onClick={() => { setOpen(v => !v); setSearch(''); }}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          padding: selected ? '6px 12px 6px 8px' : '8px 14px',
+          borderRadius: '10px',
+          border: `1px solid ${open ? DESIGN_TOKENS.primary.base : 'rgba(15,23,42,0.08)'}`,
+          background: open ? 'rgba(0,102,255,0.04)' : 'var(--bg-surface, white)',
+          cursor: 'pointer',
+          fontSize: '13px',
+          fontWeight: 500,
+          color: selected ? 'var(--text-primary)' : 'var(--text-muted, #64748b)',
+          transition: 'all 150ms',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {selected ? (
+          <>
+            <span style={{
+              width: '8px', height: '8px', borderRadius: '50%',
+              background: selected.color || DESIGN_TOKENS.primary.base,
+              flexShrink: 0,
+            }} />
+            <span style={{ fontWeight: 600, color: selected.color || DESIGN_TOKENS.primary.base }}>
+              {selected.name}
+            </span>
+            <span
+              onClick={(e) => { e.stopPropagation(); onChange('all'); }}
+              style={{
+                marginLeft: '2px', cursor: 'pointer', color: 'var(--text-subtle, #94a3b8)',
+                lineHeight: 1, fontSize: '14px', fontWeight: 400,
+              }}
+            >×</span>
+          </>
+        ) : (
+          <>
+            <Filter size={14} />
+            Proyecto
+            <ChevronDown size={13} style={{ transform: open ? 'rotate(180deg)' : 'none', transition: '150ms' }} />
+          </>
+        )}
+      </button>
+
+      {/* DROPDOWN */}
+      {open && (
+        <div style={{
+          position: 'absolute',
+          top: 'calc(100% + 6px)',
+          left: 0,
+          background: 'var(--bg-surface, white)',
+          borderRadius: '16px',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06)',
+          border: '1px solid var(--border, rgba(15,23,42,0.06))',
+          minWidth: '240px',
+          maxHeight: '320px',
+          display: 'flex',
+          flexDirection: 'column',
+          zIndex: 500,
+          overflow: 'hidden',
+        }}>
+          {/* SEARCH INPUT */}
+          <div style={{ padding: '10px 12px 8px', borderBottom: '1px solid var(--border, rgba(15,23,42,0.05))' }}>
+            <div style={{ position: 'relative' }}>
+              <Search size={13} style={{
+                position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)',
+                color: 'var(--text-subtle, #94a3b8)', pointerEvents: 'none',
+              }} />
+              <input
+                autoFocus
+                type="text"
+                placeholder="Buscar o añadir opciones..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '7px 10px 7px 30px',
+                  background: 'var(--bg-input, #f5f5f7)',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '12.5px',
+                  outline: 'none',
+                  color: 'var(--text-primary)',
+                  fontFamily: 'inherit',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
+          </div>
+
+          {/* OPTIONS */}
+          <div style={{ overflowY: 'auto', padding: '6px', scrollbarWidth: 'thin' }}>
+            {/* ALL option */}
+            <button
+              onClick={() => { onChange('all'); setOpen(false); }}
+              style={{
+                width: '100%', display: 'flex', alignItems: 'center', gap: '10px',
+                padding: '7px 10px', borderRadius: '8px', border: 'none', cursor: 'pointer',
+                background: value === 'all' ? 'rgba(0,102,255,0.06)' : 'transparent',
+                fontSize: '13px', fontWeight: value === 'all' ? 600 : 400,
+                color: value === 'all' ? DESIGN_TOKENS.primary.base : 'var(--text-muted, #64748b)',
+                textAlign: 'left', transition: 'background 120ms',
+              }}
+              onMouseEnter={(e) => { if (value !== 'all') e.currentTarget.style.background = 'rgba(0,0,0,0.03)'; }}
+              onMouseLeave={(e) => { if (value !== 'all') e.currentTarget.style.background = 'transparent'; }}
+            >
+              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--text-subtle, #94a3b8)', flexShrink: 0 }} />
+              Todos los proyectos
+            </button>
+
+            {filtered.length > 0 && (
+              <div style={{ height: '1px', background: 'var(--border, rgba(15,23,42,0.05))', margin: '4px 0' }} />
+            )}
+
+            {filtered.map(p => {
+              const isSelected = String(value) === String(p.id);
+              const color = p.color || DESIGN_TOKENS.primary.base;
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => { onChange(p.id); setOpen(false); }}
+                  style={{
+                    width: '100%', display: 'flex', alignItems: 'center', gap: '10px',
+                    padding: '7px 10px', borderRadius: '8px', border: 'none', cursor: 'pointer',
+                    background: isSelected ? `${color}12` : 'transparent',
+                    borderLeft: `3px solid ${isSelected ? color : 'transparent'}`,
+                    fontSize: '13px', fontWeight: isSelected ? 700 : 500,
+                    color: isSelected ? color : 'var(--text-primary)',
+                    textAlign: 'left', transition: 'background 120ms',
+                    paddingLeft: isSelected ? '7px' : '10px',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isSelected) {
+                      e.currentTarget.style.background = `${color}0a`;
+                      e.currentTarget.style.borderLeftColor = `${color}50`;
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isSelected) {
+                      e.currentTarget.style.background = 'transparent';
+                      e.currentTarget.style.borderLeftColor = 'transparent';
+                    }
+                  }}
+                >
+                  <span style={{
+                    width: '8px', height: '8px', borderRadius: '50%',
+                    background: color, flexShrink: 0,
+                    boxShadow: isSelected ? `0 0 0 2px ${color}30` : 'none',
+                  }} />
+                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {p.name}
+                  </span>
+                  {isSelected && (
+                    <span style={{ color, fontSize: '14px', fontWeight: 700, lineHeight: 1 }}>✓</span>
+                  )}
+                </button>
+              );
+            })}
+
+            {filtered.length === 0 && (
+              <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-subtle, #94a3b8)', fontSize: '12px' }}>
+                Sin resultados
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const formatDate = (dateStr) => {
+  if (!dateStr) return '—';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+};
+
+function AllTasksView({ tasks, projects, users, currentUser, onTaskClick }) {
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterPriority, setFilterPriority] = useState('all');
   const [filterProject, setFilterProject] = useState('all');
   const [sortBy, setSortBy] = useState('recent');
   const { currentEnvironment } = useApp();
 
+  // Filtrar solo las tareas del usuario actual
+  const myTasks = (tasks || []).filter(t => t.assigneeId === currentUser?.id);
+  console.log('[MyTasks] user.id:', currentUser?.id, 'tasks asignadas:', myTasks.length);
+
   // Filtrar proyectos por entorno
-  const environmentProjects = currentEnvironment 
-    ? projects.filter(p => p.environmentId === currentEnvironment.id)
+  const environmentProjects = currentEnvironment
+    ? projects.filter(p => p.environmentId === currentEnvironment.id || p.environmentId == null)
     : projects;
 
-  // Filtrar tareas que pertenecen a proyectos del entorno actual
+  // Filtrar tareas del usuario que pertenecen a proyectos del entorno actual
   const environmentTasks = currentEnvironment
-    ? tasks.filter(t => {
+    ? myTasks.filter(t => {
         const project = projects.find(p => p.id === t.projectId);
-        return project && project.environmentId === currentEnvironment.id;
+        return project && (project.environmentId === currentEnvironment.id || project.environmentId == null);
       })
-    : tasks;
+    : myTasks;
 
   const filteredTasks = environmentTasks
     .filter(t => {
       if (filterStatus !== 'all' && t.status !== filterStatus) return false;
       if (filterPriority !== 'all' && t.priority !== filterPriority) return false;
-      if (filterProject !== 'all' && t.projectId !== Number(filterProject)) return false;
+      if (filterProject !== 'all' && String(t.projectId) !== String(filterProject)) return false;
       return true;
     })
     .sort((a, b) => {
@@ -2908,7 +3414,7 @@ function AllTasksView({ tasks, projects, users, onTaskClick }) {
     <div style={{ padding: '2rem' }}>
       <div style={{ marginBottom: '2rem' }}>
         <h2 style={{ fontSize: '1.75rem', fontWeight: 800, margin: '0 0 0.5rem', color: DESIGN_TOKENS.neutral[800] }}>
-          Todas las Tareas
+          Mis Tareas
         </h2>
         <p style={{ color: DESIGN_TOKENS.neutral[600], margin: 0 }}>
           {filteredTasks.length} tarea{filteredTasks.length !== 1 ? 's' : ''} encontrada{filteredTasks.length !== 1 ? 's' : ''}
@@ -2930,12 +3436,11 @@ function AllTasksView({ tasks, projects, users, onTaskClick }) {
           ))}
         </select>
 
-        <select value={filterProject} onChange={(e) => setFilterProject(e.target.value)} style={selectStyle}>
-          <option value="all">Todos los proyectos</option>
-          {environmentProjects.map(p => (
-            <option key={p.id} value={p.id}>{p.name}</option>
-          ))}
-        </select>
+        <ProjectPillDropdown
+          projects={environmentProjects}
+          value={filterProject}
+          onChange={setFilterProject}
+        />
 
         <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} style={selectStyle}>
           <option value="recent">Más recientes</option>
@@ -3111,7 +3616,7 @@ function CalendarView({ projects, tasks }) {
                     <div key={t.id} style={{
                       fontSize: '0.7rem',
                       color: DESIGN_TOKENS.neutral[700],
-                      background: STATUS_OPTIONS[t.status].bg,
+                      background: (STATUS_OPTIONS[t.status] || STATUS_OPTIONS.todo).bg,
                       padding: '0.25rem 0.5rem',
                       borderRadius: 4,
                       overflow: 'hidden',
@@ -3662,15 +4167,18 @@ function KeyboardShortcutsModal({ onClose }) {
 // ============================================================================
 // FORMS AND MODALS
 // ============================================================================
-function ProjectFormModal({ users, onSave, onClose }) {
+function ProjectFormModal({ users = [], onSave, onClose, currentUser }) {
+  const safeUsers = Array.isArray(users) ? users : [];
+  const displayUsers = safeUsers.length > 0 ? safeUsers : (currentUser ? [currentUser] : []);
+  const defaultEndDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
   const [formData, setFormData] = useState({
     name: '',
     description: '',
     color: DESIGN_TOKENS.primary.base,
     startDate: new Date().toISOString().split('T')[0],
-    endDate: '',
-    ownerId: users[0]?.id,
-    members: [],
+    endDate: defaultEndDate,
+    leaderId: safeUsers[0]?.id || null,
+    members: safeUsers[0]?.id ? [safeUsers[0].id] : [],
     tags: [],
     roadmap: {
       phases: [],
@@ -3683,6 +4191,7 @@ function ProjectFormModal({ users, onSave, onClose }) {
   const { addToast } = useToast();
 
   const validateForm = () => {
+    console.log('[ProjectFormModal] validateForm → name:', formData.name, '| endDate:', formData.endDate);
     if (!formData.name.trim()) {
       addToast('El nombre es requerido', 'error');
       return false;
@@ -3698,16 +4207,20 @@ function ProjectFormModal({ users, onSave, onClose }) {
     return true;
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
+  const handleSubmit = async (e) => {
+    if (e?.preventDefault) e.preventDefault();
+    if (e?.stopPropagation) e.stopPropagation();
+    console.log('[ProjectForm] handleSubmit ejecutado, formData:', formData);
     if (validateForm()) {
+      console.log('[ProjectForm] onSave llamado con:', formData);
       onSave(formData);
     }
   };
 
+  console.log('[ProjectForm] render, users:', users?.length, 'formData.endDate:', formData.endDate);
   return (
     <Modal onClose={onClose} title="Nuevo Proyecto">
-      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
         <FormField label="Nombre del proyecto" required>
           <input
             type="text"
@@ -3715,7 +4228,6 @@ function ProjectFormModal({ users, onSave, onClose }) {
             onChange={(e) => setFormData(p => ({ ...p, name: e.target.value }))}
             placeholder="ej. Rediseño Web 2026"
             style={inputStyle}
-            required
           />
         </FormField>
 
@@ -3730,23 +4242,21 @@ function ProjectFormModal({ users, onSave, onClose }) {
         </FormField>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-          <FormField label="Fecha inicio" required>
+          <FormField label="Fecha inicio">
             <input
               type="date"
               value={formData.startDate}
               onChange={(e) => setFormData(p => ({ ...p, startDate: e.target.value }))}
               style={inputStyle}
-              required
             />
           </FormField>
 
-          <FormField label="Fecha fin" required>
+          <FormField label="Fecha fin">
             <input
               type="date"
               value={formData.endDate}
               onChange={(e) => setFormData(p => ({ ...p, endDate: e.target.value }))}
               style={inputStyle}
-              required
             />
           </FormField>
         </div>
@@ -3783,34 +4293,40 @@ function ProjectFormModal({ users, onSave, onClose }) {
 
         <FormField label="Miembros del equipo">
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            {users.map(u => (
-              <label key={u.id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.625rem', cursor: 'pointer', borderRadius: '6px', transition: 'background 0.2s' }}
-                onMouseEnter={(e) => e.currentTarget.style.background = DESIGN_TOKENS.neutral[50]}
-                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
-                <input
-                  type="checkbox"
-                  checked={formData.members.includes(u.id)}
-                  onChange={() => setFormData(p => ({
-                    ...p,
-                    members: p.members.includes(u.id)
-                      ? p.members.filter(id => id !== u.id)
-                      : [...p.members, u.id]
-                  }))}
-                  style={checkboxStyle}
-                />
-                <div style={{
-                  width: '28px', height: '28px', borderRadius: '8px',
-                  background: 'linear-gradient(135deg, #15066c 0%, #0455c7 100%)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: 'white', fontWeight: 700, fontSize: '12px', flexShrink: 0
-                }}>
-                  {(u.name || u.email || '?').charAt(0).toUpperCase()}
-                </div>
-                <span style={{ fontSize: '0.875rem', fontWeight: 500, color: DESIGN_TOKENS.neutral[800] }}>
-                  {u.name || u.email}
-                </span>
-              </label>
-            ))}
+            {displayUsers.length === 0 ? (
+              <p style={{ margin: 0, fontSize: '0.85rem', color: DESIGN_TOKENS.neutral[400], fontStyle: 'italic' }}>
+                No hay usuarios disponibles
+              </p>
+            ) : (
+              displayUsers.map(u => (
+                <label key={u.id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.625rem', cursor: 'pointer', borderRadius: '6px', transition: 'background 0.2s' }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = DESIGN_TOKENS.neutral[50]}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
+                  <input
+                    type="checkbox"
+                    checked={formData.members.includes(u.id)}
+                    onChange={() => setFormData(p => ({
+                      ...p,
+                      members: p.members.includes(u.id)
+                        ? p.members.filter(id => id !== u.id)
+                        : [...p.members, u.id]
+                    }))}
+                    style={checkboxStyle}
+                  />
+                  <div style={{
+                    width: '28px', height: '28px', borderRadius: '8px',
+                    background: 'linear-gradient(135deg, #15066c 0%, #0455c7 100%)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: 'white', fontWeight: 700, fontSize: '12px', flexShrink: 0
+                  }}>
+                    {(u.name || u.email || '?').charAt(0).toUpperCase()}
+                  </div>
+                  <span style={{ fontSize: '0.875rem', fontWeight: 500, color: DESIGN_TOKENS.neutral[800] }}>
+                    {u.name || u.email}
+                  </span>
+                </label>
+              ))
+            )}
           </div>
         </FormField>
 
@@ -3818,11 +4334,11 @@ function ProjectFormModal({ users, onSave, onClose }) {
           <button type="button" onClick={onClose} style={secondaryButtonStyle}>
             Cancelar
           </button>
-          <button type="submit" style={primaryButtonStyle}>
+          <button type="button" onClick={handleSubmit} style={primaryButtonStyle}>
             Crear Proyecto
           </button>
         </div>
-      </form>
+      </div>
     </Modal>
   );
 }
@@ -3895,7 +4411,7 @@ function TaskFormModal({ initialTask, users, tasks, onSave, onClose, tags }) {
           <FormField label="Tarea padre (para crear subtarea)">
             <select
               value={formData.parentId || ''}
-              onChange={(e) => setFormData(p => ({ ...p, parentId: e.target.value || null }))}
+              onChange={(e) => setFormData(p => ({ ...p, parentId: e.target.value ? Number(e.target.value) : null }))}
               style={selectStyle}
             >
               <option value="">Sin tarea padre</option>
@@ -3957,13 +4473,13 @@ function TaskFormModal({ initialTask, users, tasks, onSave, onClose, tags }) {
         <FormField label="Asignado a" required>
           <select
             value={formData.assigneeId}
-            onChange={(e) => setFormData(p => ({ ...p, assigneeId: e.target.value || null }))}
+            onChange={(e) => setFormData(p => ({ ...p, assigneeId: Number(e.target.value) }))}
             style={selectStyle}
+            required
           >
-            <option value="">Sin asignar</option>
             {users.map(u => (
               <option key={u.id} value={u.id}>
-                {u.avatar} {u.name || u.email}
+                {u.avatar} {u.name}
               </option>
             ))}
           </select>
@@ -4037,6 +4553,80 @@ function TaskFormModal({ initialTask, users, tasks, onSave, onClose, tags }) {
         </div>
       </form>
     </Modal>
+  );
+}
+
+// ============================================================================
+// CONFIRM DELETE MODAL
+// ============================================================================
+function ConfirmDeleteModal({ title, message, confirmLabel = 'Eliminar', onConfirm, onCancel, loading = false }) {
+  useEffect(() => {
+    const handleEsc = (e) => { if (e.key === 'Escape') onCancel(); };
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
+  }, [onCancel]);
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 9000,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      background: 'rgba(10, 15, 30, 0.55)', backdropFilter: 'blur(4px)',
+      padding: '1rem'
+    }} onClick={onCancel}>
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: 'white', borderRadius: '20px', padding: '2rem',
+          width: '100%', maxWidth: '420px',
+          boxShadow: '0 24px 60px rgba(15, 23, 42, 0.18)',
+          animation: 'modalFadeIn 0.2s ease'
+        }}
+      >
+        {/* Icono */}
+        <div style={{
+          width: 52, height: 52, borderRadius: '14px',
+          background: DESIGN_TOKENS.danger.light,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          marginBottom: '1.25rem'
+        }}>
+          <Trash2 size={24} color={DESIGN_TOKENS.danger.base} />
+        </div>
+
+        <h3 style={{ margin: '0 0 0.5rem', fontSize: '1.1rem', fontWeight: 700, color: '#0f172a' }}>
+          {title}
+        </h3>
+        <p style={{ margin: '0 0 1.75rem', fontSize: '0.9rem', color: '#64748b', lineHeight: 1.6 }}>
+          {message}
+        </p>
+
+        <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+          <button
+            onClick={onCancel}
+            disabled={loading}
+            style={{
+              padding: '0.6rem 1.2rem', borderRadius: '10px', border: '1.5px solid #e2e8f0',
+              background: 'white', color: '#475569', fontWeight: 600, fontSize: '0.875rem',
+              cursor: 'pointer'
+            }}
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={loading}
+            style={{
+              padding: '0.6rem 1.4rem', borderRadius: '10px', border: 'none',
+              background: loading ? '#fca5a5' : DESIGN_TOKENS.danger.base,
+              color: 'white', fontWeight: 700, fontSize: '0.875rem',
+              cursor: loading ? 'not-allowed' : 'pointer',
+              display: 'flex', alignItems: 'center', gap: '0.4rem'
+            }}
+          >
+            {loading ? <><Loader size={14} style={{ animation: 'spin 1s linear infinite' }} /> Eliminando...</> : confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

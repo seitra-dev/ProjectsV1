@@ -1,8 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { ChevronDown, ChevronRight, Plus, Flag, X, GripVertical } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { ChevronDown, ChevronRight, Plus, Flag, X, GripVertical, Check } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { DESIGN_TOKENS } from '../styles/tokens';
 import { dbTasks, dbProjects, dbUsers } from '../lib/database';
+import {
+  buildGroups, GroupBySelector, SortSelector, GenericGroup
+} from './shared/GroupBySelector';
 import {
   DndContext,
   closestCenter,
@@ -26,21 +29,221 @@ import { CSS } from '@dnd-kit/utilities';
 // ============================================================================
 
 const PRIORITY_OPTIONS = {
-  urgent: { label: 'Urgente', color: '#FF3D71' },
-  high: { label: 'Alta', color: '#FFAB00' },
-  medium: { label: 'Media', color: '#0095FF' },
-  low: { label: 'Baja', color: '#86868B' }
+  urgent: { label: 'Urgente', color: '#ef4444' },
+  high:   { label: 'Alta',    color: '#f97316' },
+  medium: { label: 'Media',   color: '#6366f1' },
+  low:    { label: 'Baja',    color: '#94a3b8' },
 };
 
-const STATUS_OPTIONS = {
-  pending: { label: 'PENDIENTE', color: '#FF9800' },
-  in_progress: { label: 'EN CURSO', color: '#2196F3' },
-  completed: { label: 'COMPLETADO', color: '#00D68F' }
+const STATUS_PILL = {
+  pending:     { label: 'Pendiente',   color: '#64748b', bg: '#f1f5f9' },
+  in_progress: { label: 'En curso',    color: '#3b82f6', bg: '#eff6ff' },
+  review:      { label: 'En revisión', color: '#f59e0b', bg: '#fffbeb' },
+  completed:   { label: 'Completado',  color: '#22c55e', bg: '#f0fdf4' },
+};
+
+// ============================================================================
+// TASK CHECKBOX
+// ============================================================================
+const TaskCheckbox = ({ checked, onChange }) => {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <div
+      onClick={() => onChange(!checked)}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        width: '18px',
+        height: '18px',
+        borderRadius: '50%',
+        border: `2px solid ${checked ? '#1e3a5f' : hovered ? '#1e3a5f' : '#d1d5db'}`,
+        background: checked ? '#1e3a5f' : hovered ? 'rgba(30,58,95,0.05)' : 'transparent',
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexShrink: 0,
+        transition: 'all 0.15s ease'
+      }}
+    >
+      {checked && <Check size={11} color="white" strokeWidth={3} />}
+    </div>
+  );
+};
+
+// ============================================================================
+// PILL SELECT (reemplaza <select> nativo)
+// ============================================================================
+const PillSelect = ({ value, options, onChange, placeholder = '—', rounded = true }) => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const current = options[value];
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button
+        onClick={(e) => { e.stopPropagation(); setOpen(o => !o); }}
+        style={{
+          border: '1px solid #e5e7eb',
+          borderRadius: rounded ? '20px' : '6px',
+          padding: rounded ? '4px 12px' : '3px 8px',
+          fontSize: '12px',
+          background: open ? '#f3f4f6' : (rounded ? '#f9fafb' : '#f8fafc'),
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '5px',
+          whiteSpace: 'nowrap',
+          color: current?.color || '#374151',
+          fontWeight: current ? 500 : 400
+        }}
+      >
+        {current?.label || placeholder}
+        <span style={{ fontSize: '9px', opacity: 0.6 }}>▾</span>
+      </button>
+      {open && (
+        <div style={{
+          position: 'absolute',
+          top: 'calc(100% + 4px)',
+          left: 0,
+          zIndex: 300,
+          background: 'white',
+          border: '1px solid #e5e7eb',
+          borderRadius: '8px',
+          boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+          padding: '4px',
+          minWidth: '140px'
+        }}>
+          {Object.entries(options).map(([key, opt]) => (
+            <button
+              key={key}
+              onClick={(e) => { e.stopPropagation(); onChange(key); setOpen(false); }}
+              style={{
+                display: 'block',
+                width: '100%',
+                textAlign: 'left',
+                padding: '8px 12px',
+                background: value === key ? '#f0f4ff' : 'transparent',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '12px',
+                color: opt.color || '#374151',
+                fontWeight: value === key ? 600 : 400
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = '#f3f4f6'}
+              onMouseLeave={(e) => e.currentTarget.style.background = value === key ? '#f0f4ff' : 'transparent'}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// PillSelect para listas de proyectos (opciones dinámicas)
+const ProjectPillSelect = ({ value, projects, onChange, rounded = true }) => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const current = projects.find(p => p.id === value || p.id === Number(value));
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button
+        onClick={(e) => { e.stopPropagation(); setOpen(o => !o); }}
+        style={{
+          border: '1px solid #e5e7eb',
+          borderRadius: rounded ? '20px' : '6px',
+          padding: rounded ? '4px 12px' : '3px 8px',
+          fontSize: '12px',
+          background: open ? '#f3f4f6' : (rounded ? '#f9fafb' : '#f8fafc'),
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '5px',
+          whiteSpace: 'nowrap',
+          color: current?.color || '#374151',
+          maxWidth: '140px',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis'
+        }}
+      >
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {current?.name || '— Proyecto'}
+        </span>
+        <span style={{ fontSize: '9px', opacity: 0.6, flexShrink: 0 }}>▾</span>
+      </button>
+      {open && (
+        <div style={{
+          position: 'absolute',
+          top: 'calc(100% + 4px)',
+          left: 0,
+          zIndex: 300,
+          background: 'white',
+          border: '1px solid #e5e7eb',
+          borderRadius: '8px',
+          boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+          padding: '4px',
+          minWidth: '160px',
+          maxHeight: '200px',
+          overflowY: 'auto'
+        }}>
+          <button
+            onClick={(e) => { e.stopPropagation(); onChange(null); setOpen(false); }}
+            style={{
+              display: 'block', width: '100%', textAlign: 'left',
+              padding: '8px 12px', background: !value ? '#f0f4ff' : 'transparent',
+              border: 'none', borderRadius: '4px', cursor: 'pointer',
+              fontSize: '12px', color: '#9ca3af'
+            }}
+          >
+            — Sin proyecto
+          </button>
+          {projects.map(p => (
+            <button
+              key={p.id}
+              onClick={(e) => { e.stopPropagation(); onChange(p.id); setOpen(false); }}
+              style={{
+                display: 'block', width: '100%', textAlign: 'left',
+                padding: '8px 12px',
+                background: value === p.id ? '#f0f4ff' : 'transparent',
+                border: 'none', borderRadius: '4px', cursor: 'pointer',
+                fontSize: '12px', color: p.color || '#374151',
+                fontWeight: value === p.id ? 600 : 400
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = '#f3f4f6'}
+              onMouseLeave={(e) => e.currentTarget.style.background = value === p.id ? '#f0f4ff' : 'transparent'}
+            >
+              {p.name}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 };
 
 // ============================================================================
 // SORTABLE TASK ROW
 // ============================================================================
+const TASK_GRID = '28px 20px 1fr 128px 100px 100px 100px 30px';
+
 const SortableTaskRow = ({ task, projects, users, onUpdate }) => {
   const {
     attributes,
@@ -51,98 +254,135 @@ const SortableTaskRow = ({ task, projects, users, onUpdate }) => {
     isDragging,
   } = useSortable({ id: task.id });
 
+  const [checked, setChecked] = useState(task.status === 'completed');
   const style = { transform: CSS.Transform.toString(transform), transition };
 
-  const project = projects.find(p => p.id === task.project_id);
+  const project = projects.find(p => p.id === task.projectId);
   const assignee = task.assignee || users.find(u => u.id === task.assignee_id);
   const priority = PRIORITY_OPTIONS[task.priority] || PRIORITY_OPTIONS.medium;
+  const statusDef = STATUS_PILL[task.status] || STATUS_PILL.pending;
+  const initials = assignee?.name
+    ? assignee.name.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase()
+    : assignee?.email?.[0]?.toUpperCase() || '?';
 
   return (
     <div ref={setNodeRef} style={{ ...style, opacity: isDragging ? 0.5 : 1 }}>
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: '24px 400px 150px 120px 120px 120px 120px 40px',
+          gridTemplateColumns: TASK_GRID,
           gap: '8px',
-          padding: '12px 32px',
-          background: isDragging ? DESIGN_TOKENS.primary.lightest : 'white',
-          borderBottom: `1px solid ${DESIGN_TOKENS.border.color.subtle}`,
+          padding: '9px 32px',
+          background: isDragging ? '#eef6ff' : 'white',
+          borderBottom: '1px solid #f1f5f9',
           alignItems: 'center',
           fontSize: '13px',
-          transition: 'all 0.15s',
-          border: isDragging ? `2px solid ${DESIGN_TOKENS.primary.base}` : 'none',
-          borderRadius: isDragging ? '8px' : '0'
+          transition: 'background 0.12s',
+          outline: isDragging ? '2px solid #1e3a5f' : 'none',
+          borderRadius: isDragging ? '8px' : '0',
         }}
-        onMouseEnter={(e) => { if (!isDragging) e.currentTarget.style.background = DESIGN_TOKENS.neutral[50]; }}
+        onMouseEnter={(e) => { if (!isDragging) e.currentTarget.style.background = '#f8faff'; }}
         onMouseLeave={(e) => { if (!isDragging) e.currentTarget.style.background = 'white'; }}
       >
+        {/* CHECKBOX */}
+        <TaskCheckbox
+          checked={checked}
+          onChange={(v) => {
+            setChecked(v);
+            onUpdate({ status: v ? 'completed' : 'pending' });
+          }}
+        />
+
+        {/* DRAG HANDLE */}
         <div
           {...attributes}
           {...listeners}
           style={{
             cursor: isDragging ? 'grabbing' : 'grab',
-            color: DESIGN_TOKENS.neutral[400],
+            color: '#cbd5e1',
             display: 'flex',
-            opacity: 0.5,
-            transition: 'opacity 0.2s'
+            transition: 'color 0.15s',
           }}
-          onMouseEnter={(e) => e.currentTarget.style.opacity = 1}
-          onMouseLeave={(e) => e.currentTarget.style.opacity = 0.5}
+          onMouseEnter={(e) => e.currentTarget.style.color = '#64748b'}
+          onMouseLeave={(e) => e.currentTarget.style.color = '#cbd5e1'}
         >
-          <GripVertical size={16} />
+          <GripVertical size={14} />
         </div>
 
-        <div style={{ fontWeight: 500, color: DESIGN_TOKENS.neutral[800] }}>
-          {task.title}
+        {/* TITLE + PROJECT SUBTITLE */}
+        <div style={{ overflow: 'hidden' }}>
+          <div style={{
+            fontWeight: 500,
+            fontSize: '14px',
+            color: checked ? '#94a3b8' : '#111827',
+            textDecoration: checked ? 'line-through' : 'none',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            lineHeight: '1.3',
+          }}>
+            {task.title}
+          </div>
+          {project && (
+            <div style={{
+              fontSize: '11px',
+              color: '#94a3b8',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              lineHeight: '1.3',
+              marginTop: '1px',
+            }}>
+              {project.name}
+            </div>
+          )}
         </div>
 
+        {/* STATUS PILL */}
         <div style={{
-          padding: '4px 10px',
-          background: project?.color ? project.color + '20' : DESIGN_TOKENS.neutral[100],
-          color: project?.color || DESIGN_TOKENS.neutral[600],
-          borderRadius: '4px',
-          fontSize: '12px',
-          textAlign: 'center',
+          display: 'inline-flex',
+          padding: '3px 10px',
+          background: statusDef.bg,
+          color: statusDef.color,
+          borderRadius: '20px',
+          fontSize: '11px',
+          fontWeight: 700,
           whiteSpace: 'nowrap',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis'
+          justifySelf: 'start',
         }}>
-          {project?.name || '—'}
+          {statusDef.label}
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <Flag size={14} color={priority.color} fill={priority.color} />
-          <span style={{ color: priority.color, fontSize: '12px' }}>{priority.label}</span>
+        {/* PRIORITY */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+          <Flag size={12} color={priority.color} fill={priority.color} />
+          <span style={{ color: priority.color, fontSize: '12px', fontWeight: 500 }}>{priority.label}</span>
         </div>
 
-        <div style={{ color: DESIGN_TOKENS.neutral[600], fontSize: '12px' }}>
+        {/* START DATE */}
+        <div style={{ color: '#94a3b8', fontSize: '12px' }}>
           {task.start_date || '—'}
         </div>
 
-        <div style={{ color: DESIGN_TOKENS.neutral[600], fontSize: '12px' }}>
+        {/* DUE DATE */}
+        <div style={{ color: '#94a3b8', fontSize: '12px' }}>
           {task.due_date || '—'}
         </div>
 
-        <div style={{ color: DESIGN_TOKENS.neutral[500], fontSize: '12px' }}>
-          {task.sprint || '—'}
-        </div>
-
+        {/* ASSIGNEE AVATAR */}
         <div>
-          {assignee && (
+          {assignee ? (
             <div style={{
-              width: '24px',
-              height: '24px',
-              borderRadius: '50%',
-              background: DESIGN_TOKENS.primary.base,
-              color: 'white',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '10px',
-              fontWeight: 600
+              width: '26px', height: '26px', borderRadius: '50%',
+              background: '#1e3a5f', color: 'white',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: '10px', fontWeight: 700, flexShrink: 0,
+              title: assignee.name || assignee.email,
             }}>
-              {assignee.name?.charAt(0).toUpperCase()}
+              {initials}
             </div>
+          ) : (
+            <div style={{ width: '26px' }} />
           )}
         </div>
       </div>
@@ -151,7 +391,7 @@ const SortableTaskRow = ({ task, projects, users, onUpdate }) => {
 };
 
 // ============================================================================
-// DROPPABLE STATUS GROUP
+// DROPPABLE STATUS GROUP (mantenido para DnD cross-group)
 // ============================================================================
 const DroppableStatusGroup = ({ statusKey, statusInfo, tasks, isExpanded, onToggle, onAddTask, children }) => {
   const { setNodeRef } = useSortable({
@@ -238,9 +478,11 @@ function BacklogView() {
   const [projects, setProjects] = useState([]);
   const [users, setUsers] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [expandedStatuses, setExpandedStatuses] = useState({ in_progress: true, pending: true });
   const [activeId, setActiveId] = useState(null);
-  const [newTaskRow, setNewTaskRow] = useState({ status: null });
+  const [newTaskRow, setNewTaskRow] = useState({ groupKey: null, defaultData: {} });
+  const [groupBy, setGroupBy] = useState('status');
+  const [sortDirection, setSortDirection] = useState('asc');
+  const [collapsedGroups, setCollapsedGroups] = useState({});
 
   // ── Cargar datos cuando cambia el workspace ──────────────────────────────
   useEffect(() => {
@@ -283,28 +525,29 @@ function BacklogView() {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
-  const groupedTasks = {};
-  Object.keys(STATUS_OPTIONS).forEach(status => {
-    groupedTasks[status] = tasks.filter(t => t.status === status);
+  // ── Computed groups ──────────────────────────────────────────────────────
+  const sortedTasks = [...tasks].sort((a, b) => {
+    const cmp = (a.title || '').localeCompare(b.title || '', 'es');
+    return sortDirection === 'asc' ? cmp : -cmp;
   });
+  const groups = buildGroups(groupBy, sortedTasks, projects, users);
+
+  // Reset collapsed groups when groupBy changes
+  const prevGroupByRef = useRef(groupBy);
+  if (prevGroupByRef.current !== groupBy) {
+    prevGroupByRef.current = groupBy;
+  }
 
   const handleDragStart = (event) => setActiveId(event.active.id);
 
   const handleDragOver = (event) => {
+    if (groupBy !== 'status') return; // cross-group DnD solo para status
     const { active, over } = event;
     if (!over) return;
-
     const activeTask = tasks.find(t => t.id === active.id);
     if (!activeTask) return;
-
-    let newStatus = activeTask.status;
-    if (over.data?.current?.type === 'status') {
-      newStatus = over.data.current.status;
-    } else {
-      const overTask = tasks.find(t => t.id === over.id);
-      if (overTask) newStatus = overTask.status;
-    }
-
+    const overTask = tasks.find(t => t.id === over.id);
+    const newStatus = overTask?.status || activeTask.status;
     if (newStatus !== activeTask.status) {
       setTasks(prev => prev.map(t => t.id === active.id ? { ...t, status: newStatus } : t));
     }
@@ -314,32 +557,30 @@ function BacklogView() {
     setActiveId(null);
     const { active, over } = event;
     if (!over) return;
-
     const activeTask = tasks.find(t => t.id === active.id);
     const overTask = tasks.find(t => t.id === over.id);
     if (!activeTask) return;
 
     // Reordenar dentro del mismo grupo
-    if (activeTask.status === overTask?.status) {
-      const statusTasks = groupedTasks[activeTask.status];
-      const oldIndex = statusTasks.findIndex(t => t.id === active.id);
-      const newIndex = statusTasks.findIndex(t => t.id === over.id);
-      if (oldIndex !== newIndex) {
-        const reordered = arrayMove(statusTasks, oldIndex, newIndex);
-        const otherTasks = tasks.filter(t => t.status !== activeTask.status);
-        setTasks([...otherTasks, ...reordered]);
-      }
+    const groupTasks = groups.find(g => g.tasks.some(t => t.id === active.id))?.tasks || [];
+    const oldIdx = groupTasks.findIndex(t => t.id === active.id);
+    const newIdx = groupTasks.findIndex(t => t.id === over.id);
+    if (oldIdx !== -1 && newIdx !== -1 && oldIdx !== newIdx) {
+      const reordered = arrayMove(groupTasks, oldIdx, newIdx);
+      const otherTasks = tasks.filter(t => !groupTasks.some(g => g.id === t.id));
+      setTasks([...otherTasks, ...reordered]);
     }
 
-    // Guardar nuevo status en Supabase si cambió
-    const currentTask = tasks.find(t => t.id === active.id);
-    if (currentTask && currentTask.status !== activeTask.status) {
-      try {
-        await dbTasks.update(active.id, { status: currentTask.status });
-      } catch (error) {
-        console.error('Error actualizando status:', error);
-        // Revertir si falla
-        setTasks(prev => prev.map(t => t.id === active.id ? activeTask : t));
+    // Guardar nuevo status en Supabase si cambió (solo cuando groupBy === 'status')
+    if (groupBy === 'status') {
+      const currentTask = tasks.find(t => t.id === active.id);
+      if (currentTask && currentTask.status !== activeTask.status) {
+        try {
+          await dbTasks.update(active.id, { status: currentTask.status });
+        } catch (error) {
+          console.error('Error actualizando status:', error);
+          setTasks(prev => prev.map(t => t.id === active.id ? activeTask : t));
+        }
       }
     }
   };
@@ -348,25 +589,30 @@ function BacklogView() {
   const handleSaveNewTask = async (taskData) => {
     if (!currentWorkspace?.id) return;
 
-    try {
-      const newTask = await dbTasks.create({
-        title: taskData.title,
-        status: taskData.status,
-        priority: taskData.priority || 'medium',
-        project_id: taskData.projectId || null,
-        assignee_id: taskData.assigneeId || null,
-        start_date: taskData.startDate || null,
-        due_date: taskData.endDate || null,
-        sprint: taskData.sprint || null,
-        workspace_id: currentWorkspace.id,
-        environment_id: currentEnvironment?.id || null,
-        progress: 0
-      });
+    if (!taskData.projectId) {
+      console.warn('[handleSaveNewTask] Sin proyecto seleccionado — abortando');
+      return;
+    }
 
-      setTasks(prev => [...prev, newTask]);
-      setNewTaskRow({ status: null });
+    const payload = {
+      title: taskData.title,
+      status: taskData.status,
+      priority: taskData.priority || 'medium',
+      projectId: taskData.projectId,
+      assigneeId: taskData.assigneeId || null,
+      startDate: taskData.startDate || null,
+      dueDate: taskData.endDate || null,
+      workspaceId: currentWorkspace.id,
+      environmentId: currentEnvironment?.id || null,
+      progress: 0,
+    };
+
+    try {
+      const newTask = await dbTasks.create(payload);
+      setTasks(prev => [newTask, ...prev]);
+      setNewTaskRow({ groupKey: null, defaultData: {} });
     } catch (error) {
-      console.error('Error creando tarea:', error);
+      console.error('[handleSaveNewTask] Error creando tarea:', error);
     }
   };
 
@@ -401,16 +647,13 @@ function BacklogView() {
       <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: DESIGN_TOKENS.neutral[50] }}>
         {/* HEADER */}
         <div style={{
-          padding: '24px 32px',
+          padding: '20px 32px 16px',
           background: 'white',
           borderBottom: `1px solid ${DESIGN_TOKENS.border.color.subtle}`
         }}>
           <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px',
-            marginBottom: '8px',
-            color: DESIGN_TOKENS.neutral[500],
+            display: 'flex', alignItems: 'center', gap: '8px',
+            marginBottom: '6px', color: DESIGN_TOKENS.neutral[500],
             fontSize: DESIGN_TOKENS.typography.size.sm
           }}>
             <span>{currentEnvironment?.icon || '📁'} {currentEnvironment?.name || 'Sin entorno'}</span>
@@ -419,38 +662,56 @@ function BacklogView() {
               {currentWorkspace?.name}
             </span>
           </div>
-          <h1 style={{ fontSize: '28px', fontWeight: 700, margin: 0, color: DESIGN_TOKENS.neutral[800] }}>
-            Backlog
-          </h1>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <h1 style={{ fontSize: '26px', fontWeight: 700, margin: 0, color: DESIGN_TOKENS.neutral[800] }}>
+              Backlog
+            </h1>
+            {/* TOOLBAR */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <GroupBySelector value={groupBy} onChange={(v) => { setGroupBy(v); setCollapsedGroups({}); setNewTaskRow({ groupKey: null, defaultData: {} }); }} />
+              <SortSelector direction={sortDirection} onChange={setSortDirection} />
+            </div>
+          </div>
         </div>
 
         {/* CONTENT */}
-        <div style={{ flex: 1, overflow: 'auto' }}>
+        <div style={{
+          flex: 1,
+          overflowX: 'auto',
+          overflowY: 'auto',
+          width: '100%',
+          WebkitOverflowScrolling: 'touch',
+          scrollbarWidth: 'thin',
+          scrollbarColor: '#e5e7eb transparent',
+        }}>
+          {/* inner wrapper — evita que 1fr comprima las columnas */}
+          <div style={{ minWidth: 'fit-content', width: '100%' }}>
           {/* TABLE HEADER */}
           <div style={{
             display: 'grid',
-            gridTemplateColumns: '24px 400px 150px 120px 120px 120px 120px 40px',
+            gridTemplateColumns: TASK_GRID,
             gap: '8px',
-            padding: '12px 32px',
-            background: DESIGN_TOKENS.neutral[50],
-            borderBottom: `1px solid ${DESIGN_TOKENS.border.color.subtle}`,
+            padding: '8px 32px',
+            background: 'white',
+            borderBottom: '2px solid #f1f5f9',
             fontSize: '11px',
-            fontWeight: 600,
-            color: DESIGN_TOKENS.neutral[500],
+            fontWeight: 700,
+            color: '#94a3b8',
             textTransform: 'uppercase',
-            letterSpacing: '0.5px',
+            letterSpacing: '1.5px',
             position: 'sticky',
             top: 0,
-            zIndex: 10
+            zIndex: 10,
+            minWidth: 'fit-content',
           }}>
-            <div></div>
+            <div />
+            <div />
             <div>Nombre</div>
-            <div>Proyecto</div>
+            <div>Estado</div>
             <div>Prioridad</div>
             <div>Fecha inicio</div>
             <div>Fecha límite</div>
-            <div>Sprint</div>
-            <div></div>
+            <div />
           </div>
 
           {isLoading ? (
@@ -458,26 +719,25 @@ function BacklogView() {
               Cargando tareas...
             </div>
           ) : (
-            Object.entries(STATUS_OPTIONS).map(([statusKey, statusInfo]) => {
-              const statusTasks = groupedTasks[statusKey] || [];
-              const isExpanded = expandedStatuses[statusKey];
-              const isAddingTask = newTaskRow.status === statusKey;
+            groups.map((group) => {
+              const isExpanded = collapsedGroups[group.key] !== true;
+              const isAddingTask = newTaskRow.groupKey === group.key;
 
               return (
-                <DroppableStatusGroup
-                  key={statusKey}
-                  statusKey={statusKey}
-                  statusInfo={statusInfo}
-                  tasks={statusTasks}
+                <GenericGroup
+                  key={group.key}
+                  label={group.label}
+                  color={group.color}
+                  tasks={group.tasks}
                   isExpanded={isExpanded}
-                  onToggle={() => setExpandedStatuses(prev => ({ ...prev, [statusKey]: !prev[statusKey] }))}
-                  onAddTask={() => setNewTaskRow({ status: statusKey })}
+                  onToggle={() => setCollapsedGroups(prev => ({ ...prev, [group.key]: !prev[group.key] }))}
+                  onAddTask={() => setNewTaskRow({ groupKey: group.key, defaultData: group.defaultData || {} })}
                 >
                   <SortableContext
-                    items={statusTasks.map(t => t.id)}
+                    items={group.tasks.map(t => t.id)}
                     strategy={verticalListSortingStrategy}
                   >
-                    {statusTasks.map(task => (
+                    {group.tasks.map(task => (
                       <SortableTaskRow
                         key={task.id}
                         task={task}
@@ -497,17 +757,19 @@ function BacklogView() {
 
                   {isAddingTask && (
                     <NewTaskRow
-                      status={statusKey}
+                      status={newTaskRow.defaultData?.status || 'pending'}
+                      defaultData={newTaskRow.defaultData}
                       projects={projects}
                       users={users}
                       onSave={handleSaveNewTask}
-                      onCancel={() => setNewTaskRow({ status: null })}
+                      onCancel={() => setNewTaskRow({ groupKey: null, defaultData: {} })}
                     />
                   )}
-                </DroppableStatusGroup>
+                </GenericGroup>
               );
             })
           )}
+          </div>{/* /min-width wrapper */}
         </div>
       </div>
 
@@ -515,17 +777,19 @@ function BacklogView() {
         {activeTask ? (
           <div style={{
             display: 'grid',
-            gridTemplateColumns: '24px 400px 150px 120px 120px 120px 120px 40px',
+            gridTemplateColumns: TASK_GRID,
             gap: '8px',
-            padding: '12px 32px',
+            padding: '10px 32px',
             background: 'white',
             borderRadius: '8px',
             boxShadow: DESIGN_TOKENS.shadows.lg,
-            border: `2px solid ${DESIGN_TOKENS.primary.base}`,
+            border: `2px solid #1e3a5f`,
             fontSize: '13px',
-            opacity: 0.9
+            opacity: 0.92,
+            alignItems: 'center'
           }}>
-            <GripVertical size={16} color={DESIGN_TOKENS.neutral[400]} />
+            <div style={{ width: 18, height: 18, borderRadius: '50%', border: '2px solid #d1d5db' }} />
+            <GripVertical size={15} color={DESIGN_TOKENS.neutral[400]} />
             <div style={{ fontWeight: 500 }}>{activeTask.title}</div>
           </div>
         ) : null}
@@ -537,33 +801,65 @@ function BacklogView() {
 // ============================================================================
 // NEW TASK ROW
 // ============================================================================
-const NewTaskRow = ({ status, projects, users, onSave, onCancel }) => {
+const NewTaskRow = ({ status, defaultData = {}, projects, users, onSave, onCancel }) => {
   const [taskData, setTaskData] = useState({
     title: '',
-    projectId: null,
-    priority: 'medium',
+    projectId: defaultData.projectId || null,
+    priority: defaultData.priority || 'medium',
     startDate: '',
     endDate: '',
-    assigneeId: null,
-    status
+    assigneeId: defaultData.assigneeId || null,
+    status: defaultData.status || status || 'pending',
   });
+  const [projectError, setProjectError] = useState(false);
 
   const handleSave = () => {
-    if (taskData.title.trim()) onSave(taskData);
+    if (!taskData.title.trim()) return;
+    if (!taskData.projectId) {
+      setProjectError(true);
+      return;
+    }
+    setProjectError(false);
+    onSave(taskData);
+  };
+
+  const dateInputStyle = {
+    border: '1px solid #e5e7eb',
+    borderRadius: '6px',
+    padding: '3px 8px',
+    fontSize: '12px',
+    background: '#f8fafc',
+    outline: 'none',
+    color: '#374151',
+    width: '100%',
+    boxSizing: 'border-box',
+    fontFamily: DESIGN_TOKENS.typography.fontFamily,
   };
 
   return (
     <div style={{
       display: 'grid',
-      gridTemplateColumns: '24px 400px 150px 120px 120px 120px 120px 40px',
+      gridTemplateColumns: TASK_GRID,
       gap: '8px',
-      padding: '12px 32px',
-      background: '#FFFBF0',
-      borderBottom: `2px solid ${DESIGN_TOKENS.primary.base}`,
-      alignItems: 'center'
+      padding: '9px 32px',
+      background: '#ffffff',
+      borderLeft: '3px solid #1e3a5f',
+      borderBottom: '1px solid #e5e7eb',
+      borderRadius: '8px',
+      boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+      margin: '4px 0',
+      alignItems: 'center',
     }}>
-      <div></div>
+      {/* CHECKBOX decorativo */}
+      <div style={{
+        width: '18px', height: '18px', borderRadius: '50%',
+        border: '2px solid #d1d5db', flexShrink: 0,
+      }} />
 
+      {/* DRAG HANDLE placeholder */}
+      <div />
+
+      {/* NOMBRE */}
       <input
         type="text"
         placeholder="Nombre de la tarea..."
@@ -577,102 +873,83 @@ const NewTaskRow = ({ status, projects, users, onSave, onCancel }) => {
         style={{
           border: 'none',
           background: 'transparent',
-          fontSize: '13px',
+          fontSize: '14px',
           outline: 'none',
           fontWeight: 500,
-          fontFamily: DESIGN_TOKENS.typography.fontFamily
+          color: '#111827',
+          fontFamily: DESIGN_TOKENS.typography.fontFamily,
+          width: '100%',
         }}
       />
 
-      <select
-        value={taskData.projectId || ''}
-        onChange={(e) => setTaskData({ ...taskData, projectId: e.target.value || null })}
-        style={{
-          padding: '6px',
-          border: `1px solid ${DESIGN_TOKENS.border.color.normal}`,
-          borderRadius: '4px',
-          fontSize: '12px',
-          background: 'white'
-        }}
-      >
-        <option value="">—</option>
-        {projects.map(p => (
-          <option key={p.id} value={p.id}>{p.name}</option>
-        ))}
-      </select>
+      {/* PROYECTO — pill dropdown compacto */}
+      <div>
+        <ProjectPillSelect
+          value={taskData.projectId}
+          projects={projects}
+          onChange={(id) => { setProjectError(false); setTaskData({ ...taskData, projectId: id }); }}
+          rounded={false}
+        />
+        {projectError && (
+          <div style={{ fontSize: '11px', color: '#ef4444', marginTop: '2px' }}>
+            Selecciona un proyecto
+          </div>
+        )}
+      </div>
 
-      <select
+      {/* PRIORIDAD — pill dropdown compacto */}
+      <PillSelect
         value={taskData.priority}
-        onChange={(e) => setTaskData({ ...taskData, priority: e.target.value })}
-        style={{
-          padding: '6px',
-          border: `1px solid ${DESIGN_TOKENS.border.color.normal}`,
-          borderRadius: '4px',
-          fontSize: '12px',
-          background: 'white'
-        }}
-      >
-        {Object.entries(PRIORITY_OPTIONS).map(([key, { label }]) => (
-          <option key={key} value={key}>{label}</option>
-        ))}
-      </select>
+        options={PRIORITY_OPTIONS}
+        onChange={(v) => setTaskData({ ...taskData, priority: v })}
+        rounded={false}
+      />
 
+      {/* FECHA INICIO */}
       <input
         type="date"
         value={taskData.startDate}
         onChange={(e) => setTaskData({ ...taskData, startDate: e.target.value })}
-        style={{
-          padding: '6px',
-          border: `1px solid ${DESIGN_TOKENS.border.color.normal}`,
-          borderRadius: '4px',
-          fontSize: '12px',
-          background: 'white'
-        }}
+        style={dateInputStyle}
       />
 
+      {/* FECHA LÍMITE */}
       <input
         type="date"
         value={taskData.endDate}
         onChange={(e) => setTaskData({ ...taskData, endDate: e.target.value })}
-        style={{
-          padding: '6px',
-          border: `1px solid ${DESIGN_TOKENS.border.color.normal}`,
-          borderRadius: '4px',
-          fontSize: '12px',
-          background: 'white'
-        }}
+        style={dateInputStyle}
       />
 
-      <div></div>
-
-      <div style={{ display: 'flex', gap: '4px' }}>
+      {/* BOTONES */}
+      <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
         <button
           onClick={handleSave}
+          title="Guardar"
           style={{
-            padding: '6px',
-            background: DESIGN_TOKENS.primary.base,
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            fontSize: '11px',
-            fontWeight: 600
+            width: '28px', height: '28px', borderRadius: '6px',
+            background: '#1e3a5f', color: 'white', border: 'none',
+            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            flexShrink: 0, transition: 'background 0.15s',
           }}
+          onMouseEnter={(e) => e.currentTarget.style.background = '#2d5a9e'}
+          onMouseLeave={(e) => e.currentTarget.style.background = '#1e3a5f'}
         >
-          ✓
+          <Check size={13} strokeWidth={3} />
         </button>
         <button
           onClick={onCancel}
+          title="Cancelar"
           style={{
-            padding: '6px',
-            background: DESIGN_TOKENS.neutral[200],
-            color: DESIGN_TOKENS.neutral[700],
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer'
+            width: '28px', height: '28px', borderRadius: '6px',
+            background: '#f1f5f9', color: '#64748b', border: 'none',
+            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            flexShrink: 0, transition: 'background 0.15s',
           }}
+          onMouseEnter={(e) => e.currentTarget.style.background = '#e2e8f0'}
+          onMouseLeave={(e) => e.currentTarget.style.background = '#f1f5f9'}
         >
-          <X size={12} />
+          <X size={13} />
         </button>
       </div>
     </div>

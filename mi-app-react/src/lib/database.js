@@ -4,77 +4,199 @@
 import { supabase } from './supabase';
 
 // ============================================================================
+// HELPER: fetch directo al REST API (evita Web Locks del SDK)
+// ============================================================================
+const SUPA_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPA_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+const getAuthToken = () => {
+  try {
+    const ref = SUPA_URL?.split('//')[1]?.split('.')[0];
+    const raw = localStorage.getItem(`sb-${ref}-auth-token`);
+    if (!raw) return SUPA_KEY;
+    const session = JSON.parse(raw);
+    return session?.access_token || SUPA_KEY;
+  } catch { return SUPA_KEY; }
+};
+
+const restHeaders = () => ({
+  'Content-Type': 'application/json',
+  'apikey': SUPA_KEY,
+  'Authorization': `Bearer ${getAuthToken()}`,
+  'Prefer': 'return=representation',
+});
+
+const restFetch = async (path, method, body) => {
+  const res = await fetch(`${SUPA_URL}/rest/v1/${path}`, {
+    method,
+    headers: restHeaders(),
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || err.hint || `HTTP ${res.status}`);
+  }
+  return res.status === 204 ? null : res.json();
+};
+
+// ============================================================================
+// MAPPERS: DB (snake_case) <-> Frontend (camelCase)
+// ============================================================================
+
+const mapProject = (row) => {
+  if (!row) return null;
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description || '',
+    status: row.status || 'active',
+    color: row.color || '#6366f1',
+    startDate: row.start_date,
+    endDate: row.end_date,
+    progress: row.progress || 0,
+    leaderId: row.owner_id,
+    workspaceId: row.workspace_id,
+    environmentId: row.environment_id || row.workspace?.environment_id || null,
+    tags: row.tags || [],
+    members: row.members || [],
+    favorite: row.favorite || false,
+    roadmap: row.roadmap || { phases: [], userStories: [], risks: [], meetings: [] },
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+};
+
+const toDbProject = (project) => {
+  const db = {};
+  if (project.name !== undefined) db.name = project.name;
+  if (project.description !== undefined) db.description = project.description;
+  if (project.status !== undefined) db.status = project.status;
+  if (project.color !== undefined) db.color = project.color;
+  if (project.startDate !== undefined) db.start_date = project.startDate;
+  if (project.endDate !== undefined) db.end_date = project.endDate;
+  if (project.progress !== undefined) db.progress = project.progress;
+  if (project.leaderId !== undefined) db.owner_id = project.leaderId;
+  if (project.workspaceId !== undefined) db.workspace_id = project.workspaceId;
+  if (project.environmentId !== undefined) db.environment_id = project.environmentId;
+  if (project.tags !== undefined) db.tags = project.tags;
+  if (project.members !== undefined) db.members = project.members || [];
+  if (project.favorite !== undefined) db.favorite = project.favorite;
+  if (project.roadmap !== undefined) db.roadmap = project.roadmap;
+  return db;
+};
+
+const mapTask = (row) => {
+  if (!row) return null;
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description || '',
+    status: (row.status || 'todo').toLowerCase(),
+    priority: (row.priority || 'medium').toLowerCase(),
+    projectId: row.project_id,
+    listId: row.list_id || null,
+    assigneeId: row.assignee_id,
+    parentId: row.parent_id || null,
+    dueDate: row.end_date,
+    endDate: row.end_date,
+    startDate: row.start_date,
+    progress: row.progress || 0,
+    tags: row.tags || [],
+    estimatedHours: row.estimated_hours,
+    dependencies: row.dependencies || [],
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+};
+
+const toDbTask = (task) => {
+  const db = {};
+  if (task.title !== undefined) db.title = task.title;
+  if (task.description !== undefined) db.description = task.description;
+  if (task.status !== undefined) db.status = task.status;
+  if (task.priority !== undefined) db.priority = task.priority;
+  if (task.projectId !== undefined) db.project_id = task.projectId;
+  if (task.listId !== undefined) db.list_id = task.listId || null;
+  if (task.assigneeId !== undefined) db.assignee_id = task.assigneeId || null;
+  if (task.parentId !== undefined) db.parent_id = task.parentId || null;
+  if (task.dueDate !== undefined) db.end_date = task.dueDate || null;
+  if (task.startDate !== undefined) db.start_date = task.startDate || null;
+  if (task.progress !== undefined) db.progress = task.progress;
+  if (task.tags !== undefined) db.tags = task.tags;
+  if (task.estimatedHours !== undefined) db.estimated_hours = task.estimatedHours || null;
+  if (task.dependencies !== undefined) db.dependencies = task.dependencies;
+  if (task.workspaceId !== undefined) db.workspace_id = task.workspaceId || null;
+  if (task.environmentId !== undefined) db.environment_id = task.environmentId || null;
+  return db;
+};
+
+const mapUser = (row) => {
+  if (!row) return null;
+  return {
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    role: row.role || 'user',
+    avatar: row.avatar || '👤',
+    createdAt: row.created_at,
+  };
+};
+
+const mapComment = (row) => {
+  if (!row) return null;
+  return {
+    id: row.id,
+    taskId: row.task_id,
+    userId: row.user_id,
+    content: row.content,
+    createdAt: row.created_at,
+    user: row.user ? mapUser(row.user) : null,
+  };
+};
+
+// ============================================================================
 // USUARIOS
 // ============================================================================
 
 export const dbUsers = {
-  // Obtener todos los usuarios
   getAll: async () => {
-    const { data, error } = await supabase
-      .from('users')
-      .select('*')
-      .order('created_at', { ascending: false });
-    
+    const { data, error } = await supabase.from('users').select('*').order('created_at', { ascending: false });
     if (error) throw error;
-    return data;
+    return (data || []).map(mapUser);
   },
-
-  // Obtener usuario por ID
   getById: async (id) => {
-    const { data, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', id)
-      .single();
-    
+    const { data, error } = await supabase.from('users').select('*').eq('id', id).single();
     if (error) throw error;
-    return data;
+    return mapUser(data);
   },
-
-  // Obtener usuario por email
   getByEmail: async (email) => {
-    const { data, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('email', email)
-      .single();
-    
+    const { data, error } = await supabase.from('users').select('*').eq('email', email).maybeSingle();
     if (error) throw error;
-    return data;
+    return mapUser(data);
   },
-
-  // Crear usuario
   create: async (userData) => {
-    const { data, error } = await supabase
-      .from('users')
-      .insert(userData)
-      .select()
-      .single();
-    
+    const { data, error } = await supabase.from('users').insert({
+      id: userData.id,
+      name: userData.name,
+      email: userData.email,
+      role: userData.role || 'user',
+      avatar: userData.avatar || '👤',
+    }).select().single();
     if (error) throw error;
-    return data;
+    return mapUser(data);
   },
-
-  // Actualizar usuario
   update: async (id, updates) => {
-    const { data, error } = await supabase
-      .from('users')
-      .update(updates)
-      .eq('id', id)
-      .select()
-      .single();
-    
+    const db = {};
+    if (updates.name !== undefined) db.name = updates.name;
+    if (updates.email !== undefined) db.email = updates.email;
+    if (updates.role !== undefined) db.role = updates.role;
+    if (updates.avatar !== undefined) db.avatar = updates.avatar;
+    const { data, error } = await supabase.from('users').update(db).eq('id', id).select().single();
     if (error) throw error;
-    return data;
+    return mapUser(data);
   },
-
-  // Eliminar usuario
   delete: async (id) => {
-    const { error } = await supabase
-      .from('users')
-      .delete()
-      .eq('id', id);
-    
+    const { error } = await supabase.from('users').delete().eq('id', id);
     if (error) throw error;
   }
 };
@@ -112,14 +234,8 @@ export const dbEnvironments = {
 
   // Crear entorno
   create: async (environmentData) => {
-    const { data, error } = await supabase
-      .from('environments')
-      .insert(environmentData)
-      .select()
-      .single();
-    
-    if (error) throw error;
-    return data;
+    const data = await restFetch('environments', 'POST', environmentData);
+    return Array.isArray(data) ? data[0] : data;
   },
 
   // Actualizar entorno
@@ -200,61 +316,39 @@ export const dbEnvironmentMembers = {
 export const dbWorkspaces = {
   // Obtener workspaces de un entorno
   getByEnvironment: async (environmentId) => {
-    const { data, error } = await supabase
-      .from('workspaces')
-      .select('*')
-      .eq('environment_id', environmentId)
-      .order('created_at', { ascending: false });
-    
-    if (error) throw error;
-    return data;
+    console.log('[dbWorkspaces] buscando workspaces para env:', environmentId);
+    const url = `${SUPA_URL}/rest/v1/workspaces?environment_id=eq.${environmentId}&order=created_at.desc`;
+    console.log('[dbWorkspaces] URL completa:', url);
+    console.log('[dbWorkspaces] token usado:', getAuthToken()?.substring(0, 30) + '...');
+    const response = await fetch(url, { method: 'GET', headers: restHeaders() });
+    console.log('[dbWorkspaces] respuesta status:', response.status);
+    const data = await response.json();
+    console.log('[dbWorkspaces] data recibida:', data);
+    if (!response.ok) throw new Error(data.message || data.hint || `HTTP ${response.status}`);
+    return data || [];
   },
 
   // Obtener workspace por ID
   getById: async (id) => {
-    const { data, error } = await supabase
-      .from('workspaces')
-      .select('*')
-      .eq('id', id)
-      .single();
-    
-    if (error) throw error;
-    return data;
+    const data = await restFetch(`workspaces?id=eq.${id}`, 'GET');
+    return Array.isArray(data) ? data[0] : data;
   },
 
   // Crear workspace
   create: async (workspaceData) => {
-    const { data, error } = await supabase
-      .from('workspaces')
-      .insert(workspaceData)
-      .select()
-      .single();
-    
-    if (error) throw error;
-    return data;
+    const data = await restFetch('workspaces', 'POST', workspaceData);
+    return Array.isArray(data) ? data[0] : data;
   },
 
   // Actualizar workspace
   update: async (id, updates) => {
-    const { data, error } = await supabase
-      .from('workspaces')
-      .update(updates)
-      .eq('id', id)
-      .select()
-      .single();
-    
-    if (error) throw error;
-    return data;
+    const data = await restFetch(`workspaces?id=eq.${id}`, 'PATCH', updates);
+    return Array.isArray(data) ? data[0] : data;
   },
 
   // Eliminar workspace
   delete: async (id) => {
-    const { error } = await supabase
-      .from('workspaces')
-      .delete()
-      .eq('id', id);
-    
-    if (error) throw error;
+    await restFetch(`workspaces?id=eq.${id}`, 'DELETE');
   }
 };
 
@@ -263,63 +357,51 @@ export const dbWorkspaces = {
 // ============================================================================
 
 export const dbProjects = {
-  // Obtener proyectos de un workspace
+  getAll: async () => {
+    const { data, error } = await supabase
+      .from('projects')
+      .select('*, workspace:workspaces(environment_id)')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return (data || []).map(mapProject);
+  },
+  getByEnvironment: async (environmentId) => {
+    const { data, error } = await supabase
+      .from('projects')
+      .select('*, workspace:workspaces(environment_id)')
+      .eq('environment_id', environmentId)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return (data || []).map(mapProject);
+  },
   getByWorkspace: async (workspaceId) => {
     const { data, error } = await supabase
       .from('projects')
-      .select('*')
+      .select('*, workspace:workspaces(environment_id)')
       .eq('workspace_id', workspaceId)
       .order('created_at', { ascending: false });
-    
     if (error) throw error;
-    return data;
+    return (data || []).map(mapProject);
   },
-
-  // Obtener proyecto por ID
   getById: async (id) => {
     const { data, error } = await supabase
       .from('projects')
-      .select('*')
+      .select('*, workspace:workspaces(environment_id)')
       .eq('id', id)
       .single();
-    
     if (error) throw error;
-    return data;
+    return mapProject(data);
   },
-
-  // Crear proyecto
   create: async (projectData) => {
-    const { data, error } = await supabase
-      .from('projects')
-      .insert(projectData)
-      .select()
-      .single();
-    
-    if (error) throw error;
-    return data;
+    const data = await restFetch('projects', 'POST', toDbProject(projectData));
+    return mapProject(Array.isArray(data) ? data[0] : data);
   },
-
-  // Actualizar proyecto
   update: async (id, updates) => {
-    const { data, error } = await supabase
-      .from('projects')
-      .update(updates)
-      .eq('id', id)
-      .select()
-      .single();
-    
-    if (error) throw error;
-    return data;
+    const data = await restFetch(`projects?id=eq.${id}`, 'PATCH', toDbProject(updates));
+    return mapProject(Array.isArray(data) ? data[0] : data);
   },
-
-  // Eliminar proyecto
   delete: async (id) => {
-    const { error } = await supabase
-      .from('projects')
-      .delete()
-      .eq('id', id);
-    
-    if (error) throw error;
+    await restFetch(`projects?id=eq.${id}`, 'DELETE');
   }
 };
 
@@ -328,81 +410,53 @@ export const dbProjects = {
 // ============================================================================
 
 export const dbTasks = {
-  // Obtener tareas de un proyecto
-  getByProject: async (projectId) => {
-    const { data, error } = await supabase
-      .from('tasks')
-      .select(`
-        *,
-        assignee:users(id, name, avatar)
-      `)
-      .eq('project_id', projectId)
-      .order('created_at', { ascending: false });
-    
-    if (error) throw error;
-    return data;
-  },
-
-  // Obtener tarea por ID
-  getById: async (id) => {
-    const { data, error } = await supabase
-      .from('tasks')
-      .select(`
-        *,
-        assignee:users(id, name, avatar)
-      `)
-      .eq('id', id)
-      .single();
-    
-    if (error) throw error;
-    return data;
-  },
-
-  // Obtener subtareas
-  getSubtasks: async (parentId) => {
+  getAll: async () => {
     const { data, error } = await supabase
       .from('tasks')
       .select('*')
-      .eq('parent_id', parentId)
       .order('created_at', { ascending: false });
-    
     if (error) throw error;
-    return data;
+    return (data || []).map(mapTask);
   },
-
-  // Crear tarea
+  getByProject: async (projectId) => {
+    const { data, error } = await supabase
+      .from('tasks')
+      .select('*')
+      .eq('project_id', projectId)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return (data || []).map(mapTask);
+  },
+  getById: async (id) => {
+    const { data, error } = await supabase.from('tasks').select('*').eq('id', id).single();
+    if (error) throw error;
+    return mapTask(data);
+  },
+  getByList: async (listId) => {
+    const { data, error } = await supabase
+      .from('tasks')
+      .select('*')
+      .eq('list_id', listId)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return (data || []).map(mapTask);
+  },
+  getSubtasks: async (parentId) => {
+    const { data, error } = await supabase.from('tasks').select('*').eq('parent_id', parentId).order('created_at', { ascending: false });
+    if (error) throw error;
+    return (data || []).map(mapTask);
+  },
   create: async (taskData) => {
-    const { data, error } = await supabase
-      .from('tasks')
-      .insert(taskData)
-      .select()
-      .single();
-    
-    if (error) throw error;
-    return data;
+    const data = await restFetch('tasks', 'POST', toDbTask(taskData));
+    return mapTask(Array.isArray(data) ? data[0] : data);
   },
-
-  // Actualizar tarea
   update: async (id, updates) => {
-    const { data, error } = await supabase
-      .from('tasks')
-      .update(updates)
-      .eq('id', id)
-      .select()
-      .single();
-    
-    if (error) throw error;
-    return data;
+    const body = { ...toDbTask(updates), updated_at: new Date().toISOString() };
+    const data = await restFetch(`tasks?id=eq.${id}`, 'PATCH', body);
+    return mapTask(Array.isArray(data) ? data[0] : data);
   },
-
-  // Eliminar tarea
   delete: async (id) => {
-    const { error } = await supabase
-      .from('tasks')
-      .delete()
-      .eq('id', id);
-    
-    if (error) throw error;
+    await restFetch(`tasks?id=eq.${id}`, 'DELETE');
   }
 };
 
@@ -411,40 +465,25 @@ export const dbTasks = {
 // ============================================================================
 
 export const dbComments = {
-  // Obtener comentarios de una tarea
   getByTask: async (taskId) => {
     const { data, error } = await supabase
       .from('comments')
-      .select(`
-        *,
-        user:users(id, name, avatar)
-      `)
+      .select('*, user:users(id, name, avatar)')
       .eq('task_id', taskId)
       .order('created_at', { ascending: true });
-    
     if (error) throw error;
-    return data;
+    return (data || []).map(mapComment);
   },
-
-  // Crear comentario
   create: async (commentData) => {
-    const { data, error } = await supabase
-      .from('comments')
-      .insert(commentData)
-      .select()
-      .single();
-    
-    if (error) throw error;
-    return data;
+    const data = await restFetch('comments', 'POST', {
+      task_id: commentData.taskId,
+      user_id: commentData.userId,
+      content: commentData.content,
+    });
+    return mapComment(Array.isArray(data) ? data[0] : data);
   },
-
-  // Eliminar comentario
   delete: async (id) => {
-    const { error } = await supabase
-      .from('comments')
-      .delete()
-      .eq('id', id);
-    
+    const { error } = await supabase.from('comments').delete().eq('id', id);
     if (error) throw error;
   }
 };
@@ -511,6 +550,50 @@ export const dbChatMessages = {
 };
 
 // ============================================================================
+// LISTAS
+// ============================================================================
+
+export const dbLists = {
+  getByEnvironment: async (environmentId) => {
+    const data = await restFetch(
+      `lists?environment_id=eq.${environmentId}&order=created_at.asc`,
+      'GET'
+    );
+    return data || [];
+  },
+  getByWorkspace: async (workspaceId) => {
+    const data = await restFetch(
+      `lists?workspace_id=eq.${workspaceId}&order=created_at.asc`,
+      'GET'
+    );
+    return data || [];
+  },
+  create: async (listData) => {
+    const data = await restFetch('lists', 'POST', {
+      name: listData.name,
+      description: listData.description || '',
+      workspace_id: listData.workspaceId || null,
+      environment_id: listData.environmentId || null,
+      is_private: listData.isPrivate || false,
+      created_by: listData.createdBy || null,
+    });
+    return Array.isArray(data) ? data[0] : data;
+  },
+  update: async (id, updates) => {
+    const db = {};
+    if (updates.name !== undefined) db.name = updates.name;
+    if (updates.description !== undefined) db.description = updates.description;
+    if (updates.isPrivate !== undefined) db.is_private = updates.isPrivate;
+    db.updated_at = new Date().toISOString();
+    const data = await restFetch(`lists?id=eq.${id}`, 'PATCH', db);
+    return Array.isArray(data) ? data[0] : data;
+  },
+  delete: async (id) => {
+    await restFetch(`lists?id=eq.${id}`, 'DELETE');
+  },
+};
+
+// ============================================================================
 // HELPER: Manejo de errores
 // ============================================================================
 
@@ -522,7 +605,7 @@ export const handleSupabaseError = (error) => {
     return 'Este registro ya existe (duplicado)';
   }
   if (error.code === '23503') {
-    return 'No se puede eliminar porque tiene datos relacionados';
+    return 'Error de referencia: un campo apunta a un registro que no existe';
   }
   if (error.code === '42P01') {
     return 'La tabla no existe';

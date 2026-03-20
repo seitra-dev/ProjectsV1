@@ -9,4 +9,11 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.error("❌ ERROR: Credenciales de Supabase no encontradas. Verifica tu archivo .env o las variables en Vercel.");
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+// El SDK de Supabase JS v2 usa Web Locks (navigator.locks) internamente.
+// En redes corporativas/proxies esto cuelga indefinidamente.
+// Anulamos el lock con una función no-op para evitar el bloqueo.
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    lock: async (_name, _acquireTimeout, fn) => fn(),
+  }
+})

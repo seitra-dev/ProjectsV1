@@ -970,22 +970,368 @@ const PhaseCard = ({ phase, isOpen, isCreating, onToggle, onUpdate, onDelete, on
         )}
       </div>
 
-      {/* Activities - Collapsed Content */}
+      {/* Activities */}
       {isOpen && !isEditing && (
-        <div style={{
-          borderTop: `1px solid ${DESIGN_TOKENS.border.color.subtle}`,
-          padding: '20px'
-        }}>
-          <p style={{
-            fontSize: '14px',
-            color: DESIGN_TOKENS.neutral[600],
-            textAlign: 'center',
-            margin: 0
-          }}>
-            Actividades de esta fase aparecerán aquí
-          </p>
+        <ActivityList
+          phase={phase}
+          onUpdate={onUpdate}
+        />
+      )}
+    </div>
+  );
+};
+
+// ============================================================================
+// ACTIVITY LIST
+// ============================================================================
+
+const ACTIVITY_STATUS = {
+  pending:     { label: 'Pendiente',   color: '#94a3b8', bg: '#f1f5f9' },
+  in_progress: { label: 'En Progreso', color: '#3b82f6', bg: '#eff6ff' },
+  review:      { label: 'En Revisión', color: '#f59e0b', bg: '#fffbeb' },
+  done:        { label: 'Completado',  color: '#10b981', bg: '#f0fdf4' },
+};
+
+const ActivityList = ({ phase, onUpdate }) => {
+  const [isAdding, setIsAdding] = useState(false);
+  const [newName, setNewName] = useState('');
+  const inputRef = React.useRef(null);
+
+  const activities = phase.activities || [];
+
+  const handleAddActivity = () => {
+    const name = newName.trim();
+    if (!name) { setIsAdding(false); return; }
+    const newActivity = {
+      id: Date.now(),
+      name,
+      status: 'pending',
+      dueDate: '',
+    };
+    onUpdate({ activities: [...activities, newActivity] });
+    setNewName('');
+    setIsAdding(false);
+  };
+
+  const handleToggleDone = (actId) => {
+    onUpdate({
+      activities: activities.map(a =>
+        a.id === actId
+          ? { ...a, status: a.status === 'done' ? 'pending' : 'done' }
+          : a
+      )
+    });
+  };
+
+  const handleUpdateActivity = (actId, updates) => {
+    onUpdate({
+      activities: activities.map(a => a.id === actId ? { ...a, ...updates } : a)
+    });
+  };
+
+  const handleDeleteActivity = (actId) => {
+    onUpdate({ activities: activities.filter(a => a.id !== actId) });
+  };
+
+  React.useEffect(() => {
+    if (isAdding && inputRef.current) inputRef.current.focus();
+  }, [isAdding]);
+
+  return (
+    <div style={{
+      borderTop: `1px solid ${DESIGN_TOKENS.border.color.subtle}`,
+    }}>
+      {/* Activity rows */}
+      {activities.length > 0 && (
+        <div>
+          {activities.map((activity, idx) => (
+            <ActivityRow
+              key={activity.id}
+              activity={activity}
+              isLast={idx === activities.length - 1}
+              phaseColor={phase.color || DESIGN_TOKENS.primary.base}
+              onToggleDone={() => handleToggleDone(activity.id)}
+              onUpdate={(updates) => handleUpdateActivity(activity.id, updates)}
+              onDelete={() => handleDeleteActivity(activity.id)}
+            />
+          ))}
         </div>
       )}
+
+      {/* New activity inline form */}
+      {isAdding && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          padding: '10px 20px',
+          borderBottom: `1px solid ${DESIGN_TOKENS.border.color.subtle}`,
+          background: '#fafbff',
+        }}>
+          {/* Checkbox placeholder */}
+          <div style={{
+            width: '18px', height: '18px', borderRadius: '50%',
+            border: `2px solid ${DESIGN_TOKENS.neutral[300]}`,
+            flexShrink: 0
+          }} />
+          <input
+            ref={inputRef}
+            type="text"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleAddActivity();
+              if (e.key === 'Escape') { setIsAdding(false); setNewName(''); }
+            }}
+            placeholder="Nombre de la actividad..."
+            style={{
+              flex: 1,
+              border: `1px solid ${DESIGN_TOKENS.primary.base}`,
+              borderRadius: '8px',
+              padding: '7px 12px',
+              fontSize: '13px',
+              fontFamily: DESIGN_TOKENS.typography.fontFamily,
+              outline: 'none',
+              color: DESIGN_TOKENS.neutral[800],
+            }}
+          />
+          <button
+            onClick={handleAddActivity}
+            style={{
+              padding: '7px 16px',
+              background: DESIGN_TOKENS.primary.base,
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontSize: '13px',
+              fontWeight: 600,
+              display: 'flex', alignItems: 'center', gap: '6px',
+            }}
+          >
+            <Check size={14} /> Guardar
+          </button>
+          <button
+            onClick={() => { setIsAdding(false); setNewName(''); }}
+            style={{
+              padding: '7px 10px',
+              background: DESIGN_TOKENS.neutral[100],
+              color: DESIGN_TOKENS.neutral[600],
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontSize: '13px',
+              display: 'flex', alignItems: 'center',
+            }}
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
+      {/* Empty state + Add button */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: activities.length === 0 ? 'center' : 'flex-start',
+        padding: activities.length === 0 ? '24px 20px' : '10px 20px',
+      }}>
+        {activities.length === 0 && !isAdding && (
+          <span style={{ fontSize: '13px', color: DESIGN_TOKENS.neutral[400], marginRight: '16px' }}>
+            Sin actividades aún.
+          </span>
+        )}
+        {!isAdding && (
+          <button
+            onClick={() => setIsAdding(true)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '6px',
+              padding: '7px 14px',
+              background: 'transparent',
+              border: `1.5px dashed ${DESIGN_TOKENS.neutral[300]}`,
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontSize: '13px',
+              fontWeight: 600,
+              color: DESIGN_TOKENS.neutral[500],
+              transition: 'all 0.15s',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = phase.color || DESIGN_TOKENS.primary.base;
+              e.currentTarget.style.color = phase.color || DESIGN_TOKENS.primary.base;
+              e.currentTarget.style.background = `${phase.color || DESIGN_TOKENS.primary.base}10`;
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = DESIGN_TOKENS.neutral[300];
+              e.currentTarget.style.color = DESIGN_TOKENS.neutral[500];
+              e.currentTarget.style.background = 'transparent';
+            }}
+          >
+            <Plus size={14} /> Agregar actividad
+          </button>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ============================================================================
+// ACTIVITY ROW
+// ============================================================================
+
+const ActivityRow = ({ activity, isLast, phaseColor, onToggleDone, onUpdate, onDelete }) => {
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editedName, setEditedName] = useState(activity.name);
+  const [showActions, setShowActions] = useState(false);
+  const [showStatusMenu, setShowStatusMenu] = useState(false);
+  const statusDef = ACTIVITY_STATUS[activity.status] || ACTIVITY_STATUS.pending;
+  const isDone = activity.status === 'done';
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '12px',
+        padding: '9px 20px',
+        borderBottom: isLast ? 'none' : `1px solid ${DESIGN_TOKENS.border.color.subtle}`,
+        background: 'white',
+        transition: 'background 0.12s',
+        position: 'relative',
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = '#f8faff'; setShowActions(true); }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = 'white'; setShowActions(false); setShowStatusMenu(false); }}
+    >
+      {/* Checkbox */}
+      <button
+        onClick={onToggleDone}
+        style={{
+          width: '18px', height: '18px', borderRadius: '50%', flexShrink: 0,
+          border: `2px solid ${isDone ? phaseColor : DESIGN_TOKENS.neutral[300]}`,
+          background: isDone ? phaseColor : 'white',
+          cursor: 'pointer',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: 0, transition: 'all 0.15s',
+        }}
+      >
+        {isDone && <Check size={11} color="white" strokeWidth={3} />}
+      </button>
+
+      {/* Name */}
+      {isEditingName ? (
+        <input
+          autoFocus
+          type="text"
+          value={editedName}
+          onChange={(e) => setEditedName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              if (editedName.trim()) onUpdate({ name: editedName.trim() });
+              setIsEditingName(false);
+            }
+            if (e.key === 'Escape') { setEditedName(activity.name); setIsEditingName(false); }
+          }}
+          onBlur={() => {
+            if (editedName.trim()) onUpdate({ name: editedName.trim() });
+            setIsEditingName(false);
+          }}
+          style={{
+            flex: 1, border: `1px solid ${DESIGN_TOKENS.primary.base}`,
+            borderRadius: '6px', padding: '4px 8px', fontSize: '13px',
+            fontFamily: DESIGN_TOKENS.typography.fontFamily, outline: 'none',
+          }}
+        />
+      ) : (
+        <span
+          onDoubleClick={() => { setEditedName(activity.name); setIsEditingName(true); }}
+          style={{
+            flex: 1, fontSize: '13px', fontWeight: 500, cursor: 'text',
+            color: isDone ? DESIGN_TOKENS.neutral[400] : DESIGN_TOKENS.neutral[700],
+            textDecoration: isDone ? 'line-through' : 'none',
+            transition: 'all 0.15s',
+          }}
+        >
+          {activity.name}
+        </span>
+      )}
+
+      {/* Status pill */}
+      <div style={{ position: 'relative' }}>
+        <button
+          onClick={() => setShowStatusMenu(v => !v)}
+          style={{
+            padding: '3px 10px',
+            background: statusDef.bg,
+            color: statusDef.color,
+            border: `1px solid ${statusDef.color}40`,
+            borderRadius: '20px',
+            cursor: 'pointer',
+            fontSize: '11px',
+            fontWeight: 700,
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {statusDef.label}
+        </button>
+        {showStatusMenu && (
+          <div style={{
+            position: 'absolute', top: 'calc(100% + 4px)', right: 0, zIndex: 100,
+            background: 'white', borderRadius: '10px',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+            border: '1px solid #f3f4f6', padding: '4px',
+            minWidth: '150px',
+          }}>
+            {Object.entries(ACTIVITY_STATUS).map(([key, def]) => (
+              <button
+                key={key}
+                onClick={() => { onUpdate({ status: key }); setShowStatusMenu(false); }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '8px',
+                  width: '100%', padding: '7px 10px', border: 'none',
+                  background: activity.status === key ? def.bg : 'transparent',
+                  borderRadius: '8px', cursor: 'pointer', fontSize: '12px',
+                  fontWeight: activity.status === key ? 700 : 400,
+                  color: activity.status === key ? def.color : DESIGN_TOKENS.neutral[600],
+                }}
+                onMouseEnter={(e) => { if (activity.status !== key) e.currentTarget.style.background = DESIGN_TOKENS.neutral[50]; }}
+                onMouseLeave={(e) => { if (activity.status !== key) e.currentTarget.style.background = 'transparent'; }}
+              >
+                <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: def.color, display: 'inline-block', flexShrink: 0 }} />
+                {def.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Due date */}
+      <input
+        type="date"
+        value={activity.dueDate || ''}
+        onChange={(e) => onUpdate({ dueDate: e.target.value })}
+        style={{
+          border: `1px solid ${DESIGN_TOKENS.border.color.subtle}`,
+          borderRadius: '6px', padding: '3px 8px', fontSize: '11px',
+          color: DESIGN_TOKENS.neutral[600], cursor: 'pointer',
+          fontFamily: DESIGN_TOKENS.typography.fontFamily,
+          opacity: showActions || activity.dueDate ? 1 : 0,
+          transition: 'opacity 0.15s',
+        }}
+      />
+
+      {/* Delete */}
+      <button
+        onClick={onDelete}
+        style={{
+          padding: '4px', background: 'transparent', border: 'none',
+          borderRadius: '6px', cursor: 'pointer', color: DESIGN_TOKENS.neutral[400],
+          display: 'flex', opacity: showActions ? 1 : 0, transition: 'opacity 0.15s',
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.color = DESIGN_TOKENS.danger?.base || '#ef4444'; }}
+        onMouseLeave={(e) => { e.currentTarget.style.color = DESIGN_TOKENS.neutral[400]; }}
+      >
+        <Trash2 size={14} />
+      </button>
     </div>
   );
 };

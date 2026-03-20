@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { 
+import {
   Plus, MoreVertical, ChevronRight, GripVertical, Pencil, Trash2,
   MessageSquare, ListTodo, Folder, FileText, Trello,
-  LayoutDashboard, Zap, FileInput, Layout
+  LayoutDashboard, Zap, FileInput, Layout, Briefcase
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { DESIGN_TOKENS } from '../../styles/tokens.js';
@@ -40,7 +40,9 @@ const SortableWorkspaceItem = ({
   onSelectList,
   onRenameList,
   onDeleteList,
-  onAddToFolder
+  onAddToFolder,
+  onAddItem,
+  lists: props_lists,
 }) => {
   const {
     attributes,
@@ -54,6 +56,7 @@ const SortableWorkspaceItem = ({
   const [showListMenu, setShowListMenu] = useState(null);
   const [folderAddingItem, setFolderAddingItem] = useState(false);
   const [newItemName, setNewItemName] = useState('');
+  const [isHovered, setIsHovered] = useState(false);
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -61,8 +64,8 @@ const SortableWorkspaceItem = ({
     opacity: isDragging ? 0.5 : 1,
   };
 
-  // Listas del workspace (simuladas por ahora, luego vendrán del context)
-  const lists = workspace.lists || [];
+  // Listas del workspace — vienen del contexto vía prop
+  const lists = props_lists || [];
 
   return (
     <div 
@@ -78,23 +81,34 @@ const SortableWorkspaceItem = ({
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: '8px',
-          padding: '10px 12px',
-          borderRadius: DESIGN_TOKENS.border.radius.md,
+          gap: '6px',
+          padding: '7px 10px 7px 0',
+          borderRadius: '8px',
           cursor: isDragging ? 'grabbing' : 'pointer',
-          background: isActive ? 'rgba(0, 102, 255, 0.06)' : 'transparent',
+          background: isActive
+            ? `${workspace.settings?.color || DESIGN_TOKENS.primary.base}18`
+            : 'transparent',
           transition: `all ${DESIGN_TOKENS.transition.fast}`,
           position: 'relative',
-          border: isDragging ? `2px solid ${DESIGN_TOKENS.primary.base}` : '2px solid transparent'
+          borderLeft: workspace.type !== 'folder'
+            ? `3px solid ${isActive ? (workspace.settings?.color || DESIGN_TOKENS.primary.base) : 'transparent'}`
+            : '3px solid transparent',
+          outline: isDragging ? `2px solid ${DESIGN_TOKENS.primary.base}` : 'none',
+          paddingLeft: '8px',
         }}
         onMouseEnter={(e) => {
+          setIsHovered(true);
           if (!isActive && !isDragging) {
-            e.currentTarget.style.background = 'rgba(0, 0, 0, 0.03)';
+            const color = workspace.settings?.color || DESIGN_TOKENS.primary.base;
+            e.currentTarget.style.background = `${color}10`;
+            e.currentTarget.style.borderLeftColor = `${color}60`;
           }
         }}
         onMouseLeave={(e) => {
+          setIsHovered(false);
           if (!isActive && !isDragging) {
             e.currentTarget.style.background = 'transparent';
+            e.currentTarget.style.borderLeftColor = 'transparent';
           }
         }}
       >
@@ -107,17 +121,18 @@ const SortableWorkspaceItem = ({
             color: DESIGN_TOKENS.neutral[400],
             display: 'flex',
             padding: '2px',
-            opacity: isDragging ? 0 : 0.5,
-            transition: 'opacity 0.2s'
+            opacity: isDragging ? 0 : 0,
+            transition: 'opacity 0.2s',
+            flexShrink: 0,
           }}
           onMouseEnter={(e) => e.currentTarget.style.opacity = 1}
-          onMouseLeave={(e) => e.currentTarget.style.opacity = 0.5}
+          onMouseLeave={(e) => e.currentTarget.style.opacity = 0}
         >
-          <GripVertical size={14} />
+          <GripVertical size={13} />
         </div>
 
         {/* EXPAND BUTTON */}
-        {(lists.length > 0 || workspace.type === 'folder') && (
+        {(lists.length > 0 || workspace.type === 'folder') ? (
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -130,34 +145,37 @@ const SortableWorkspaceItem = ({
               cursor: 'pointer',
               color: DESIGN_TOKENS.neutral[400],
               display: 'flex',
+              flexShrink: 0,
               transition: `transform ${DESIGN_TOKENS.transition.normal}`
             }}
           >
             <ChevronRight
-              size={14}
+              size={13}
               style={{
                 transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
                 transition: `transform ${DESIGN_TOKENS.transition.normal}`
               }}
             />
           </button>
+        ) : (
+          <div style={{ width: '18px', flexShrink: 0 }} />
         )}
 
-        {/* ICON */}
+        {/* ICON / COLOR DOT */}
         {workspace.type === 'folder' ? (
           <Folder
             size={14}
             color={DESIGN_TOKENS.neutral[500]}
-            style={{ flexShrink: 0, marginLeft: lists.length > 0 ? 0 : '18px' }}
+            style={{ flexShrink: 0 }}
           />
         ) : (
           <div style={{
-            width: '6px',
-            height: '6px',
+            width: '8px',
+            height: '8px',
             borderRadius: '50%',
             background: workspace.settings?.color || DESIGN_TOKENS.primary.base,
             flexShrink: 0,
-            marginLeft: lists.length > 0 ? 0 : '18px'
+            boxShadow: `0 0 0 2px ${(workspace.settings?.color || DESIGN_TOKENS.primary.base)}30`,
           }} />
         )}
 
@@ -180,42 +198,71 @@ const SortableWorkspaceItem = ({
             style={{
               flex: 1,
               border: `1px solid ${DESIGN_TOKENS.primary.base}`,
-              background: 'white',
-              padding: '4px 8px',
+              background: 'var(--bg-input, white)',
+              padding: '3px 8px',
               borderRadius: DESIGN_TOKENS.border.radius.sm,
               fontSize: DESIGN_TOKENS.typography.size.sm,
               outline: 'none',
-              fontWeight: DESIGN_TOKENS.typography.weight.medium
+              fontWeight: DESIGN_TOKENS.typography.weight.medium,
+              color: 'var(--text-primary)',
             }}
           />
         ) : (
           <span style={{
             flex: 1,
-            fontSize: DESIGN_TOKENS.typography.size.sm,
-            fontWeight: DESIGN_TOKENS.typography.weight.medium,
-            color: isActive ? DESIGN_TOKENS.primary.base : DESIGN_TOKENS.neutral[800],
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis'
+            fontSize: '13px',
+            fontWeight: isActive ? 600 : 500,
+            color: isActive
+              ? (workspace.settings?.color || DESIGN_TOKENS.primary.base)
+              : 'var(--text-primary, #0f172a)',
+            whiteSpace: 'normal',
+            wordBreak: 'break-word',
+            letterSpacing: '-0.01em',
+            padding: '2px 0',
           }}>
             {workspace.name}
           </span>
         )}
 
-        {/* LIST COUNT */}
-        {lists.length > 0 && (
+        {/* LIST COUNT badge / ADD button */}
+        {isHovered ? (
+          <button
+            onClick={(e) => { e.stopPropagation(); onAddItem && onAddItem(workspace, e); }}
+            style={{
+              background: 'none',
+              border: 'none',
+              padding: '3px',
+              cursor: 'pointer',
+              color: DESIGN_TOKENS.neutral[400],
+              display: 'flex',
+              alignItems: 'center',
+              borderRadius: '4px',
+              flexShrink: 0,
+              transition: 'all 0.15s',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(0,102,255,0.1)'; e.currentTarget.style.color = DESIGN_TOKENS.primary.base; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = DESIGN_TOKENS.neutral[400]; }}
+            title="Agregar al espacio"
+          >
+            <Plus size={13} />
+          </button>
+        ) : lists.length > 0 ? (
           <span style={{
-            fontSize: DESIGN_TOKENS.typography.size.xs,
-            color: DESIGN_TOKENS.neutral[400],
-            fontWeight: DESIGN_TOKENS.typography.weight.medium
+            fontSize: '10px',
+            color: 'var(--text-subtle, #94a3b8)',
+            fontWeight: 600,
+            background: 'var(--bg-input, rgba(15,23,42,0.05))',
+            borderRadius: '10px',
+            padding: '1px 6px',
+            flexShrink: 0,
           }}>
             {lists.length}
           </span>
-        )}
+        ) : null}
       </div>
 
       {/* LISTS (COLLAPSED) */}
-      {isExpanded && lists.length > 0 && (
+      {isExpanded && workspace.type !== 'folder' && (
         <div style={{
           paddingLeft: '36px',
           marginTop: '2px'
@@ -355,6 +402,40 @@ const SortableWorkspaceItem = ({
               )}
             </div>
           ))}
+
+          {/* ADD ITEM BUTTON inside workspace */}
+          <button
+            onClick={(e) => { onAddItem && onAddItem(workspace, e); }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '5px 10px',
+              marginTop: '2px',
+              background: 'none',
+              border: `1px dashed ${DESIGN_TOKENS.border.color.subtle}`,
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontSize: '12px',
+              fontWeight: 500,
+              color: DESIGN_TOKENS.neutral[500],
+              width: '100%',
+              transition: 'all 0.15s',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'rgba(0, 102, 255, 0.04)';
+              e.currentTarget.style.borderColor = DESIGN_TOKENS.primary.base;
+              e.currentTarget.style.color = DESIGN_TOKENS.primary.base;
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'none';
+              e.currentTarget.style.borderColor = DESIGN_TOKENS.border.color.subtle;
+              e.currentTarget.style.color = DESIGN_TOKENS.neutral[500];
+            }}
+          >
+            <Plus size={12} />
+            Agregar lista
+          </button>
         </div>
       )}
 
@@ -476,13 +557,14 @@ const SortableWorkspaceItem = ({
 // ============================================================================
 // WORKSPACE LIST WITH DRAG AND DROP
 // ============================================================================
-const WorkspaceList = ({ onCreateWorkspace, onSelectWorkspace, onOpenChat, onOpenBacklog, onCreateList }) => {
-  const { currentEnvironment, currentWorkspace, deleteWorkspace, updateWorkspace } = useApp();
+const WorkspaceList = ({ onCreateWorkspace, onSelectWorkspace, onOpenChat, onOpenBacklog, onCreateList, onSelectList }) => {
+  const { currentEnvironment, currentWorkspace, deleteWorkspace, updateWorkspace, lists, deleteList, updateList } = useApp();
   const workspaces = currentEnvironment?.workspaces || [];
   const [expandedWorkspaces, setExpandedWorkspaces] = useState({});
   const [editingWorkspace, setEditingWorkspace] = useState(null);
   const [contextMenu, setContextMenu] = useState(null);
   const [showAddMenu, setShowAddMenu] = useState(false);
+  const [activeMenuWorkspace, setActiveMenuWorkspace] = useState(null);
   const addMenuRef = useRef(null);
   const addButtonRef = useRef(null);
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
@@ -581,6 +663,8 @@ const WorkspaceList = ({ onCreateWorkspace, onSelectWorkspace, onOpenChat, onOpe
 
 const handleAddOption = (type) => {
   setShowAddMenu(false);
+  const ws = activeMenuWorkspace;
+  setActiveMenuWorkspace(null);
   if (type === 'space') {
     onCreateWorkspace();
   } else if (type === 'chat') {
@@ -588,56 +672,45 @@ const handleAddOption = (type) => {
   } else if (type === 'backlog') {
     onOpenBacklog && onOpenBacklog();
   } else if (type === 'list') {
-    onCreateList && onCreateList();
+    onCreateList && onCreateList(ws);
   } else if (type === 'folder') {
-    const newFolder = {
-      id: `folder-${Date.now()}`,
-      name: 'Nueva carpeta',
-      type: 'folder',
-      lists: [],
-      settings: { color: DESIGN_TOKENS.neutral[400] },
-      createdAt: new Date().toISOString(),
-    };
-    setWorkspaces(prev => [...prev, newFolder]);
-    setExpandedWorkspaces(prev => ({ ...prev, [newFolder.id]: true }));
-    setTimeout(() => setEditingWorkspace(newFolder.id), 50);
+    console.log('Crear carpeta: pendiente de implementación completa');
   } else {
     console.log(`Crear ${type}: pendiente de implementación`);
   }
 };
 
-  const handleDeleteList = (list) => {
+  const handleWorkspaceAddItem = (workspace, e) => {
+    e.stopPropagation();
+    const rect = e.currentTarget.getBoundingClientRect();
+    const menuH = 440;
+    const vp = window.innerHeight;
+    const left = rect.right + 10;
+    const top = Math.min(rect.top, vp - menuH - 16);
+    setMenuPos({ top: Math.max(16, top), left: Math.max(8, left) });
+    setActiveMenuWorkspace(workspace);
+    setShowAddMenu(true);
+  };
+
+  const handleDeleteList = async (list) => {
     if (confirm(`¿Eliminar la lista "${list.name}"?`)) {
-      console.log('Eliminar lista:', list);
-      // Aquí luego se integrará con el context
+      await deleteList(list.id);
     }
   };
 
-  const handleRenameList = (list) => {
+  const handleRenameList = async (list) => {
     const newName = prompt('Nuevo nombre:', list.name);
     if (newName && newName.trim()) {
-      console.log('Renombrar lista:', list.name, '->', newName);
-      // Aquí luego se integrará con el context
+      await updateList(list.id, { name: newName.trim() });
     }
   };
 
   const handleSelectList = (list) => {
-    console.log('Abrir lista:', list);
-    // Aquí se abrirá la ListView con esta lista
+    onSelectList && onSelectList(list);
   };
 
   const addItemToFolder = (folderId, itemType, itemName) => {
-    const newItem = {
-      id: `item-${Date.now()}`,
-      name: itemName,
-      type: itemType,
-      createdAt: new Date().toISOString(),
-    };
-    setWorkspaces(prev => prev.map(ws =>
-      ws.id === folderId
-        ? { ...ws, lists: [...(ws.lists || []), newItem] }
-        : ws
-    ));
+    console.log('addItemToFolder: pendiente de implementación', folderId, itemType, itemName);
   };
 
   // Cerrar menú contextual
@@ -683,20 +756,7 @@ const handleAddOption = (type) => {
         <div style={{ position: 'relative' }}>
           <button
             ref={addButtonRef}
-            onClick={() => {
-              if (!showAddMenu && addButtonRef.current) {
-                const rect = addButtonRef.current.getBoundingClientRect();
-                const menuW = 288;
-                const menuH = 440;
-                const vp = window.innerHeight;
-                // Aparece a la derecha del sidebar, alineado con el botón
-                const left = rect.right + 10;
-                // Ajusta verticalmente para que no se salga del viewport
-                const top = Math.min(rect.top, vp - menuH - 16);
-                setMenuPos({ top: Math.max(16, top), left });
-              }
-              setShowAddMenu(v => !v);
-            }}
+            onClick={() => onCreateWorkspace()}
             style={{
               background: 'none',
               border: 'none',
@@ -714,10 +774,8 @@ const handleAddOption = (type) => {
               e.currentTarget.style.color = DESIGN_TOKENS.primary.base;
             }}
             onMouseLeave={(e) => {
-              if (!showAddMenu) {
-                e.currentTarget.style.background = 'none';
-                e.currentTarget.style.color = DESIGN_TOKENS.neutral[400];
-              }
+              e.currentTarget.style.background = 'none';
+              e.currentTarget.style.color = DESIGN_TOKENS.neutral[400];
             }}
           >
             <Plus size={16} />
@@ -768,6 +826,47 @@ const handleAddOption = (type) => {
                 </span>
               </div>
 
+              {/* ESPACIO */}
+              <button
+                onClick={() => handleAddOption('space')}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '12px',
+                  padding: '10px 12px',
+                  background: 'none',
+                  border: 'none',
+                  borderRadius: DESIGN_TOKENS.border.radius.sm,
+                  cursor: 'pointer',
+                  transition: `all ${DESIGN_TOKENS.transition.fast}`,
+                  textAlign: 'left'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(0, 102, 255, 0.06)'}
+                onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
+              >
+                <Briefcase size={18} color={DESIGN_TOKENS.primary.base} style={{ marginTop: '2px' }} />
+                <div style={{ flex: 1 }}>
+                  <div style={{
+                    fontSize: '14px',
+                    fontWeight: 600,
+                    color: DESIGN_TOKENS.primary.base,
+                    marginBottom: '2px'
+                  }}>
+                    Espacio
+                  </div>
+                  <div style={{
+                    fontSize: '12px',
+                    color: DESIGN_TOKENS.neutral[500],
+                    lineHeight: 1.3
+                  }}>
+                    Agrupa listas y proyectos de un equipo o área
+                  </div>
+                </div>
+              </button>
+
+              <div style={{ height: '0.5px', background: DESIGN_TOKENS.border.color.subtle, margin: '4px 8px' }} />
+
               {/* LISTA */}
               <button
                 onClick={() => handleAddOption('list')}
@@ -789,15 +888,15 @@ const handleAddOption = (type) => {
               >
                 <ListTodo size={18} color={DESIGN_TOKENS.neutral[700]} style={{ marginTop: '2px' }} />
                 <div style={{ flex: 1 }}>
-                  <div style={{ 
-                    fontSize: '14px', 
+                  <div style={{
+                    fontSize: '14px',
                     fontWeight: 500,
                     color: DESIGN_TOKENS.neutral[800],
                     marginBottom: '2px'
                   }}>
-                    lista
+                    Lista
                   </div>
-                  <div style={{ 
+                  <div style={{
                     fontSize: '12px',
                     color: DESIGN_TOKENS.neutral[500],
                     lineHeight: 1.3
@@ -1043,7 +1142,13 @@ const handleAddOption = (type) => {
             items={workspaces.map(w => w.id)}
             strategy={verticalListSortingStrategy}
           >
-            <div>
+            <div style={{
+              background: 'var(--bg-input, rgba(15,23,42,0.02))',
+              borderRadius: '12px',
+              padding: '4px 4px',
+              border: '1px solid var(--border, rgba(15,23,42,0.04))',
+              margin: '0 4px',
+            }}>
               {workspaces.map((workspace) => (
                 <SortableWorkspaceItem
                   key={workspace.id}
@@ -1060,6 +1165,8 @@ const handleAddOption = (type) => {
                   onRenameList={handleRenameList}
                   onDeleteList={handleDeleteList}
                   onAddToFolder={addItemToFolder}
+                  onAddItem={handleWorkspaceAddItem}
+                  lists={lists.filter(l => l.workspace_id === workspace.id)}
                 />
               ))}
             </div>
