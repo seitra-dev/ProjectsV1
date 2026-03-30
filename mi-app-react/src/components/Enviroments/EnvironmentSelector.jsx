@@ -134,7 +134,7 @@ const EnvironmentSelector = ({ onCreateEnvironment, onOpenSettings }) => {
             textTransform: 'uppercase',
             letterSpacing: '0.6px'
           }}>
-            Entornos disponibles
+            Equipos disponibles
           </div>
 
           {/* ENVIRONMENT LIST */}

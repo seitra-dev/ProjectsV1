@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import ConfirmModal from './ConfirmModal';
 import { 
   Plus, ChevronDown, ChevronRight, Edit, Trash2, Check, X,
   Home, Clipboard, FileText, AlertTriangle, Calendar, Target, CheckCircle2, AlertCircle, Users, TrendingUp, Map
@@ -9,7 +10,7 @@ import { DESIGN_TOKENS } from '../styles/tokens';
 // PROJECT ROADMAP - Dynamic Component
 // ============================================================================
 
-const ProjectRoadmap = ({ project, onProjectUpdate }) => {
+const ProjectRoadmap = ({ project, tasks = [], onProjectUpdate }) => {
   const [activeTab, setActiveTab] = useState('overview');
 
   // Inicializar estructura si no existe
@@ -240,8 +241,9 @@ const ProjectRoadmap = ({ project, onProjectUpdate }) => {
           />
         )}
         {activeTab === 'plan' && (
-          <PlanTab 
+          <PlanTab
             phases={roadmapData.phases || []}
+            tasks={tasks}
             onUpdate={(phases) => updateRoadmap({ phases })}
           />
         )}
@@ -630,9 +632,10 @@ const PhaseTimeline = ({ phases }) => {
 // PLAN TAB
 // ============================================================================
 
-const PlanTab = ({ phases, onUpdate }) => {
+const PlanTab = ({ phases, tasks = [], onUpdate }) => {
   const [openPhase, setOpenPhase] = useState(phases[0]?.id || null);
   const [isCreating, setIsCreating] = useState(false);
+  const [confirmData, setConfirmData] = useState(null);
 
   const handleAddPhase = () => {
     const newPhase = {
@@ -654,9 +657,11 @@ const PlanTab = ({ phases, onUpdate }) => {
   };
 
   const handleDeletePhase = (phaseId) => {
-    if (confirm('¿Eliminar esta fase?')) {
-      onUpdate(phases.filter(p => p.id !== phaseId));
-    }
+    setConfirmData({
+      title: '¿Eliminar fase?',
+      message: 'Esta fase y todas sus actividades serán eliminadas permanentemente.',
+      onConfirm: () => onUpdate(phases.filter(p => p.id !== phaseId)),
+    });
   };
 
   return (
@@ -674,6 +679,7 @@ const PlanTab = ({ phases, onUpdate }) => {
         <PhaseCard
           key={phase.id}
           phase={phase}
+          phaseTasks={tasks.filter(t => String(t.roadmapPhaseId) === String(phase.id))}
           isOpen={openPhase === phase.id}
           isCreating={isCreating && phase.id === openPhase}
           onToggle={() => setOpenPhase(openPhase === phase.id ? null : phase.id)}
@@ -715,6 +721,13 @@ const PlanTab = ({ phases, onUpdate }) => {
         <Plus size={20} />
         Agregar Nueva Fase
       </button>
+      <ConfirmModal
+        isOpen={!!confirmData}
+        title={confirmData?.title}
+        message={confirmData?.message}
+        onConfirm={() => { confirmData?.onConfirm(); setConfirmData(null); }}
+        onCancel={() => setConfirmData(null)}
+      />
     </div>
   );
 };
@@ -723,7 +736,14 @@ const PlanTab = ({ phases, onUpdate }) => {
 // PHASE CARD
 // ============================================================================
 
-const PhaseCard = ({ phase, isOpen, isCreating, onToggle, onUpdate, onDelete, onFinishCreating }) => {
+const TASK_STATUS_STYLE = {
+  todo:        { label: 'Pendiente',   color: '#94a3b8', bg: '#f1f5f9' },
+  in_progress: { label: 'En Progreso', color: '#3b82f6', bg: '#eff6ff' },
+  review:      { label: 'En Revisión', color: '#f59e0b', bg: '#fffbeb' },
+  completed:   { label: 'Completado',  color: '#10b981', bg: '#f0fdf4' },
+};
+
+const PhaseCard = ({ phase, phaseTasks = [], isOpen, isCreating, onToggle, onUpdate, onDelete, onFinishCreating }) => {
   const [isEditing, setIsEditing] = useState(isCreating);
   const [editedName, setEditedName] = useState(phase.name);
 
@@ -976,6 +996,50 @@ const PhaseCard = ({ phase, isOpen, isCreating, onToggle, onUpdate, onDelete, on
           phase={phase}
           onUpdate={onUpdate}
         />
+      )}
+
+      {/* Tareas asignadas a esta fase */}
+      {isOpen && !isEditing && phaseTasks.length > 0 && (
+        <div style={{
+          borderTop: `1px solid ${DESIGN_TOKENS.border.color.subtle}`,
+          padding: '12px 20px 16px',
+          background: DESIGN_TOKENS.neutral[50],
+        }}>
+          <p style={{
+            fontSize: '11px', fontWeight: 700, color: DESIGN_TOKENS.neutral[400],
+            textTransform: 'uppercase', letterSpacing: '0.8px', margin: '0 0 10px'
+          }}>
+            Tareas vinculadas ({phaseTasks.length})
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {phaseTasks.map(task => {
+              const s = TASK_STATUS_STYLE[task.status] || TASK_STATUS_STYLE.todo;
+              return (
+                <div key={task.id} style={{
+                  display: 'flex', alignItems: 'center', gap: '10px',
+                  padding: '8px 12px', background: 'white', borderRadius: '8px',
+                  border: `1px solid ${DESIGN_TOKENS.border.color.subtle}`,
+                }}>
+                  <div style={{ flex: 1, fontSize: '13px', fontWeight: 500, color: DESIGN_TOKENS.neutral[700] }}>
+                    {task.title}
+                  </div>
+                  <span style={{
+                    fontSize: '11px', fontWeight: 600, padding: '2px 8px',
+                    borderRadius: '20px', color: s.color, background: s.bg,
+                    flexShrink: 0
+                  }}>
+                    {s.label}
+                  </span>
+                  {task.endDate && (
+                    <span style={{ fontSize: '11px', color: DESIGN_TOKENS.neutral[400], flexShrink: 0 }}>
+                      {task.endDate}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
       )}
     </div>
   );

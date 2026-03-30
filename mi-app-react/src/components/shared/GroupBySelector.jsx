@@ -303,7 +303,7 @@ export const GenericGroup = ({ label, color, tasks, isExpanded, onToggle, onAddT
       <button
         onClick={(e) => { e.stopPropagation(); onAddTask(); }}
         style={{
-          marginLeft: 'auto', padding: '4px 10px', background: 'transparent',
+          marginLeft: '4px', padding: '4px 10px', background: 'transparent',
           border: '1px solid transparent', color: '#94a3b8', cursor: 'pointer',
           fontSize: '12px', fontWeight: 500,
           display: 'flex', alignItems: 'center', gap: '4px', borderRadius: '6px',

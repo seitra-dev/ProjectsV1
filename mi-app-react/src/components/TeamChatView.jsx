@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Smile, Paperclip, MoreVertical, Image as ImageIcon, Palette, X } from 'lucide-react';
 import { DESIGN_TOKENS } from '../styles/tokens';
+import { useApp } from '../context/AppContext';
 
 // ============================================================================
 // BACKGROUNDS DISPONIBLES
@@ -42,11 +43,13 @@ const INITIAL_CHAT_MESSAGES = [
 ];
 
 function TeamChatView({ user, isMobile = false }) {
-  const [messages, setMessages] = useState(INITIAL_CHAT_MESSAGES);
+  const { currentEnvironment, db } = useApp();
+  const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showBackgroundSelector, setShowBackgroundSelector] = useState(false);
   const [selectedBackground, setSelectedBackground] = useState(CHAT_BACKGROUNDS[0]);
+  const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -58,22 +61,78 @@ function TeamChatView({ user, isMobile = false }) {
     scrollToBottom();
   }, [messages]);
 
-  const handleSendMessage = (e) => {
-    e?.preventDefault();
-    if (!newMessage.trim()) return;
+  // Carga mensajes y suscripción en tiempo real al cambiar de environment
+  useEffect(() => {
+    if (!currentEnvironment?.id) {
+      setMessages([]);
+      return;
+    }
 
-    const message = {
-      id: Date.now(),
-      userId: user.id,
-      text: newMessage,
-      timestamp: new Date().toISOString(),
-      userName: user.name,
-      userAvatar: user.avatar
+    let channel = null;
+
+    const loadMessages = async () => {
+      setIsLoading(true);
+      try {
+        const data = await db.chat.getByEnvironment(currentEnvironment.id);
+        setMessages(data || []);
+      } catch (err) {
+        console.error('[Chat] Error cargando mensajes:', err);
+      } finally {
+        setIsLoading(false);
+      }
     };
 
-    setMessages([...messages, message]);
+    loadMessages();
+
+    // Suscripción tiempo real
+    channel = db.chat.subscribe(currentEnvironment.id, (payload) => {
+      if (payload.eventType === 'INSERT') {
+        const newMsg = payload.new;
+        setMessages(prev => {
+          // Evitar duplicados (optimistic update ya lo agregó)
+          if (prev.some(m => m.id === newMsg.id)) return prev;
+          return [...prev, newMsg];
+        });
+      }
+    });
+
+    return () => {
+      if (channel) db.chat.unsubscribe(channel);
+    };
+  }, [currentEnvironment?.id]);
+
+  const handleSendMessage = async (e) => {
+    e?.preventDefault();
+    if (!newMessage.trim() || !currentEnvironment?.id) return;
+
+    const content = newMessage.trim();
     setNewMessage('');
     setShowEmojiPicker(false);
+
+    // Optimistic update
+    const optimisticMsg = {
+      id: `temp-${Date.now()}`,
+      environment_id: currentEnvironment.id,
+      user_id: user.id,
+      text: content,
+      created_at: new Date().toISOString(),
+      user: { id: user.id, name: user.name, avatar: user.avatar }
+    };
+    setMessages(prev => [...prev, optimisticMsg]);
+
+    try {
+      const saved = await db.chat.create({
+        environment_id: currentEnvironment.id,
+        user_id: user.id,
+        text: content,
+      });
+      // Reemplazar el optimistic con el mensaje real
+      setMessages(prev => prev.map(m => m.id === optimisticMsg.id ? saved : m));
+    } catch (err) {
+      console.error('[Chat] Error enviando mensaje:', err?.message);
+      // Revertir optimistic en caso de error
+      setMessages(prev => prev.filter(m => m.id !== optimisticMsg.id));
+    }
   };
 
   const addEmoji = (emoji) => {
@@ -275,10 +334,33 @@ function TeamChatView({ user, isMobile = false }) {
         flexDirection: 'column',
         gap: '16px'
       }}>
+        {isLoading && (
+          <div style={{ textAlign: 'center', color: DESIGN_TOKENS.neutral[400], fontSize: '14px', padding: '32px 0' }}>
+            Cargando mensajes...
+          </div>
+        )}
+        {!isLoading && !currentEnvironment && (
+          <div style={{ textAlign: 'center', color: DESIGN_TOKENS.neutral[400], fontSize: '14px', padding: '32px 0' }}>
+            Selecciona un entorno para ver el chat.
+          </div>
+        )}
+        {!isLoading && currentEnvironment && messages.length === 0 && (
+          <div style={{ textAlign: 'center', color: DESIGN_TOKENS.neutral[400], fontSize: '14px', padding: '32px 0' }}>
+            Sin mensajes aún. ¡Sé el primero en escribir!
+          </div>
+        )}
         {messages.map((msg, index) => {
-          const isOwnMessage = msg.userId === user.id;
+          const msgUserId = msg.user_id;
+          const msgUserName = msg.user?.name || 'Usuario';
+          const msgUserAvatar = msg.user?.avatar || '👤';
+          const msgContent = msg.text;
+          const msgTimestamp = msg.created_at;
+          const isOwnMessage = msgUserId === user.id;
           const prevMsg = messages[index - 1];
-          const showDate = showDateSeparator(msg, prevMsg);
+          const showDate = showDateSeparator(
+            { timestamp: msgTimestamp },
+            prevMsg ? { timestamp: prevMsg.created_at } : null
+          );
 
           return (
             <React.Fragment key={msg.id}>
@@ -299,11 +381,11 @@ function TeamChatView({ user, isMobile = false }) {
                     color: DESIGN_TOKENS.neutral[600],
                     boxShadow: '0 2px 8px rgba(0,0,0,0.08)'
                   }}>
-                    {new Date(msg.timestamp).toLocaleDateString('es-ES', { 
-                      weekday: 'long', 
-                      year: 'numeric', 
-                      month: 'long', 
-                      day: 'numeric' 
+                    {new Date(msgTimestamp).toLocaleDateString('es-ES', {
+                      weekday: 'long',
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric'
                     })}
                   </div>
                 </div>
@@ -325,22 +407,26 @@ function TeamChatView({ user, isMobile = false }) {
                   maxWidth: isMobile ? '92%' : '70%',
                   flexDirection: isOwnMessage ? 'row-reverse' : 'row'
                 }}>
-                  {/* AVATAR */}
+                  {/* AVATAR con iniciales */}
                   <div style={{
                     width: '40px',
                     height: '40px',
                     borderRadius: '50%',
-                    background: isOwnMessage 
+                    background: isOwnMessage
                       ? `linear-gradient(135deg, ${DESIGN_TOKENS.primary.base}, ${DESIGN_TOKENS.primary.dark})`
                       : `linear-gradient(135deg, ${DESIGN_TOKENS.info.base}, ${DESIGN_TOKENS.info.dark})`,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    fontSize: '18px',
+                    fontSize: msgUserAvatar?.length === 1 || msgUserAvatar?.length === 2 ? '16px' : '18px',
+                    color: 'white',
+                    fontWeight: 700,
                     flexShrink: 0,
                     boxShadow: '0 2px 8px rgba(0,0,0,0.12)'
                   }}>
-                    {msg.userAvatar}
+                    {msgUserAvatar && msgUserAvatar.length <= 2
+                      ? msgUserAvatar
+                      : (msgUserName?.charAt(0) || '?').toUpperCase()}
                   </div>
 
                   {/* MESSAGE CONTENT */}
@@ -355,16 +441,16 @@ function TeamChatView({ user, isMobile = false }) {
                       fontWeight: 600,
                       color: 'rgba(0,0,0,0.6)'
                     }}>
-                      {msg.userName}
+                      {msgUserName}
                     </div>
-                    
+
                     <div style={{
-                      background: isOwnMessage 
+                      background: isOwnMessage
                         ? `linear-gradient(135deg, ${DESIGN_TOKENS.primary.base}, ${DESIGN_TOKENS.primary.dark})`
                         : 'rgba(255, 255, 255, 0.95)',
                       color: isOwnMessage ? 'white' : DESIGN_TOKENS.neutral[800],
                       padding: '12px 16px',
-                      borderRadius: isOwnMessage 
+                      borderRadius: isOwnMessage
                         ? '16px 16px 4px 16px'
                         : '16px 16px 16px 4px',
                       fontSize: '14px',
@@ -376,7 +462,7 @@ function TeamChatView({ user, isMobile = false }) {
                         : '0 2px 8px rgba(0,0,0,0.08)',
                       border: !isOwnMessage ? `1px solid ${DESIGN_TOKENS.neutral[200]}` : 'none'
                     }}>
-                      {msg.text}
+                      {msgContent}
                     </div>
 
                     <div style={{
@@ -384,7 +470,7 @@ function TeamChatView({ user, isMobile = false }) {
                       color: 'rgba(0,0,0,0.5)',
                       fontWeight: 500
                     }}>
-                      {formatTime(msg.timestamp)}
+                      {formatTime(msgTimestamp)}
                     </div>
                   </div>
                 </div>

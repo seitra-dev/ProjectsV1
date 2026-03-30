@@ -38,19 +38,14 @@ import CreateListModal from './components/Enviroments/CreateListModal';
 const ToastContext = React.createContext();
 
 let _toastCounter = 0;
+const TOAST_DURATION = 3500;
 
 function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([]);
 
-  const addToast = useCallback((message, type = 'info', duration = 3000) => {
+  const addToast = useCallback((message, type = 'info') => {
     const id = ++_toastCounter;
-    setToasts(prev => [...prev, { id, message, type, duration }]);
-    
-    if (duration > 0) {
-      setTimeout(() => {
-        setToasts(prev => prev.filter(t => t.id !== id));
-      }, duration);
-    }
+    setToasts(prev => [...prev, { id, message, type }]);
   }, []);
 
   const removeToast = useCallback((id) => {
@@ -69,76 +64,105 @@ function ToastContainer({ toasts, removeToast }) {
   return (
     <div style={{
       position: 'fixed',
-      top: '1rem',
-      right: '1rem',
-      left: '1rem',
-      zIndex: 9999,
+      bottom: '24px',
+      right: '24px',
+      zIndex: 9998,
       display: 'flex',
       flexDirection: 'column',
-      gap: '0.5rem',
-      maxWidth: '400px',
-      marginLeft: 'auto'
+      gap: '10px',
     }}>
       {toasts.map(toast => (
         <Toast key={toast.id} toast={toast} onClose={() => removeToast(toast.id)} />
       ))}
+      <style>{`
+        @keyframes toastSlideIn {
+          from { opacity: 0; transform: translateX(110%) scale(0.95); }
+          to   { opacity: 1; transform: translateX(0) scale(1); }
+        }
+        @keyframes toastSlideOut {
+          from { opacity: 1; transform: translateX(0); }
+          to   { opacity: 0; transform: translateX(110%); }
+        }
+        @keyframes toastProgress {
+          from { width: 100%; }
+          to   { width: 0%; }
+        }
+      `}</style>
     </div>
   );
 }
 
 function Toast({ toast, onClose }) {
-  const icons = {
-    success: <CheckCircle size={20} />,
-    error: <XCircle size={20} />,
-    warning: <AlertTriangle size={20} />,
-    info: <Info size={20} />
+  const [exiting, setExiting] = useState(false);
+
+  useEffect(() => {
+    const exitTimer = setTimeout(() => setExiting(true), TOAST_DURATION - 250);
+    const removeTimer = setTimeout(onClose, TOAST_DURATION);
+    return () => { clearTimeout(exitTimer); clearTimeout(removeTimer); };
+  }, []);
+
+  const handleClose = () => {
+    setExiting(true);
+    setTimeout(onClose, 250);
   };
 
-  const colors = {
-    success: { bg: DESIGN_TOKENS.success.light, border: DESIGN_TOKENS.success.base, text: DESIGN_TOKENS.success.dark },
-    error: { bg: DESIGN_TOKENS.danger.light, border: DESIGN_TOKENS.danger.base, text: DESIGN_TOKENS.danger.dark },
-    warning: { bg: DESIGN_TOKENS.warning.light, border: DESIGN_TOKENS.warning.base, text: DESIGN_TOKENS.warning.dark },
-    info: { bg: DESIGN_TOKENS.info.light, border: DESIGN_TOKENS.info.base, text: DESIGN_TOKENS.info.dark }
-  };
-
-  const style = colors[toast.type] || colors.info;
+  const dotColor = {
+    success: '#22c55e',
+    error:   '#ef4444',
+    info:    '#3b82f6',
+    warning: '#f59e0b',
+  }[toast.type] || '#3b82f6';
 
   return (
     <div style={{
-      background: style.bg,
-      border: `1px solid ${style.border}`,
-      borderLeft: `4px solid ${style.border}`,
-      borderRadius: '8px',
-      padding: '1rem',
-      display: 'flex',
-      alignItems: 'flex-start',
-      gap: '0.75rem',
-      boxShadow: DESIGN_TOKENS.shadows.lg,
-      animation: 'slideInRight 0.3s ease',
       minWidth: '300px',
-      minWidth: 'min(300px, calc(100vw - 2rem))',
-      width: '100%'
+      maxWidth: '380px',
+      borderRadius: '14px',
+      padding: '14px 18px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '12px',
+      background: 'white',
+      border: '1px solid #e5e7eb',
+      boxShadow: '0 8px 24px rgba(0,0,0,0.10)',
+      animation: exiting
+        ? 'toastSlideOut 0.25s ease-in forwards'
+        : 'toastSlideIn 0.35s cubic-bezier(0.34,1.56,0.64,1)',
+      position: 'relative',
+      overflow: 'hidden',
     }}>
-      <div style={{ color: style.text, display: 'flex', flexShrink: 0 }}>
-        {icons[toast.type]}
-      </div>
-      <div style={{ flex: 1, fontSize: '0.875rem', color: style.text, fontWeight: 500 }}>
+      {/* Punto de color con glow */}
+      <div style={{
+        width: '8px', height: '8px', borderRadius: '50%',
+        background: dotColor,
+        boxShadow: `0 0 8px ${dotColor}`,
+        flexShrink: 0,
+      }} />
+      <div style={{ flex: 1, fontSize: '13px', fontWeight: 600, color: '#111111' }}>
         {toast.message}
       </div>
       <button
-        onClick={onClose}
+        onClick={handleClose}
         style={{
-          background: 'none',
-          border: 'none',
-          color: style.text,
-          cursor: 'pointer',
-          padding: '0',
-          display: 'flex',
-          flexShrink: 0
+          background: 'none', border: 'none', cursor: 'pointer',
+          padding: '0', display: 'flex', flexShrink: 0,
+          color: '#9ca3af',
+          transition: 'color 0.15s',
         }}
+        onMouseEnter={e => e.currentTarget.style.color = '#374151'}
+        onMouseLeave={e => e.currentTarget.style.color = '#9ca3af'}
       >
-        <X size={16} />
+        <X size={15} />
       </button>
+      {/* Barra de progreso */}
+      <div style={{
+        position: 'absolute', bottom: 0, left: 0,
+        height: '3px',
+        borderRadius: '0 0 14px 14px',
+        background: dotColor,
+        animation: `toastProgress ${TOAST_DURATION}ms linear forwards`,
+        opacity: 0.7,
+      }} />
     </div>
   );
 }
@@ -239,6 +263,20 @@ const PRIORITY_OPTIONS = {
 };
 
 // ============================================================================
+// DATE UTILS — evita "31 dic 1969" cuando la fecha es null/epoch
+// ============================================================================
+const parseDate = (dateStr) => {
+  if (!dateStr) return null;
+  const d = new Date(dateStr);
+  return isNaN(d.getTime()) || d.getFullYear() < 2000 ? null : d;
+};
+
+const formatDate = (dateStr, options = { day: 'numeric', month: 'short', year: 'numeric' }) => {
+  const d = parseDate(dateStr);
+  return d ? d.toLocaleDateString('es-ES', options) : '—';
+};
+
+// ============================================================================
 // MAIN APP
 // ============================================================================
 function App() {
@@ -321,7 +359,7 @@ function AppContent() {
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setCurrentUser(null);
-    setShowLanding(true);
+    setShowLanding(false);
     addToast('Sesión cerrada correctamente', 'info');
   };
 
@@ -387,7 +425,7 @@ if (isTransitioning) {
             fontSize: '1rem', color: 'white', fontWeight: 600, 
             letterSpacing: '0.1em', textTransform: 'uppercase', opacity: 0.9 
           }}>
-            Sincronizando Entorno
+            Sincronizando Equipo
           </div>
           <div style={{ fontSize: '0.9rem', color: '#64748b', marginTop: '0.5rem' }}>
             Configurando tus proyectos y metas...
@@ -435,10 +473,12 @@ function LoginScreen({ onLogin }) {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
 
   const switchMode = (toLogin) => {
     setIsLogin(toLogin);
     setError('');
+    setSuccess('');
     setName('');
     setEmail('');
     setPassword('');
@@ -586,13 +626,11 @@ function LoginScreen({ onLogin }) {
           newUser = null;
         }
 
-        onLogin(newUser || {
-          id: data.user.id,
-          email: email.trim().toLowerCase(),
-          name: name.trim(),
-          role: 'user',
-          avatar: '👤'
-        }, true);
+        setSuccess('¡Cuenta creada! Ya puedes iniciar sesión.');
+        setIsLogin(true);
+        setName('');
+        setEmail('');
+        setPassword('');
       }
     } catch (err) {
       const msg = err.message || 'Error de autenticación';
@@ -612,261 +650,236 @@ function LoginScreen({ onLogin }) {
     }
   };
 
-return (
-    <div style={{
-      minHeight: '100vh', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-      backgroundColor: '#0a0f1e', fontFamily: 'Inter, system-ui, sans-serif', overflow: 'hidden', position: 'relative',
-      padding: '1.5rem'
-    }}>
-      {/* --- FONDO CINEMÁTICO --- */}
-      <div style={{
-        position: 'absolute', inset: 0,
-        backgroundImage: 'url(https://images.unsplash.com/photo-1497215728101-856f4ea42174?q=80&w=2070&auto=format&fit=crop)',
-        backgroundSize: 'cover', backgroundPosition: 'center', zIndex: 0, opacity: 0.6
-      }}>
-        <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at 30% 50%, rgba(15, 23, 42, 0.4) 0%, rgba(10, 15, 30, 0.95) 100%)' }} />
-      </div>
-
-      {/* --- FIGURAS ANIMADAS --- */}
-      <div style={{ position: 'absolute', inset: 0, zIndex: 1, pointerEvents: 'none' }}>
-        <div className="shape-1" />
-        <div className="shape-2" />
-      </div>
+  return (
+    <div style={{ minHeight: '100vh', display: 'flex', fontFamily: 'Inter, system-ui, sans-serif' }}>
 
       <style>{`
-        @keyframes float-complex { 
-          0%, 100% { transform: translate(0, 0) rotate(0deg); } 
-          33% { transform: translate(30px, -50px) rotate(5deg); }
-          66% { transform: translate(-20px, 20px) rotate(-5deg); }
+        .login-input {
+          width: 100%; padding: 0.8rem 1rem; border-radius: 10px;
+          border: 1.5px solid #e2e8f0; background: #f8fafc;
+          font-size: 0.9rem; box-sizing: border-box;
+          transition: border-color 0.2s, box-shadow 0.2s; outline: none;
+          font-family: inherit; color: #1e293b;
         }
-        .shape-1 { 
-          position: absolute; top: 15%; right: 25%; width: 250px; height: 250px; 
-          background: linear-gradient(135deg, rgba(79, 70, 229, 0.4) 0%, transparent 80%);
-          border-radius: 30% 70% 70% 30% / 30% 30% 70% 70%; filter: blur(60px); animation: float-complex 20s infinite linear;
+        .login-input:focus {
+          border-color: #667eea; background: white;
+          box-shadow: 0 0 0 3px rgba(102,126,234,0.12);
         }
-        .shape-2 { 
-          position: absolute; bottom: 10%; left: 20%; width: 300px; height: 300px; 
-          background: linear-gradient(135deg, rgba(124, 205, 243, 0.3) 0%, transparent 80%);
-          border-radius: 50%; filter: blur(80px); animation: float-complex 25s infinite linear reverse;
+        .login-input::placeholder { color: #cbd5e1; }
+        .social-btn {
+          flex: 1; display: flex; align-items: center; justify-content: center;
+          gap: 8px; padding: 0.7rem 1rem; border-radius: 10px;
+          border: 1.5px solid #e8ecf0; background: #f8fafc;
+          color: #374151; font-weight: 600; font-size: 0.85rem;
+          cursor: pointer; transition: all 0.2s; font-family: inherit;
         }
-        .main-container {
-          display: flex;
-          width: 88%;
-          max-width: 860px;
-          background: rgba(255, 255, 255, 0.02);
-          backdrop-filter: blur(10px);
-          border-radius: 32px;
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          overflow: hidden;
-          z-index: 2;
-          box-shadow: 0 40px 80px -20px rgba(0,0,0,0.5);
-          margin: 0 auto;
+        .social-btn:hover { background: white; border-color: #cbd5e1; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+        .left-panel-blob {
+          position: absolute; border-radius: 50%; filter: blur(60px); pointer-events: none;
         }
-        .input-pro { 
-          width: 100%; padding: 0.75rem 1.1rem; border-radius: 12px; border: 1px solid #e2e8f0; 
-          background: #f8fafc; font-size: 0.9rem; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-          box-sizing: border-box;
-        }
-        .input-pro:focus { 
-          border-color: #0f172a; background: white; 
-          box-shadow: 0 6px 12px -3px rgba(0, 0, 0, 0.1); outline: none;
-        }
-        @media (max-width: 768px) { .branding-section { display: none !important; } }
+        @media (max-width: 768px) { .login-left-panel { display: none !important; } }
       `}</style>
 
-      {/* --- CONTENEDOR MAESTRO --- */}
-      <div className="main-container">
-        
-        {/* SECCIÓN BRANDING (Izquierda) */}
-        <div className="branding-section" style={{
-          flex: '1.1', padding: '3rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
-          borderRight: '1px solid rgba(255,255,255,0.05)', position: 'relative'
-        }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '2.5rem' }}>
-              <div style={{ background: '#fff', padding: '8px', borderRadius: '10px' }}>
-                <Layout size={22} color="#0a0f1e" strokeWidth={2.5} />
-              </div>
-              <h1 style={{ fontSize: '1.3rem', fontWeight: 900, color: 'white', margin: 0, letterSpacing: '-0.02em' }}>SEITRA</h1>
-            </div>
+      {/* ── PANEL IZQUIERDO ── */}
+      <div className="login-left-panel" style={{
+        flex: 1, position: 'relative', overflow: 'hidden',
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        display: 'flex', flexDirection: 'column', justifyContent: 'center',
+        alignItems: 'center', padding: '3rem',
+      }}>
+        {/* Blobs decorativos */}
+        <div className="left-panel-blob" style={{ width: 320, height: 320, background: 'rgba(255,255,255,0.08)', top: '-80px', left: '-80px' }} />
+        <div className="left-panel-blob" style={{ width: 240, height: 240, background: 'rgba(255,255,255,0.06)', bottom: '40px', right: '-60px' }} />
+        <div className="left-panel-blob" style={{ width: 160, height: 160, background: 'rgba(255,255,255,0.1)', bottom: '200px', left: '30px' }} />
 
-            <h2 style={{ fontSize: '1.6rem', fontWeight: 600, color: 'white', lineHeight: 1.2, margin: 0, letterSpacing: '-0.03em' }}>
-              ¡Bienvenido al Centro de Mando!
-            </h2>
-            <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.95rem', marginTop: '1rem', maxWidth: '340px', lineHeight: 1.6 }}>
-              Menos caos, más resultados. Accede para sincronizar tus objetivos y llevar tus proyectos al siguiente nivel.
-            </p>
+        <div style={{ position: 'relative', zIndex: 1, textAlign: 'center', maxWidth: '400px' }}>
+          {/* Ícono central */}
+          <div style={{
+            width: 72, height: 72, borderRadius: '20px',
+            background: 'rgba(255,255,255,0.18)', backdropFilter: 'blur(8px)',
+            border: '1px solid rgba(255,255,255,0.3)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            margin: '0 auto 2rem',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
+          }}>
+            <Sparkles size={36} color="white" strokeWidth={1.5} />
           </div>
 
-          <div style={{ display: 'flex', gap: '1.5rem' }}>
-            <div style={{ color: 'white' }}>
-              <h4 style={{ margin: 0, fontSize: '1.2rem' }}>+500</h4>
-              <p style={{ margin: 0, opacity: 0.5, fontSize: '0.75rem' }}>Proyectos Activos</p>
-            </div>
-            <div style={{ color: 'white' }}>
-              <h4 style={{ margin: 0, fontSize: '1.2rem' }}>99.9%</h4>
-              <p style={{ margin: 0, opacity: 0.5, fontSize: '0.75rem' }}>Productividad</p>
-            </div>
+          <h1 style={{
+            fontSize: 'clamp(1.5rem, 3vw, 2rem)', fontWeight: 700,
+            color: 'white', lineHeight: 1.3, margin: '0 0 1.5rem',
+            letterSpacing: '-0.02em',
+          }}>
+            Accede fácilmente a tu hub personal de claridad y productividad
+          </h1>
+
+          <p style={{ color: 'rgba(255,255,255,0.72)', fontSize: '0.95rem', lineHeight: 1.6, margin: 0 }}>
+            Organiza tus proyectos, tareas y equipos en un solo lugar. Sin caos, con resultados.
+          </p>
+
+          {/* Píldoras de features */}
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center', marginTop: '2.5rem' }}>
+            {['Proyectos', 'Tareas', 'Equipos', 'Roadmap'].map(tag => (
+              <span key={tag} style={{
+                padding: '6px 14px', borderRadius: '20px',
+                background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.25)',
+                color: 'white', fontSize: '0.78rem', fontWeight: 500,
+              }}>{tag}</span>
+            ))}
           </div>
         </div>
+      </div>
 
-        {/* SECCIÓN LOGIN (Derecha) */}
-        <div style={{
-          flex: '1', backgroundColor: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          padding: '2.5rem'
-        }}>
-          <div style={{ width: '100%', maxWidth: '380px' }}>
+      {/* ── PANEL DERECHO ── */}
+      <div style={{
+        flex: 1, background: 'white', display: 'flex', flexDirection: 'column',
+        justifyContent: 'center', alignItems: 'center',
+        padding: '2.5rem', overflowY: 'auto',
+      }}>
+        <div style={{ width: '100%', maxWidth: '400px' }}>
 
-            {/* BIENVENIDA CON GATITO */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem' }}>
-              <svg width="40" height="48" viewBox="0 0 52 62" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
-                <polygon points="6,18 2,4 14,12" fill="#1e1e1e"/>
-                <polygon points="30,18 38,4 26,12" fill="#1e1e1e"/>
-                <polygon points="7,17 4,8 13,13" fill="#f87171"/>
-                <polygon points="29,17 35,8 27,13" fill="#f87171"/>
-                <ellipse cx="18" cy="26" rx="16" ry="14" fill="#1e1e1e"/>
-                <ellipse cx="12" cy="24" rx="3" ry="3.5" fill="white"/>
-                <ellipse cx="24" cy="24" rx="3" ry="3.5" fill="white"/>
-                <circle cx="12.5" cy="24.5" r="1.8" fill="#111"/>
-                <circle cx="24.5" cy="24.5" r="1.8" fill="#111"/>
-                <circle cx="13.2" cy="23.8" r="0.6" fill="white"/>
-                <circle cx="25.2" cy="23.8" r="0.6" fill="white"/>
-                <polygon points="18,29 16.5,27.5 19.5,27.5" fill="#f87171"/>
-                <path d="M16.5 29.5 Q18 31.5 19.5 29.5" stroke="#f87171" strokeWidth="0.8" fill="none" strokeLinecap="round"/>
-                <line x1="2" y1="27" x2="11" y2="28.5" stroke="#555" strokeWidth="0.8" strokeLinecap="round"/>
-                <line x1="2" y1="30" x2="11" y2="29.5" stroke="#555" strokeWidth="0.8" strokeLinecap="round"/>
-                <line x1="34" y1="27" x2="25" y2="28.5" stroke="#555" strokeWidth="0.8" strokeLinecap="round"/>
-                <line x1="34" y1="30" x2="25" y2="29.5" stroke="#555" strokeWidth="0.8" strokeLinecap="round"/>
-                <path d="M28 38 Q34 28 40 22" stroke="#1e1e1e" strokeWidth="5" fill="none" strokeLinecap="round"/>
-                <circle cx="41" cy="20" r="4.5" fill="#1e1e1e"/>
-                <circle cx="38" cy="16" r="2.2" fill="#1e1e1e"/>
-                <circle cx="41" cy="15" r="2.2" fill="#1e1e1e"/>
-                <circle cx="44" cy="16" r="2.2" fill="#1e1e1e"/>
-              </svg>
-              <div>
-                <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: '#0f172a', letterSpacing: '-0.3px', lineHeight: 1.2 }}>
-                  {isLogin ? 'Entra a tu espacio de trabajo' : 'Tu productividad comienza aquí'}
-                </h2>
-                <p style={{ margin: '3px 0 0', fontSize: '0.8rem', color: '#94a3b8' }}>
-                  {isLogin ? 'Nos alegra verte de nuevo por aquí.' : 'Crea tu cuenta y empieza hoy.'}
-                </p>
-              </div>
-            </div>
-
-            {/* TAB SWITCHER */}
+          {/* Logo SEITRA */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2rem' }}>
             <div style={{
-              display: 'flex', background: '#f7f7f7', borderRadius: '14px',
-              padding: '3px', margin: '0 auto 1.0rem auto',
-              boxShadow: 'inset 0 1px 3px rgba(0, 0, 0, 0)',
-              maxWidth: '260px',
+              width: 36, height: 36, borderRadius: '10px',
+              background: 'linear-gradient(135deg, #667eea, #764ba2)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
-              {[{ label: 'Iniciar sesión', mode: true }, { label: 'Registrarse', mode: false }].map(({ label, mode }) => (
-                <button key={label} type="button" onClick={() => switchMode(mode)} style={{
-                  flex: 1, padding: '0.4rem 0.8rem', borderRadius: '11px', border: 'none',
-                  background: isLogin === mode ? 'white' : 'transparent',
-                  color: isLogin === mode ? '#0f172a' : '#94a3b8',
-                  fontWeight: isLogin === mode ? 600 : 300,
-                  fontSize: '0.78rem', cursor: 'pointer', whiteSpace: 'nowrap',
-                  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                  boxShadow: isLogin === mode ? '0 2px 8px rgba(15,23,42,0.1)' : 'none',
-                }}>
-                  {label}
-                </button>
-              ))}
+              <Zap size={18} color="white" strokeWidth={2.5} />
             </div>
-
-            {/* FORMULARIO */}
-            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
-              {!isLogin && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                  <label style={{ color: '#475569', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Nombre completo</label>
-                  <input type="text" required={!isLogin} value={name} onChange={(e) => setName(e.target.value)} className="input-pro" />
-                </div>
-              )}
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                <label style={{ color: '#475569', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Correo corporativo</label>
-                <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="input-pro" />
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                <label style={{ color: '#475569', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Contraseña</label>
-                <div style={{ position: 'relative' }}>
-                  <input type={showPassword ? 'text' : 'password'} required value={password} onChange={(e) => setPassword(e.target.value)} className="input-pro" style={{ paddingRight: '3rem' }} placeholder="••••••••" />
-                  <button type="button" onClick={() => setShowPassword(!showPassword)} style={{ position: 'absolute', right: '1rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>
-                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
-                </div>
-              </div>
-
-              {error && (
-                <div style={{ padding: '0.65rem 0.9rem', borderRadius: '10px', background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626', fontSize: '0.8rem', fontWeight: 500 }}>
-                  {error}
-                </div>
-              )}
-
-              <button disabled={isLoading} style={{
-                width: '100%', padding: '0.85rem', border: 'none', borderRadius: '12px',
-                background: isLoading ? '#94a3b8' : 'linear-gradient(135deg, #15066c 0%, #0455c7 100%)',
-                color: 'white', fontSize: '0.9rem', fontWeight: 700,
-                cursor: isLoading ? 'not-allowed' : 'pointer', transition: 'all 0.3s ease',
-                boxShadow: isLoading ? 'none' : '0 6px 18px rgba(15,23,42,0.25)', marginTop: '0.1rem'
-              }}>
-                {isLoading ? 'Verificando...' : isLogin ? 'Iniciar sesión' : 'Crear mi cuenta'}
-              </button>
-            </form>
-
-            {/* DIVISOR */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', margin: '1.25rem 0' }}>
-              <div style={{ flex: 1, height: '1px', background: '#e2e8f0' }} />
-              <span style={{ fontSize: '0.7rem', color: '#cbd5e1', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>o continuar con</span>
-              <div style={{ flex: 1, height: '1px', background: '#e2e8f0' }} />
-            </div>
-
-            {/* SOCIAL LOGIN - ✅ GOOGLE AHORA FUNCIONA */}
-            <div style={{ display: 'flex', gap: '0.6rem' }}>
-              <button 
-                type="button" 
-                onClick={handleGoogleSignIn}
-                disabled={isLoading}
-                style={{
-                  flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-                  padding: '0.7rem 1rem', borderRadius: '12px', border: '1.5px solid #e2e8f0', background: 'white',
-                  color: '#1e293b', fontWeight: 600, fontSize: '0.85rem', 
-                  cursor: isLoading ? 'not-allowed' : 'pointer', 
-                  transition: 'all 0.2s ease',
-                  opacity: isLoading ? 0.6 : 1
-                }}
-                onMouseEnter={e => { 
-                  if (!isLoading) {
-                    e.currentTarget.style.borderColor = '#cbd5e1'; 
-                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)'; 
-                  }
-                }}
-                onMouseLeave={e => { 
-                  if (!isLoading) {
-                    e.currentTarget.style.borderColor = '#e2e8f0'; 
-                    e.currentTarget.style.boxShadow = 'none'; 
-                  }
-                }}
-              >
-                <svg width="16" height="16" viewBox="0 0 48 48" fill="none"><path d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z" fill="#FFC107"/><path d="M6.306 14.691l6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 16.318 4 9.656 8.337 6.306 14.691z" fill="#FF3D00"/><path d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238A11.91 11.91 0 0 1 24 36c-5.202 0-9.619-3.317-11.283-7.946l-6.522 5.025C9.505 39.556 16.227 44 24 44z" fill="#4CAF50"/><path d="M43.611 20.083H42V20H24v8h11.303a12.04 12.04 0 0 1-4.087 5.571l.003-.002 6.19 5.238C36.971 39.205 44 34 44 24c0-1.341-.138-2.65-.389-3.917z" fill="#1976D2"/></svg>
-                Google
-              </button>
-              <button type="button" style={{
-                flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-                padding: '0.7rem 1rem', borderRadius: '12px', border: 'none', background: '#1877F2',
-                color: 'white', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer', transition: 'all 0.2s ease'
-              }}
-                onMouseEnter={e => { e.currentTarget.style.background = '#1565d8'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(24,119,242,0.35)'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = '#1877F2'; e.currentTarget.style.boxShadow = 'none'; }}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
-                Facebook
-              </button>
-            </div>
-
+            <span style={{ fontSize: '1.1rem', fontWeight: 800, color: '#1e293b', letterSpacing: '-0.02em' }}>SEITRA</span>
           </div>
+
+          {/* Título y subtítulo */}
+          <h2 style={{ fontSize: '1.6rem', fontWeight: 700, color: '#1e293b', margin: '0 0 0.5rem', letterSpacing: '-0.02em' }}>
+            {isLogin ? 'Iniciar sesión' : 'Crear cuenta'}
+          </h2>
+          <p style={{ color: '#64748b', fontSize: '0.9rem', margin: '0 0 1.75rem', lineHeight: 1.5 }}>
+            Accede a tus tareas, notas y proyectos en cualquier momento y mantén todo fluyendo en un solo lugar.
+          </p>
+
+          {/* FORMULARIO */}
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+
+            {/* Nombre (solo registro) */}
+            {!isLogin && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '0.82rem', fontWeight: 600, color: '#374151' }}>Nombre completo</label>
+                <input
+                  type="text" required={!isLogin} value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Tu nombre"
+                  className="login-input"
+                />
+              </div>
+            )}
+
+            {/* Email */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{ fontSize: '0.82rem', fontWeight: 600, color: '#374151' }}>Tu email</label>
+              <input
+                type="email" required value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="tu@email.com"
+                className="login-input"
+              />
+            </div>
+
+            {/* Contraseña */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{ fontSize: '0.82rem', fontWeight: 600, color: '#374151' }}>Contraseña</label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type={showPassword ? 'text' : 'password'} required value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="login-input"
+                  style={{ paddingRight: '3rem' }}
+                />
+                <button
+                  type="button" onClick={() => setShowPassword(!showPassword)}
+                  style={{ position: 'absolute', right: '0.9rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', display: 'flex', padding: 0 }}
+                >
+                  {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+                </button>
+              </div>
+            </div>
+
+            {/* Mensajes */}
+            {success && (
+              <div style={{ padding: '10px 14px', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: '8px', color: '#16a34a', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                ✓ {success}
+              </div>
+            )}
+            {error && (
+              <div style={{ padding: '10px 14px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', color: '#dc2626', fontSize: '0.85rem' }}>
+                {error}
+              </div>
+            )}
+
+            {/* Botón submit */}
+            <button
+              type="submit" disabled={isLoading}
+              style={{
+                width: '100%', padding: '0.85rem', border: 'none', borderRadius: '10px',
+                background: isLoading ? '#94a3b8' : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                color: 'white', fontSize: '0.95rem', fontWeight: 700,
+                cursor: isLoading ? 'not-allowed' : 'pointer',
+                boxShadow: isLoading ? 'none' : '0 4px 16px rgba(102,126,234,0.4)',
+                transition: 'all 0.2s', marginTop: '0.25rem',
+                fontFamily: 'inherit',
+              }}
+            >
+              {isLoading ? 'Verificando...' : isLogin ? 'Iniciar sesión' : 'Comenzar'}
+            </button>
+          </form>
+
+          {/* Divisor */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', margin: '1.5rem 0' }}>
+            <div style={{ flex: 1, height: '1px', background: '#e8ecf0' }} />
+            <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 500, whiteSpace: 'nowrap' }}>o continuar con</span>
+            <div style={{ flex: 1, height: '1px', background: '#e8ecf0' }} />
+          </div>
+
+          {/* Botones sociales */}
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button
+              type="button" onClick={handleGoogleSignIn} disabled={isLoading}
+              className="social-btn"
+              style={{ opacity: isLoading ? 0.6 : 1, cursor: isLoading ? 'not-allowed' : 'pointer' }}
+            >
+              <svg width="16" height="16" viewBox="0 0 48 48" fill="none">
+                <path d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z" fill="#FFC107"/>
+                <path d="M6.306 14.691l6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 16.318 4 9.656 8.337 6.306 14.691z" fill="#FF3D00"/>
+                <path d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238A11.91 11.91 0 0 1 24 36c-5.202 0-9.619-3.317-11.283-7.946l-6.522 5.025C9.505 39.556 16.227 44 24 44z" fill="#4CAF50"/>
+                <path d="M43.611 20.083H42V20H24v8h11.303a12.04 12.04 0 0 1-4.087 5.571l.003-.002 6.19 5.238C36.971 39.205 44 34 44 24c0-1.341-.138-2.65-.389-3.917z" fill="#1976D2"/>
+              </svg>
+              Google
+            </button>
+            <button
+              type="button" className="social-btn"
+              style={{ background: '#1877F2', border: '1.5px solid #1877F2', color: 'white' }}
+              onMouseEnter={e => { e.currentTarget.style.background = '#1565d8'; e.currentTarget.style.borderColor = '#1565d8'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = '#1877F2'; e.currentTarget.style.borderColor = '#1877F2'; }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="white">
+                <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+              </svg>
+              Facebook
+            </button>
+          </div>
+
+          {/* Switch mode link */}
+          <p style={{ textAlign: 'center', marginTop: '1.75rem', fontSize: '0.875rem', color: '#64748b' }}>
+            {isLogin ? '¿No tienes cuenta? ' : '¿Ya tienes cuenta? '}
+            <button
+              type="button" onClick={() => switchMode(!isLogin)}
+              style={{ background: 'none', border: 'none', color: '#667eea', fontWeight: 600, cursor: 'pointer', fontSize: '0.875rem', padding: 0, fontFamily: 'inherit' }}
+            >
+              {isLogin ? 'Regístrate' : 'Inicia sesión'}
+            </button>
+          </p>
+
         </div>
       </div>
     </div>
@@ -916,13 +929,15 @@ useEffect(() => {
 
   useEffect(() => {
     loadData();
-  }, [currentEnvironment?.id]);
+  }, [currentEnvironment?.id, currentWorkspace?.id]);
   const loadData = async () => {
-    console.log('[loadData] iniciando... currentEnvironment:', currentEnvironment?.id);
+    console.log('[loadData] iniciando... currentEnvironment:', currentEnvironment?.id, '| currentWorkspace:', currentWorkspace?.id);
     // allSettled: cada recurso carga de forma independiente — si uno falla, los demás siguen
-    const projectsPromise = currentEnvironment?.id
-      ? dbProjects.getByEnvironment(currentEnvironment.id)
-      : dbProjects.getAll();
+    const projectsPromise = currentWorkspace?.id
+      ? dbProjects.getByWorkspace(currentWorkspace.id)
+      : currentEnvironment?.id
+        ? dbProjects.getByEnvironment(currentEnvironment.id)
+        : dbProjects.getAll();
     const [projectsResult, tasksResult, usersResult] = await Promise.allSettled([
       projectsPromise,
       dbTasks.getAll(),
@@ -1306,13 +1321,13 @@ useEffect(() => {
 
         <div style={contentAreaStyle}>
           {activeView === 'dashboard' && (
-            <DashboardView 
+            <DashboardView
               user={user}
+              users={users}
               tasks={tasks}
               projects={projects}
               onTaskClick={handleTaskClick}
               onProjectSelect={handleProjectSelect}
-
             />
           )}
 
@@ -1338,6 +1353,7 @@ useEffect(() => {
               onListDelete={() => {
                 handleViewChange('dashboard', 'Dashboard');
               }}
+              onError={(msg) => addToast(msg, 'error')}
             />
           )}
 
@@ -1579,9 +1595,16 @@ function TopBar({ user, onLogout, onMenuClick, searchQuery, onSearchChange, dark
 // ============================================================================
 // DASHBOARD VIEW - CORREGIDA
 // ============================================================================
-function DashboardView({ user, tasks = [], projects = [], onTaskClick, onProjectSelect }) {
+function DashboardView({ user, users = [], tasks = [], projects = [], onTaskClick, onProjectSelect }) {
+  // Resolver el ID del usuario actual: puede ser UUID (auth) o ID de tabla users
+  const currentUserRecord = users.find(u => u.id === user?.id || u.email === user?.email);
+  const currentUserId = currentUserRecord?.id ?? user?.id;
+
   // Blindaje de seguridad: Si tasks o projects llegan undefined, usamos array vacío
-  const myTasks = (tasks || []).filter(t => t.assigneeId === user?.id);
+  const myTasks = (tasks || []).filter(t =>
+    t.assigneeId !== null && t.assigneeId !== undefined &&
+    (String(t.assigneeId) === String(currentUserId) || String(t.assigneeId) === String(user?.id))
+  );
   
   const overdueTasks = myTasks.filter(t => 
     new Date(t.endDate) < new Date() && t.status !== 'completed'
@@ -1809,7 +1832,7 @@ function TaskCardCompact({ task, onClick }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '0.75rem', color: DESIGN_TOKENS.neutral[500] }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
           <Clock size={12} />
-          {new Date(task.endDate).toLocaleDateString('es-ES', { month: 'short', day: 'numeric' })}
+          {formatDate(task.endDate, { month: 'short', day: 'numeric' })}
         </span>
         <span style={{
           padding: '0.25rem 0.5rem',
@@ -1924,7 +1947,7 @@ function ProjectCard({ project, onClick, index = 0 }) {
         fontWeight: DESIGN_TOKENS.typography.weight.medium
       }}>
         <span>
-          {new Date(project.startDate).toLocaleDateString('es-ES')} - {new Date(project.endDate).toLocaleDateString('es-ES')}
+          {formatDate(project.startDate)} - {formatDate(project.endDate)}
         </span>
         <div style={{ 
           display: 'flex', 
@@ -2171,10 +2194,11 @@ function ProjectsView({ projects, createProject, deleteProject, users, currentUs
           users={users}
           currentUser={currentUser}
           onSave={async (project) => {
-            console.log('[ProjectsView] onSave recibido, environmentId:', currentEnvironment?.id, '| project.name:', project.name);
+            console.log('[ProjectsView] onSave recibido, environmentId:', currentEnvironment?.id, '| workspaceId:', currentWorkspace?.id, '| project.name:', project.name);
             try {
               await createProject({
                 ...project,
+                workspaceId: currentWorkspace?.id || null,
                 environmentId: currentEnvironment?.id || null,
                 status: project.status || 'active',
                 favorite: false,
@@ -2320,7 +2344,7 @@ function ProjectCardExtended({ project, onClick, onToggleFavorite, onDuplicate, 
         )}
 
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: DESIGN_TOKENS.neutral[400], fontWeight: 500 }}>
-          <span>{new Date(project.endDate).toLocaleDateString('es-ES')}</span>
+          <span>{formatDate(project.endDate)}</span>
           <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
             <Users size={12} />
             {project.members?.length ?? 0} miembros
@@ -2425,7 +2449,7 @@ function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTask
 
   const handleAddTask = async (task) => {
     try {
-      await onTaskCreate({ ...task, projectId: project.id });
+      await onTaskCreate({ ...task, projectId: task.projectId || project.id });
       setShowNewTask(false);
       addToast('Tarea creada exitosamente', 'success');
     } catch {
@@ -2496,7 +2520,7 @@ function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTask
                 <span style={{ fontWeight: 700, color: 'var(--text-primary, #0f172a)' }}>{projectTasks.length}</span> tareas
               </span>
               <span style={{ fontSize: '0.8rem', color: 'var(--text-muted, #64748b)', fontWeight: 500 }}>
-                {new Date(project.startDate).toLocaleDateString('es-ES')} → {new Date(project.endDate).toLocaleDateString('es-ES')}
+                {formatDate(project.startDate)} → {formatDate(project.endDate)}
               </span>
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-subtle, #94a3b8)' }}>
                 <ChevronDown size={14} /> Ver más
@@ -2554,8 +2578,8 @@ function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTask
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', marginTop: '1rem' }}>
-            <InfoItem label="Fecha inicio" value={new Date(project.startDate).toLocaleDateString('es-ES')} />
-            <InfoItem label="Fecha fin" value={new Date(project.endDate).toLocaleDateString('es-ES')} />
+            <InfoItem label="Fecha inicio" value={formatDate(project.startDate)} />
+            <InfoItem label="Fecha fin" value={formatDate(project.endDate)} />
             <InfoItem label="Tareas totales" value={projectTasks.length} />
             <InfoItem label="Completadas" value={projectTasks.filter(t => t.status === 'completed').length} />
           </div>
@@ -2604,6 +2628,8 @@ function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTask
           onTasksChange={setLiveTasks}
           onListNameChange={() => {}}
           onListDelete={() => {}}
+          onError={(msg) => addToast(msg, 'error')}
+          hideTitle
         />
       )}
 
@@ -2617,23 +2643,24 @@ function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTask
       )}
 
       {viewMode === 'gantt' && (
-        <GanttView tasks={projectTasks} project={project} />
+        <GanttView tasks={projectTasks} project={project} users={users} onTaskClick={onTaskClick} />
       )}
       
       {viewMode === 'roadmap' && (
-        <ProjectRoadmap 
-          project={project} 
-          onProjectUpdate={onProjectUpdate} 
+        <ProjectRoadmap
+          project={project}
+          tasks={projectTasks}
+          onProjectUpdate={onProjectUpdate}
         />
       )}
 
       {/* MODALES */}
       {showNewTask && (
-        <TaskFormModal users={users} tasks={projectTasks} onSave={handleAddTask} onClose={() => setShowNewTask(false)} tags={tags} />
+        <TaskFormModal users={users} tasks={projectTasks} projects={projects} currentProject={project} onSave={handleAddTask} onClose={() => setShowNewTask(false)} tags={tags} />
       )}
 
       {selectedTask && (
-        <TaskFormModal initialTask={selectedTask} users={users} tasks={projectTasks} onSave={handleUpdateTask} onClose={() => setSelectedTask(null)} tags={tags} />
+        <TaskFormModal initialTask={selectedTask} users={users} tasks={projectTasks} projects={projects} currentProject={project} onSave={handleUpdateTask} onClose={() => setSelectedTask(null)} tags={tags} />
       )}
 
       {pendingDeleteTask && (
@@ -3070,79 +3097,382 @@ function TableView({ tasks = [], users = [], onEdit, onTaskClick }) {
 // ============================================================================
 // GANTT VIEW
 // ============================================================================
-function GanttView({ tasks, project }) {
-  const startDate = new Date(project.startDate);
-  const endDate = new Date(project.endDate);
-  const totalDays = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24));
+function GanttView({ tasks, project, users = [], onTaskClick }) {
+  const [scale, setScale] = useState(null); // null = auto
+  const [tooltip, setTooltip] = useState(null); // { task, x, y }
+  const containerRef = useRef(null);
 
-  const getTaskPosition = (task) => {
-    const taskStart = new Date(task.startDate);
-    const taskEnd = new Date(task.endDate);
-    const left = Math.max(0, (taskStart - startDate) / (1000 * 60 * 60 * 24));
-    const width = Math.max(1, (taskEnd - taskStart) / (1000 * 60 * 60 * 24) + 1);
-    return { left: (left / totalDays) * 100, width: (width / totalDays) * 100 };
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const NAME_COL_W = 220;
+
+  // Split tasks with/without dates
+  const tasksWithDates = tasks.filter(t => t.startDate || t.dueDate || t.endDate);
+  const tasksWithout = tasks.filter(t => !t.startDate && !t.dueDate && !t.endDate);
+
+  // Empty state
+  if (tasks.length === 0 || tasksWithDates.length === 0) {
+    return (
+      <div style={{
+        background: 'white', borderRadius: '16px',
+        border: `1px solid ${DESIGN_TOKENS.neutral[200]}`,
+        padding: '80px 40px', textAlign: 'center',
+        boxShadow: DESIGN_TOKENS.shadows.sm
+      }}>
+        <div style={{ fontSize: '40px', marginBottom: '16px' }}>📅</div>
+        <div style={{ fontSize: '16px', fontWeight: 600, color: DESIGN_TOKENS.neutral[700], marginBottom: '8px' }}>
+          Sin fechas configuradas
+        </div>
+        <div style={{ fontSize: '14px', color: DESIGN_TOKENS.neutral[400] }}>
+          Agrega fechas a tus tareas para ver el Gantt
+        </div>
+      </div>
+    );
+  }
+
+  // Calculate range from tasks
+  const allDates = [];
+  tasksWithDates.forEach(t => {
+    const s = parseDate(t.startDate);
+    const e = parseDate(t.dueDate) || parseDate(t.endDate);
+    if (s) allDates.push(s);
+    if (e) allDates.push(e);
+  });
+  const rangeStart = new Date(Math.min(...allDates));
+  const rangeEnd = new Date(Math.max(...allDates));
+  rangeStart.setDate(rangeStart.getDate() - 7);
+  rangeEnd.setDate(rangeEnd.getDate() + 14);
+  rangeStart.setHours(0, 0, 0, 0);
+  rangeEnd.setHours(0, 0, 0, 0);
+
+  const totalDays = Math.ceil((rangeEnd - rangeStart) / (1000 * 60 * 60 * 24)) || 1;
+  const totalMonths = totalDays / 30;
+
+  const effectiveScale = scale || (totalMonths <= 3 ? 'weeks' : totalMonths <= 14 ? 'months' : 'quarters');
+
+  // Generate header columns
+  const generateColumns = () => {
+    const cols = [];
+    if (effectiveScale === 'weeks') {
+      const d = new Date(rangeStart);
+      // go to previous Monday
+      while (d.getDay() !== 1) d.setDate(d.getDate() - 1);
+      while (d <= rangeEnd) {
+        cols.push({
+          label: `${d.getDate()} ${d.toLocaleDateString('es-ES', { month: 'short' })}`,
+          start: new Date(d),
+        });
+        d.setDate(d.getDate() + 7);
+      }
+    } else if (effectiveScale === 'months') {
+      const d = new Date(rangeStart.getFullYear(), rangeStart.getMonth(), 1);
+      while (d <= rangeEnd) {
+        cols.push({
+          label: d.toLocaleDateString('es-ES', { month: 'short', year: '2-digit' }),
+          start: new Date(d),
+        });
+        d.setMonth(d.getMonth() + 1);
+      }
+    } else {
+      const d = new Date(rangeStart.getFullYear(), Math.floor(rangeStart.getMonth() / 3) * 3, 1);
+      while (d <= rangeEnd) {
+        const q = Math.floor(d.getMonth() / 3) + 1;
+        cols.push({ label: `Q${q} ${d.getFullYear()}`, start: new Date(d) });
+        d.setMonth(d.getMonth() + 3);
+      }
+    }
+    return cols;
+  };
+  const columns = generateColumns();
+
+  // Add end to each column
+  const columnsWithEnd = columns.map((col, i) => ({
+    ...col,
+    end: columns[i + 1] ? columns[i + 1].start : rangeEnd,
+  }));
+
+  const DAY_MS = 1000 * 60 * 60 * 24;
+
+  const dayToFrac = (date) => {
+    const d = new Date(date);
+    d.setHours(0, 0, 0, 0);
+    return Math.max(0, Math.min(1, (d - rangeStart) / DAY_MS / totalDays));
+  };
+
+  const todayFrac = dayToFrac(today);
+  const isTodayInRange = today >= rangeStart && today <= rangeEnd;
+
+  const projectColor = project?.color || '#6366f1';
+
+  const getBar = (task) => {
+    const start = parseDate(task.startDate);
+    const end = parseDate(task.dueDate) || parseDate(task.endDate);
+    if (!start && !end) return null;
+
+    if (start && end) {
+      // Both dates: calculate real duration
+      const startDay = (start - rangeStart) / DAY_MS;
+      const durationDays = (end - start) / DAY_MS;
+      const leftPct = (startDay / totalDays) * 100;
+      const widthPct = Math.max((durationDays / totalDays) * 100, 2);
+      return { leftPct: Math.max(0, leftPct), widthPct, dashed: false };
+    } else {
+      // Only one date: dashed bar of 3 days
+      const s = start || end;
+      const startDay = (s - rangeStart) / DAY_MS;
+      const leftPct = (startDay / totalDays) * 100;
+      const widthPct = Math.max((3 / totalDays) * 100, 2);
+      return { leftPct: Math.max(0, leftPct), widthPct, dashed: true };
+    }
+  };
+
+  const getUser = (id) => users.find(u => String(u.id) === String(id));
+
+  const ROW_H = 48;
+  const HEADER_H = 44;
+
+  const scaleButtons = [
+    { key: 'weeks', label: 'Semanas' },
+    { key: 'months', label: 'Meses' },
+    { key: 'quarters', label: 'Trimestres' },
+  ];
+
+  const renderRow = (task, idx, noDates = false) => {
+    const bar = noDates ? null : getBar(task);
+    const assignee = getUser(task.assigneeId);
+    const rowBg = idx % 2 === 0 ? 'white' : '#f8faff';
+
+    return (
+      <div key={task.id} style={{ display: 'flex', minHeight: `${ROW_H}px`, background: rowBg, borderBottom: '1px solid #f0f2f7' }}>
+        {/* Name col — sticky */}
+        <div style={{
+          minWidth: `${NAME_COL_W}px`, width: `${NAME_COL_W}px`,
+          position: 'sticky', left: 0, zIndex: 2,
+          background: rowBg,
+          borderRight: '2px solid #e5e7eb',
+          display: 'flex', alignItems: 'center', gap: '8px',
+          padding: '0 12px',
+          boxShadow: '2px 0 6px rgba(0,0,0,0.04)',
+        }}>
+          <div style={{
+            width: '8px', height: '8px', borderRadius: '50%', flexShrink: 0,
+            background: noDates ? '#d1d5db' : (projectColor),
+          }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{
+              fontSize: '13px', fontWeight: 600, color: '#111',
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+            }}>{task.title}</div>
+            {!noDates && (task.startDate || task.dueDate) && (
+              <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '1px' }}>
+                {formatDate(task.startDate, { day: '2-digit', month: 'short' })}
+                {' → '}
+                {formatDate(task.dueDate || task.endDate, { day: '2-digit', month: 'short' })}
+              </div>
+            )}
+          </div>
+          {assignee && (
+            <div title={assignee.name} style={{
+              width: '24px', height: '24px', borderRadius: '50%',
+              background: '#e0e7ff', color: '#4f46e5',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: '12px', fontWeight: 700, flexShrink: 0,
+            }}>
+              {assignee.avatar && assignee.avatar.length <= 2 ? assignee.avatar : assignee.name?.charAt(0)?.toUpperCase()}
+            </div>
+          )}
+        </div>
+
+        {/* Timeline col */}
+        <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
+          {/* Column grid lines */}
+          {columnsWithEnd.map((col, ci) => (
+            <div key={ci} style={{
+              position: 'absolute', top: 0, bottom: 0,
+              left: `${dayToFrac(col.start) * 100}%`,
+              width: `${(dayToFrac(col.end) - dayToFrac(col.start)) * 100}%`,
+              borderRight: '1px solid #f0f2f7',
+            }} />
+          ))}
+
+          {/* Today line */}
+          {isTodayInRange && (
+            <div style={{
+              position: 'absolute', top: 0, bottom: 0,
+              left: `${todayFrac * 100}%`,
+              width: '2px', background: '#ef4444',
+              zIndex: 3, pointerEvents: 'none',
+            }} />
+          )}
+
+          {/* Bar */}
+          {noDates ? (
+            <div style={{
+              position: 'absolute', top: '50%', transform: 'translateY(-50%)',
+              left: '4%', right: '4%', height: '24px',
+              border: '2px dashed #d1d5db', borderRadius: '6px',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: '11px', color: '#9ca3af',
+            }}>sin fechas</div>
+          ) : bar ? (
+            <div
+              onClick={() => onTaskClick && onTaskClick(task)}
+              onMouseEnter={(e) => {
+                const r = e.currentTarget.getBoundingClientRect();
+                setTooltip({ task, x: r.left + r.width / 2, y: r.top - 8 });
+              }}
+              onMouseLeave={() => setTooltip(null)}
+              style={{
+                position: 'absolute', top: '50%', transform: 'translateY(-50%)',
+                left: `${bar.leftPct}%`,
+                width: `${bar.widthPct}%`,
+                height: '28px',
+                background: bar.dashed ? 'transparent' : `${projectColor}30`,
+                borderRadius: '6px',
+                border: bar.dashed ? `2px dashed ${projectColor}90` : `1.5px solid ${projectColor}60`,
+                cursor: onTaskClick ? 'pointer' : 'default',
+                overflow: 'hidden',
+                zIndex: 1,
+              }}
+            >
+              {/* Progress fill */}
+              {!bar.dashed && (
+                <div style={{
+                  position: 'absolute', inset: 0,
+                  width: `${task.progress || 0}%`,
+                  background: projectColor,
+                  borderRadius: '5px',
+                  transition: 'width 0.3s',
+                }} />
+              )}
+              {/* Label: task name + progress */}
+              <div style={{
+                position: 'absolute', inset: 0,
+                display: 'flex', alignItems: 'center',
+                paddingLeft: '8px', paddingRight: '4px',
+                gap: '4px',
+                fontSize: '11px', fontWeight: 700,
+                color: (task.progress || 0) > 45 ? 'white' : projectColor,
+                whiteSpace: 'nowrap', overflow: 'hidden',
+                zIndex: 1,
+              }}>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>
+                  {bar.widthPct > 4 ? task.title : ''}
+                </span>
+                {!bar.dashed && task.progress > 0 && bar.widthPct > 8 && (
+                  <span style={{ flexShrink: 0, opacity: 0.85 }}>{task.progress}%</span>
+                )}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      </div>
+    );
   };
 
   return (
-    <div style={{
-      background: 'white',
-      borderRadius: '12px',
-      border: `1px solid ${DESIGN_TOKENS.neutral[200]}`,
-      overflow: 'auto',
-      boxShadow: DESIGN_TOKENS.shadows.sm
-    }}>
-      <div style={{ minWidth: '800px' }}>
-        {tasks.filter(t => !t.parentId).map(task => {
-          const pos = getTaskPosition(task);
-          return (
-            <div
-              key={task.id}
-              style={{
-                display: 'flex',
-                borderBottom: `1px solid ${DESIGN_TOKENS.neutral[100]}`,
-                minHeight: '60px',
-                alignItems: 'center'
-              }}
-            >
-              <div style={{
-                minWidth: '250px',
-                padding: '1rem',
-                borderRight: `1px solid ${DESIGN_TOKENS.neutral[200]}`,
-                background: DESIGN_TOKENS.neutral[50]
-              }}>
-                <div style={{ fontWeight: 600, fontSize: '0.875rem', color: DESIGN_TOKENS.neutral[800], marginBottom: '0.25rem' }}>
-                  {task.title}
-                </div>
-                <div style={{ fontSize: '0.75rem', color: DESIGN_TOKENS.neutral[500] }}>
-                  {new Date(task.startDate).toLocaleDateString('es-ES')} - {new Date(task.endDate).toLocaleDateString('es-ES')}
-                </div>
-              </div>
-              <div style={{ flex: 1, position: 'relative', padding: '0.75rem 1rem' }}>
-                <div
-                  style={{
-                    position: 'absolute',
-                    left: `calc(1rem + ${pos.left}%)`,
-                    width: `${pos.width}%`,
-                    height: '32px',
-                    background: `linear-gradient(135deg, ${PRIORITY_OPTIONS[task.priority].color}, ${PRIORITY_OPTIONS[task.priority].color}CC)`,
-                    borderRadius: '6px',
-                    color: 'white',
-                    display: 'flex',
-                    alignItems: 'center',
-                    paddingLeft: '0.75rem',
-                    fontSize: '0.75rem',
-                    fontWeight: 600,
-                    boxShadow: DESIGN_TOKENS.shadows.sm
-                  }}
-                  title={`${task.progress}% completado`}
-                >
-                  {task.progress}%
-                </div>
-              </div>
-            </div>
-          );
-        })}
+    <div style={{ position: 'relative' }}>
+      {/* Controls */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', alignItems: 'center' }}>
+        <span style={{ fontSize: '13px', color: '#6b7280', fontWeight: 500 }}>Escala:</span>
+        {scaleButtons.map(btn => (
+          <button key={btn.key} onClick={() => setScale(btn.key === effectiveScale && !scale ? null : btn.key)} style={{
+            padding: '5px 14px', borderRadius: '8px', border: '1.5px solid',
+            borderColor: effectiveScale === btn.key ? projectColor : '#e5e7eb',
+            background: effectiveScale === btn.key ? `${projectColor}15` : 'white',
+            color: effectiveScale === btn.key ? projectColor : '#374151',
+            fontSize: '13px', fontWeight: 600, cursor: 'pointer',
+          }}>{btn.label}</button>
+        ))}
+        <div style={{ flex: 1 }} />
+        {isTodayInRange && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#6b7280' }}>
+            <div style={{ width: '12px', height: '3px', background: '#ef4444', borderRadius: '2px' }} />
+            Hoy
+          </div>
+        )}
       </div>
+
+      {/* Gantt table */}
+      <div ref={containerRef} style={{
+        border: '1px solid #e5e7eb', borderRadius: '14px', overflow: 'auto',
+        boxShadow: '0 2px 12px rgba(0,0,0,0.06)', background: 'white',
+      }}>
+        <div style={{ minWidth: `${NAME_COL_W + Math.max(800, totalDays * 12)}px` }}>
+
+          {/* Header */}
+          <div style={{ display: 'flex', height: `${HEADER_H}px`, position: 'sticky', top: 0, zIndex: 10, background: 'white', borderBottom: '2px solid #e5e7eb' }}>
+            {/* Name header */}
+            <div style={{
+              minWidth: `${NAME_COL_W}px`, width: `${NAME_COL_W}px`,
+              position: 'sticky', left: 0, zIndex: 11,
+              background: '#f8faff', borderRight: '2px solid #e5e7eb',
+              display: 'flex', alignItems: 'center', paddingLeft: '16px',
+              fontSize: '11px', fontWeight: 700, color: '#6b7280', letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+            }}>TAREA</div>
+
+            {/* Timeline header */}
+            <div style={{ flex: 1, position: 'relative' }}>
+              {columnsWithEnd.map((col, ci) => (
+                <div key={ci} style={{
+                  position: 'absolute', top: 0, bottom: 0,
+                  left: `${dayToFrac(col.start) * 100}%`,
+                  width: `${(dayToFrac(col.end) - dayToFrac(col.start)) * 100}%`,
+                  borderRight: '1px solid #e5e7eb',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '11px', fontWeight: 700, color: '#374151',
+                  overflow: 'hidden', whiteSpace: 'nowrap', padding: '0 4px',
+                  background: '#f8faff',
+                }}>
+                  {col.label}
+                </div>
+              ))}
+              {/* Today marker in header */}
+              {isTodayInRange && (
+                <div style={{
+                  position: 'absolute', top: 0, bottom: 0,
+                  left: `${todayFrac * 100}%`,
+                  width: '2px', background: '#ef4444', zIndex: 4,
+                }} />
+              )}
+            </div>
+          </div>
+
+          {/* Task rows */}
+          {tasksWithDates.map((task, idx) => renderRow(task, idx, false))}
+          {tasksWithout.map((task, idx) => renderRow(task, tasksWithDates.length + idx, true))}
+        </div>
+      </div>
+
+      {/* Tooltip */}
+      {tooltip && (() => {
+        const t = tooltip.task;
+        const assignee = getUser(t.assigneeId);
+        return (
+          <div style={{
+            position: 'fixed', zIndex: 9999,
+            left: tooltip.x, top: tooltip.y,
+            transform: 'translateX(-50%) translateY(-100%)',
+            background: 'white', border: '1px solid #e5e7eb',
+            borderRadius: '10px', padding: '10px 14px',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+            pointerEvents: 'none', minWidth: '180px',
+          }}>
+            <div style={{ fontWeight: 700, fontSize: '13px', color: '#111', marginBottom: '6px' }}>{t.title}</div>
+            <div style={{ fontSize: '12px', color: '#6b7280', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+              <span>📅 {formatDate(t.startDate)} → {formatDate(t.dueDate || t.endDate)}</span>
+              <span>⏳ Progreso: <b style={{ color: projectColor }}>{t.progress || 0}%</b></span>
+              {assignee && <span>👤 {assignee.name}</span>}
+            </div>
+          </div>
+        );
+      })()}
+
+      <style>{`
+        @keyframes ganttFadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+      `}</style>
     </div>
   );
 }
@@ -3362,12 +3692,6 @@ function ProjectPillDropdown({ projects, value, onChange }) {
   );
 }
 
-const formatDate = (dateStr) => {
-  if (!dateStr) return '—';
-  const d = new Date(dateStr);
-  if (isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
-};
 
 function AllTasksView({ tasks, projects, users, currentUser, onTaskClick }) {
   const [filterStatus, setFilterStatus] = useState('all');
@@ -3376,9 +3700,18 @@ function AllTasksView({ tasks, projects, users, currentUser, onTaskClick }) {
   const [sortBy, setSortBy] = useState('recent');
   const { currentEnvironment } = useApp();
 
-  // Filtrar solo las tareas del usuario actual
-  const myTasks = (tasks || []).filter(t => t.assigneeId === currentUser?.id);
-  console.log('[MyTasks] user.id:', currentUser?.id, 'tasks asignadas:', myTasks.length);
+  // Resolver el ID del usuario actual: puede ser UUID (auth) o ID de tabla users
+  const currentUserRecord = (users || []).find(u =>
+    u.id === currentUser?.id || u.email === currentUser?.email
+  );
+  const currentUserId = currentUserRecord?.id ?? currentUser?.id;
+
+  // Filtrar solo las tareas del usuario actual (comparación flexible de tipos)
+  const myTasks = (tasks || []).filter(t =>
+    t.assigneeId !== null && t.assigneeId !== undefined &&
+    (String(t.assigneeId) === String(currentUserId) || String(t.assigneeId) === String(currentUser?.id))
+  );
+  console.log('[MyTasks] user.id:', currentUser?.id, 'resolvedId:', currentUserId, 'tasks asignadas:', myTasks.length);
 
   // Filtrar proyectos por entorno
   const environmentProjects = currentEnvironment
@@ -4055,13 +4388,13 @@ function TaskDetailModal({ task, project, users, comments, onClose, onUpdate, on
 
               <DetailItem label="Fecha inicio">
                 <div style={{ fontSize: '0.875rem', color: DESIGN_TOKENS.neutral[700] }}>
-                  {new Date(task.startDate).toLocaleDateString('es-ES', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
+                  {formatDate(task.startDate, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
                 </div>
               </DetailItem>
 
               <DetailItem label="Fecha fin">
                 <div style={{ fontSize: '0.875rem', color: DESIGN_TOKENS.neutral[700] }}>
-                  {new Date(task.endDate).toLocaleDateString('es-ES', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
+                  {formatDate(task.endDate, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
                 </div>
               </DetailItem>
 
@@ -4343,20 +4676,34 @@ function ProjectFormModal({ users = [], onSave, onClose, currentUser }) {
   );
 }
 
-function TaskFormModal({ initialTask, users, tasks, onSave, onClose, tags }) {
-  const [formData, setFormData] = useState(initialTask || {
-    title: '',
-    description: '',
-    startDate: new Date().toISOString().split('T')[0],
-    endDate: '',
-    priority: 'medium',
-    status: 'todo',
-    assigneeId: users[0]?.id,
-    progress: 0,
-    parentId: null,
-    tags: [],
-    estimatedHours: 0
+function TaskFormModal({ initialTask, users, tasks, projects = [], currentProject, onSave, onClose, tags }) {
+  const [formData, setFormData] = useState(() => {
+    if (initialTask) {
+      return {
+        ...initialTask,
+        projectId: initialTask.projectId || currentProject?.id || null,
+        roadmapPhaseId: initialTask.roadmapPhaseId || null,
+      };
+    }
+    return {
+      title: '',
+      description: '',
+      startDate: new Date().toISOString().split('T')[0],
+      endDate: '',
+      priority: 'medium',
+      status: 'todo',
+      assigneeId: users[0]?.id,
+      progress: 0,
+      parentId: null,
+      tags: [],
+      estimatedHours: 0,
+      projectId: currentProject?.id || null,
+      roadmapPhaseId: null,
+    };
   });
+
+  const selectedProject = projects.find(p => String(p.id) === String(formData.projectId)) || null;
+  const roadmapPhases = selectedProject?.roadmap?.phases?.filter(ph => ph.name) || [];
 
   const { addToast } = useToast();
 
@@ -4379,7 +4726,13 @@ function TaskFormModal({ initialTask, users, tasks, onSave, onClose, tags }) {
   const handleSubmit = (e) => {
     e.preventDefault();
     if (validateForm()) {
-      onSave(formData);
+      // Si la fase seleccionada no pertenece al proyecto actual, limpiarla
+      const phaseStillValid = roadmapPhases.some(ph => String(ph.id) === String(formData.roadmapPhaseId));
+      const dataToSave = {
+        ...formData,
+        roadmapPhaseId: phaseStillValid ? formData.roadmapPhaseId : null,
+      };
+      onSave(dataToSave);
     }
   };
 
@@ -4406,6 +4759,46 @@ function TaskFormModal({ initialTask, users, tasks, onSave, onClose, tags }) {
             style={{ ...inputStyle, resize: 'vertical' }}
           />
         </FormField>
+
+        {projects.length > 0 && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            <FormField label="Proyecto">
+              <select
+                value={formData.projectId || ''}
+                onChange={(e) => setFormData(p => ({ ...p, projectId: e.target.value || null, roadmapPhaseId: null }))}
+                style={selectStyle}
+              >
+                <option value="">Sin proyecto</option>
+                {projects.map(p => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </FormField>
+
+            <FormField label="Fase del roadmap">
+              {!formData.projectId ? (
+                <div style={{ padding: '8px 12px', color: DESIGN_TOKENS.neutral[400], fontSize: '13px', background: DESIGN_TOKENS.neutral[50], borderRadius: '8px', border: `1px solid ${DESIGN_TOKENS.neutral[200]}` }}>
+                  Selecciona un proyecto primero
+                </div>
+              ) : roadmapPhases.length === 0 ? (
+                <div style={{ padding: '8px 12px', color: DESIGN_TOKENS.neutral[400], fontSize: '13px', background: DESIGN_TOKENS.neutral[50], borderRadius: '8px', border: `1px solid ${DESIGN_TOKENS.neutral[200]}` }}>
+                  Este proyecto no tiene fases en el roadmap
+                </div>
+              ) : (
+                <select
+                  value={formData.roadmapPhaseId || ''}
+                  onChange={(e) => setFormData(p => ({ ...p, roadmapPhaseId: e.target.value || null }))}
+                  style={selectStyle}
+                >
+                  <option value="">Sin fase específica</option>
+                  {roadmapPhases.map(phase => (
+                    <option key={phase.id} value={phase.id}>{phase.name}</option>
+                  ))}
+                </select>
+              )}
+            </FormField>
+          </div>
+        )}
 
         {tasks && tasks.length > 0 && (
           <FormField label="Tarea padre (para crear subtarea)">
@@ -4473,7 +4866,7 @@ function TaskFormModal({ initialTask, users, tasks, onSave, onClose, tags }) {
         <FormField label="Asignado a" required>
           <select
             value={formData.assigneeId}
-            onChange={(e) => setFormData(p => ({ ...p, assigneeId: Number(e.target.value) }))}
+            onChange={(e) => { const v = e.target.value; setFormData(p => ({ ...p, assigneeId: isNaN(Number(v)) ? v : Number(v) })); }}
             style={selectStyle}
             required
           >

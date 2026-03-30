@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ChevronDown, ChevronRight, Plus, Flag, X, GripVertical, Check } from 'lucide-react';
+import { ChevronDown, ChevronRight, Plus, Flag, X, GripVertical, Check, ArrowUpDown } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { DESIGN_TOKENS } from '../styles/tokens';
 import { dbTasks, dbProjects, dbUsers } from '../lib/database';
 import {
   buildGroups, GroupBySelector, SortSelector, GenericGroup
 } from './shared/GroupBySelector';
+import { ColumnMenu } from './shared/ColumnMenu';
 import {
   DndContext,
   closestCenter,
@@ -242,9 +243,8 @@ const ProjectPillSelect = ({ value, projects, onChange, rounded = true }) => {
 // ============================================================================
 // SORTABLE TASK ROW
 // ============================================================================
-const TASK_GRID = '28px 20px 1fr 128px 100px 100px 100px 30px';
 
-const SortableTaskRow = ({ task, projects, users, onUpdate }) => {
+const SortableTaskRow = ({ task, projects, users, onUpdate, columns, visibleColumns }) => {
   const {
     attributes,
     listeners,
@@ -258,19 +258,93 @@ const SortableTaskRow = ({ task, projects, users, onUpdate }) => {
   const style = { transform: CSS.Transform.toString(transform), transition };
 
   const project = projects.find(p => p.id === task.projectId);
-  const assignee = task.assignee || users.find(u => u.id === task.assignee_id);
+  const assignee = task.assignee || users.find(u => u.id === task.assigneeId);
   const priority = PRIORITY_OPTIONS[task.priority] || PRIORITY_OPTIONS.medium;
   const statusDef = STATUS_PILL[task.status] || STATUS_PILL.pending;
   const initials = assignee?.name
     ? assignee.name.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase()
     : assignee?.email?.[0]?.toUpperCase() || '?';
 
+  const visibleCols = columns.filter(c => visibleColumns.includes(c.key));
+  const dynamicGrid = `28px 20px ${visibleCols.map(c => c.width).join(' ')}`;
+
+  const renderCell = (colKey) => {
+    switch (colKey) {
+      case 'nombre':
+        return (
+          <div style={{ overflow: 'hidden' }}>
+            <div style={{
+              fontWeight: 500, fontSize: '14px',
+              color: checked ? '#94a3b8' : '#111827',
+              textDecoration: checked ? 'line-through' : 'none',
+              overflow: 'hidden', textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap', lineHeight: '1.3',
+            }}>
+              {task.title}
+            </div>
+            {project && (
+              <div style={{
+                fontSize: '11px', color: '#94a3b8',
+                overflow: 'hidden', textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap', lineHeight: '1.3', marginTop: '1px',
+              }}>
+                {project.name}
+              </div>
+            )}
+          </div>
+        );
+      case 'proyecto':
+        return (
+          <div style={{ fontSize: '13px', color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {project?.name || '—'}
+          </div>
+        );
+      case 'estado':
+        return (
+          <div style={{
+            display: 'inline-flex', padding: '3px 10px',
+            background: statusDef.bg, color: statusDef.color,
+            borderRadius: '20px', fontSize: '11px', fontWeight: 700,
+            whiteSpace: 'nowrap', justifySelf: 'start',
+          }}>
+            {statusDef.label}
+          </div>
+        );
+      case 'prioridad':
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+            <Flag size={12} color={priority.color} fill={priority.color} />
+            <span style={{ color: priority.color, fontSize: '12px', fontWeight: 500 }}>{priority.label}</span>
+          </div>
+        );
+      case 'fecha_inicio':
+        return <div style={{ color: '#94a3b8', fontSize: '12px' }}>{task.start_date || '—'}</div>;
+      case 'fecha_limite':
+        return <div style={{ color: '#94a3b8', fontSize: '12px' }}>{task.due_date || '—'}</div>;
+      case 'semana':
+        return <div style={{ color: '#94a3b8', fontSize: '12px' }}>{task.week || '—'}</div>;
+      case 'asignado':
+        return assignee ? (
+          <div style={{
+            width: '26px', height: '26px', borderRadius: '50%',
+            background: '#1e3a5f', color: 'white',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: '10px', fontWeight: 700, flexShrink: 0,
+          }}>
+            {initials}
+          </div>
+        ) : <div style={{ width: '26px' }} />;
+      default:
+        return <div />;
+    }
+  };
+
   return (
     <div ref={setNodeRef} style={{ ...style, opacity: isDragging ? 0.5 : 1 }}>
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: TASK_GRID,
+          gridTemplateColumns: dynamicGrid,
           gap: '8px',
           padding: '9px 32px',
           background: isDragging ? '#eef6ff' : 'white',
@@ -309,82 +383,12 @@ const SortableTaskRow = ({ task, projects, users, onUpdate }) => {
           <GripVertical size={14} />
         </div>
 
-        {/* TITLE + PROJECT SUBTITLE */}
-        <div style={{ overflow: 'hidden' }}>
-          <div style={{
-            fontWeight: 500,
-            fontSize: '14px',
-            color: checked ? '#94a3b8' : '#111827',
-            textDecoration: checked ? 'line-through' : 'none',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-            lineHeight: '1.3',
-          }}>
-            {task.title}
-          </div>
-          {project && (
-            <div style={{
-              fontSize: '11px',
-              color: '#94a3b8',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              lineHeight: '1.3',
-              marginTop: '1px',
-            }}>
-              {project.name}
-            </div>
-          )}
-        </div>
-
-        {/* STATUS PILL */}
-        <div style={{
-          display: 'inline-flex',
-          padding: '3px 10px',
-          background: statusDef.bg,
-          color: statusDef.color,
-          borderRadius: '20px',
-          fontSize: '11px',
-          fontWeight: 700,
-          whiteSpace: 'nowrap',
-          justifySelf: 'start',
-        }}>
-          {statusDef.label}
-        </div>
-
-        {/* PRIORITY */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-          <Flag size={12} color={priority.color} fill={priority.color} />
-          <span style={{ color: priority.color, fontSize: '12px', fontWeight: 500 }}>{priority.label}</span>
-        </div>
-
-        {/* START DATE */}
-        <div style={{ color: '#94a3b8', fontSize: '12px' }}>
-          {task.start_date || '—'}
-        </div>
-
-        {/* DUE DATE */}
-        <div style={{ color: '#94a3b8', fontSize: '12px' }}>
-          {task.due_date || '—'}
-        </div>
-
-        {/* ASSIGNEE AVATAR */}
-        <div>
-          {assignee ? (
-            <div style={{
-              width: '26px', height: '26px', borderRadius: '50%',
-              background: '#1e3a5f', color: 'white',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: '10px', fontWeight: 700, flexShrink: 0,
-              title: assignee.name || assignee.email,
-            }}>
-              {initials}
-            </div>
-          ) : (
-            <div style={{ width: '26px' }} />
-          )}
-        </div>
+        {/* DYNAMIC CELLS */}
+        {visibleCols.map(col => (
+          <React.Fragment key={col.key}>
+            {renderCell(col.key)}
+          </React.Fragment>
+        ))}
       </div>
     </div>
   );
@@ -483,8 +487,25 @@ function BacklogView() {
   const [groupBy, setGroupBy] = useState('status');
   const [sortDirection, setSortDirection] = useState('asc');
   const [collapsedGroups, setCollapsedGroups] = useState({});
+  const [columns, setColumns] = useState([
+    { key: 'nombre', label: 'NOMBRE', width: '1fr' },
+    { key: 'proyecto', label: 'PROYECTO', width: '150px' },
+    { key: 'estado', label: 'ESTADO', width: '120px' },
+    { key: 'prioridad', label: 'PRIORIDAD', width: '120px' },
+    { key: 'fecha_inicio', label: 'FECHA INICIO', width: '130px' },
+    { key: 'fecha_limite', label: 'FECHA LÍMITE', width: '130px' },
+    { key: 'semana', label: 'SEMANA', width: '120px' },
+    { key: 'asignado', label: 'ASIGNADO', width: '150px' },
+  ]);
+  const [visibleColumns, setVisibleColumns] = useState(
+    ['nombre', 'estado', 'prioridad', 'fecha_inicio', 'fecha_limite', 'asignado']
+  );
+  const [draggedCol, setDraggedCol] = useState(null);
+  const [dragOverCol, setDragOverCol] = useState(null);
+  const [colMenu, setColMenu] = useState(null);
 
   // ── Cargar datos cuando cambia el workspace ──────────────────────────────
+  // String() normaliza número/string para evitar disparos dobles por coerción de tipo
   useEffect(() => {
     if (!currentWorkspace?.id) {
       setTasks([]);
@@ -492,7 +513,7 @@ function BacklogView() {
       return;
     }
     loadData();
-  }, [currentWorkspace?.id]);
+  }, [String(currentWorkspace?.id ?? '')]);
 
   const loadData = async () => {
     setIsLoading(true);
@@ -517,6 +538,18 @@ function BacklogView() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const reorderColumns = (fromKey, toKey) => {
+    if (!fromKey || !toKey || fromKey === toKey) return;
+    setColumns(prev => {
+      const next = [...prev];
+      const fromIdx = next.findIndex(c => c.key === fromKey);
+      const toIdx = next.findIndex(c => c.key === toKey);
+      const [moved] = next.splice(fromIdx, 1);
+      next.splice(toIdx, 0, moved);
+      return next;
+    });
   };
 
   // ── Drag & Drop ──────────────────────────────────────────────────────────
@@ -589,10 +622,7 @@ function BacklogView() {
   const handleSaveNewTask = async (taskData) => {
     if (!currentWorkspace?.id) return;
 
-    if (!taskData.projectId) {
-      console.warn('[handleSaveNewTask] Sin proyecto seleccionado — abortando');
-      return;
-    }
+
 
     const payload = {
       title: taskData.title,
@@ -637,6 +667,7 @@ function BacklogView() {
   }
 
   return (
+    <>
     <DndContext
       sensors={sensors}
       collisionDetection={closestCenter}
@@ -687,32 +718,60 @@ function BacklogView() {
           {/* inner wrapper — evita que 1fr comprima las columnas */}
           <div style={{ minWidth: 'fit-content', width: '100%' }}>
           {/* TABLE HEADER */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: TASK_GRID,
-            gap: '8px',
-            padding: '8px 32px',
-            background: 'white',
-            borderBottom: '2px solid #f1f5f9',
-            fontSize: '11px',
-            fontWeight: 700,
-            color: '#94a3b8',
-            textTransform: 'uppercase',
-            letterSpacing: '1.5px',
-            position: 'sticky',
-            top: 0,
-            zIndex: 10,
-            minWidth: 'fit-content',
-          }}>
-            <div />
-            <div />
-            <div>Nombre</div>
-            <div>Estado</div>
-            <div>Prioridad</div>
-            <div>Fecha inicio</div>
-            <div>Fecha límite</div>
-            <div />
-          </div>
+          {(() => {
+            const visibleCols = columns.filter(c => visibleColumns.includes(c.key));
+            const dynGrid = `28px 20px ${visibleCols.map(c => c.width).join(' ')}`;
+            return (
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: dynGrid,
+                gap: '8px',
+                padding: '8px 32px',
+                background: 'white',
+                borderBottom: '2px solid #f1f5f9',
+                fontSize: '11px',
+                fontWeight: 700,
+                color: '#94a3b8',
+                textTransform: 'uppercase',
+                letterSpacing: '1.5px',
+                position: 'sticky',
+                top: 0,
+                zIndex: 10,
+                minWidth: 'fit-content',
+              }}>
+                <div />
+                <div />
+                {visibleCols.map(col => (
+                  <div
+                    key={col.key}
+                    draggable
+                    onDragStart={() => setDraggedCol(col.key)}
+                    onDragOver={(e) => { e.preventDefault(); setDragOverCol(col.key); }}
+                    onDrop={() => { reorderColumns(draggedCol, col.key); setDraggedCol(null); setDragOverCol(null); }}
+                    onDragEnd={() => { setDraggedCol(null); setDragOverCol(null); }}
+                    onClick={(e) => {
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      setColMenu({ col, x: rect.left, y: rect.bottom + 4 });
+                    }}
+                    style={{
+                      cursor: 'pointer',
+                      opacity: draggedCol === col.key ? 0.4 : 1,
+                      borderLeft: dragOverCol === col.key && draggedCol !== col.key
+                        ? '2px solid #1e3a5f' : '2px solid transparent',
+                      paddingLeft: '4px',
+                      userSelect: 'none',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                    }}
+                  >
+                    {col.label}
+                    <ArrowUpDown size={10} style={{ opacity: 0.4 }} />
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
 
           {isLoading ? (
             <div style={{ padding: '40px', textAlign: 'center', color: DESIGN_TOKENS.neutral[400] }}>
@@ -743,12 +802,22 @@ function BacklogView() {
                         task={task}
                         projects={projects}
                         users={users}
+                        columns={columns}
+                        visibleColumns={visibleColumns}
                         onUpdate={async (updated) => {
+                          console.log('[updateTask] campo: assigneeId, valor:', updated.assigneeId);
+                          const payload = { ...updated };
+                          console.log('[updateTask] enviando a Supabase:', payload);
+                          // Optimistic update: refleja el cambio antes del await
+                          const prev = tasks;
+                          setTasks(p => p.map(t => t.id === task.id ? { ...t, ...updated } : t));
                           try {
-                            await dbTasks.update(task.id, updated);
-                            setTasks(prev => prev.map(t => t.id === task.id ? { ...t, ...updated } : t));
+                            const result = await dbTasks.update(task.id, payload);
+                            console.log('[updateTask] respuesta Supabase:', result);
                           } catch (error) {
-                            console.error('Error actualizando tarea:', error);
+                            console.log('[updateTask] error si hay:', error);
+                            // Revert on error
+                            setTasks(prev);
                           }
                         }}
                       />
@@ -777,7 +846,7 @@ function BacklogView() {
         {activeTask ? (
           <div style={{
             display: 'grid',
-            gridTemplateColumns: TASK_GRID,
+            gridTemplateColumns: `28px 20px ${columns.filter(c => visibleColumns.includes(c.key)).map(c => c.width).join(' ')}`,
             gap: '8px',
             padding: '10px 32px',
             background: 'white',
@@ -795,6 +864,25 @@ function BacklogView() {
         ) : null}
       </DragOverlay>
     </DndContext>
+      {colMenu && (
+        <ColumnMenu
+          col={colMenu.col}
+          x={colMenu.x}
+          y={colMenu.y}
+          columns={columns}
+          setColumns={setColumns}
+          visibleColumns={visibleColumns}
+          setVisibleColumns={setVisibleColumns}
+          onSort={(colKey, dir) => setTasks(prev => [...prev].sort((a, b) => {
+            const va = String(a[colKey] ?? '');
+            const vb = String(b[colKey] ?? '');
+            return dir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
+          }))}
+          setGroupBy={setGroupBy}
+          onClose={() => setColMenu(null)}
+        />
+      )}
+    </>
   );
 }
 
@@ -811,15 +899,9 @@ const NewTaskRow = ({ status, defaultData = {}, projects, users, onSave, onCance
     assigneeId: defaultData.assigneeId || null,
     status: defaultData.status || status || 'pending',
   });
-  const [projectError, setProjectError] = useState(false);
 
   const handleSave = () => {
     if (!taskData.title.trim()) return;
-    if (!taskData.projectId) {
-      setProjectError(true);
-      return;
-    }
-    setProjectError(false);
     onSave(taskData);
   };
 
@@ -839,7 +921,7 @@ const NewTaskRow = ({ status, defaultData = {}, projects, users, onSave, onCance
   return (
     <div style={{
       display: 'grid',
-      gridTemplateColumns: TASK_GRID,
+      gridTemplateColumns: '28px 20px 1fr 120px 120px 130px 130px 150px',
       gap: '8px',
       padding: '9px 32px',
       background: '#ffffff',
@@ -887,14 +969,9 @@ const NewTaskRow = ({ status, defaultData = {}, projects, users, onSave, onCance
         <ProjectPillSelect
           value={taskData.projectId}
           projects={projects}
-          onChange={(id) => { setProjectError(false); setTaskData({ ...taskData, projectId: id }); }}
+          onChange={(id) => setTaskData({ ...taskData, projectId: id })}
           rounded={false}
         />
-        {projectError && (
-          <div style={{ fontSize: '11px', color: '#ef4444', marginTop: '2px' }}>
-            Selecciona un proyecto
-          </div>
-        )}
       </div>
 
       {/* PRIORIDAD — pill dropdown compacto */}

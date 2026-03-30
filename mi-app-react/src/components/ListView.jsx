@@ -1,4 +1,6 @@
-import { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import ConfirmModal from './ConfirmModal';
+import { ColumnMenu } from './shared/ColumnMenu';
 import {
   ChevronRight, Flag, X, GripVertical,
   MoreVertical, Pencil, Trash2
@@ -52,8 +54,6 @@ const STATUS_OPTIONS = {
   blocked:     { label: 'Bloqueado',   color: '#DC2626', bg: '#FFEBEE' },
 };
 
-// Grid columns — penúltima columna es el asignado, última es acciones
-const ROW_GRID = '24px 350px 150px 120px 120px 120px 120px 150px 140px auto';
 
 // ============================================================================
 // CUSTOM PILL SELECTS
@@ -204,7 +204,7 @@ const ArrayPillSelect = ({ value, items, idKey = 'id', labelKey = 'name', colorK
 // ============================================================================
 // SORTABLE TASK ROW
 // ============================================================================
-const SortableTaskRow = ({ task, projects = [], users = [], weeks = [], onUpdate, onDelete }) => {
+const SortableTaskRow = ({ task, projects = [], users = [], weeks = [], onUpdate, onDelete, columns = [], visibleColumns = [] }) => {
   const {
     attributes,
     listeners,
@@ -246,243 +246,236 @@ const SortableTaskRow = ({ task, projects = [], users = [], weeks = [], onUpdate
 
   return (
     <div ref={setNodeRef} style={{ ...style, opacity: isDragging ? 0.5 : 1 }}>
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: ROW_GRID,
-          gap: '8px',
-          padding: '12px 32px',
-          background: isDragging ? DESIGN_TOKENS.primary.lightest : 'white',
-          borderTop: isEditing ? '1px solid #e2e8f0' : 'none',
-          borderRight: isEditing ? '1px solid #e2e8f0' : 'none',
-          borderBottom: isEditing ? '1px solid #e2e8f0' : `1px solid ${DESIGN_TOKENS.border.color.subtle}`,
-          borderLeft: isEditing ? `3px solid ${DESIGN_TOKENS.primary.base}` : 'none',
-          borderRadius: isEditing ? '8px' : '0',
-          boxShadow: isEditing ? '0 2px 10px rgba(0,102,255,0.08)' : (isDragging ? DESIGN_TOKENS.shadows.lg : 'none'),
-          margin: isEditing ? '4px 0' : '0',
-          outline: isDragging ? `2px solid ${DESIGN_TOKENS.primary.base}` : 'none',
-          alignItems: 'center',
-          fontSize: '13px',
-          transition: 'all 0.15s',
-        }}
-        onMouseEnter={(e) => { if (!isDragging && !isEditing) e.currentTarget.style.background = DESIGN_TOKENS.neutral[50]; }}
-        onMouseLeave={(e) => { if (!isDragging && !isEditing) e.currentTarget.style.background = 'white'; }}
-        onDoubleClick={() => setIsEditing(true)}
-      >
-        {/* DRAG HANDLE */}
-        <div
-          {...attributes}
-          {...listeners}
-          style={{
-            cursor: isDragging ? 'grabbing' : 'grab',
-            color: DESIGN_TOKENS.neutral[400],
-            display: 'flex', opacity: 0.5, transition: 'opacity 0.2s',
-          }}
-          onMouseEnter={(e) => e.currentTarget.style.opacity = 1}
-          onMouseLeave={(e) => e.currentTarget.style.opacity = 0.5}
-        >
-          <GripVertical size={16} />
-        </div>
+      {(() => {
+        const visibleCols = columns.filter(c => visibleColumns.includes(c.key));
+        const dynGrid = `24px ${visibleCols.map(c => c.width).join(' ')} auto`;
 
-        {/* TITLE */}
-        {isEditing ? (
-          <input
-            type="text"
-            value={editedTask.title}
-            onChange={(e) => setEditedTask({ ...editedTask, title: e.target.value })}
-            onKeyDown={(e) => handleKeyDown(e, 'title')}
-            autoFocus
-            style={{
-              border: 'none', background: 'transparent', fontSize: '13px',
-              fontWeight: 500, outline: 'none',
-              fontFamily: DESIGN_TOKENS.typography.fontFamily,
-              color: DESIGN_TOKENS.neutral[800],
-            }}
-          />
-        ) : (
-          <div style={{ fontWeight: 500, color: DESIGN_TOKENS.neutral[800] }}>
-            {task.title}
-          </div>
-        )}
-
-        {/* PROJECT */}
-        {isEditing ? (
-          <ArrayPillSelect
-            value={editedTask.projectId}
-            items={projects}
-            onChange={(id) => setEditedTask({ ...editedTask, projectId: id })}
-            placeholder="Proyecto"
-          />
-        ) : (
-          <div style={{
-            padding: '4px 10px',
-            background: project?.color ? project.color + '20' : DESIGN_TOKENS.neutral[100],
-            color: project?.color || DESIGN_TOKENS.neutral[600],
-            borderRadius: '4px', fontSize: '12px', textAlign: 'center',
-            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-          }}>
-            {project?.name || '—'}
-          </div>
-        )}
-
-        {/* STATUS */}
-        {isEditing ? (
-          <PillSelect
-            value={editedTask.status}
-            options={STATUS_OPTIONS}
-            onChange={(v) => setEditedTask({ ...editedTask, status: v })}
-          />
-        ) : (
-          <div style={{
-            padding: '4px 10px', background: status.bg, color: status.color,
-            borderRadius: '4px', fontSize: '11px', fontWeight: 600,
-            textAlign: 'center', whiteSpace: 'nowrap',
-          }}>
-            {status.label}
-          </div>
-        )}
-
-        {/* PRIORITY */}
-        {isEditing ? (
-          <PillSelect
-            value={editedTask.priority}
-            options={PRIORITY_OPTIONS}
-            onChange={(v) => setEditedTask({ ...editedTask, priority: v })}
-          />
-        ) : (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <Flag size={14} color={priority.color} fill={priority.color} />
-            <span style={{ color: priority.color, fontSize: '12px' }}>{priority.label}</span>
-          </div>
-        )}
-
-        {/* START DATE */}
-        {isEditing ? (
-          <input
-            type="date"
-            value={editedTask.startDate || ''}
-            onChange={(e) => setEditedTask({ ...editedTask, startDate: e.target.value })}
-            style={dateInputStyle}
-          />
-        ) : (
-          <div style={{ color: DESIGN_TOKENS.neutral[600], fontSize: '12px' }}>
-            {task.startDate || '—'}
-          </div>
-        )}
-
-        {/* END DATE */}
-        {isEditing ? (
-          <input
-            type="date"
-            value={editedTask.endDate || ''}
-            onChange={(e) => setEditedTask({ ...editedTask, endDate: e.target.value })}
-            style={dateInputStyle}
-          />
-        ) : (
-          <div style={{ color: DESIGN_TOKENS.neutral[600], fontSize: '12px' }}>
-            {task.endDate || '—'}
-          </div>
-        )}
-
-        {/* WEEK */}
-        {isEditing ? (
-          <ArrayPillSelect
-            value={editedTask.weekId}
-            items={weeks}
-            onChange={(id) => setEditedTask({ ...editedTask, weekId: id })}
-            placeholder="Semana"
-          />
-        ) : (
-          <div style={{ color: DESIGN_TOKENS.neutral[500], fontSize: '12px' }}>
-            {week?.name || '—'}
-          </div>
-        )}
-
-        {/* ASSIGNEE */}
-        {isEditing ? (
-          <ArrayPillSelect
-            value={editedTask.assigneeId}
-            items={users}
-            labelKey="name"
-            onChange={(id) => setEditedTask({ ...editedTask, assigneeId: id })}
-            placeholder="Asignado"
-          />
-        ) : (
-          (() => {
-            const assignee = users.find(u => u.id === task.assigneeId);
-            if (!assignee) return <div style={{ color: DESIGN_TOKENS.neutral[400], fontSize: '12px' }}>—</div>;
-            const initials = assignee.name
-              ? assignee.name.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase()
-              : assignee.email?.[0]?.toUpperCase() || '?';
-            return (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+        const renderCell = (colKey) => {
+          switch (colKey) {
+            case 'nombre':
+              return isEditing ? (
+                <input
+                  type="text"
+                  value={editedTask.title}
+                  onChange={(e) => setEditedTask({ ...editedTask, title: e.target.value })}
+                  onKeyDown={(e) => handleKeyDown(e, 'title')}
+                  autoFocus
+                  style={{
+                    border: 'none', background: 'transparent', fontSize: '13px',
+                    fontWeight: 500, outline: 'none',
+                    fontFamily: DESIGN_TOKENS.typography.fontFamily,
+                    color: DESIGN_TOKENS.neutral[800],
+                  }}
+                />
+              ) : (
+                <div style={{ fontWeight: 500, color: DESIGN_TOKENS.neutral[800] }}>{task.title}</div>
+              );
+            case 'proyecto':
+              return isEditing ? (
+                <ArrayPillSelect
+                  value={editedTask.projectId}
+                  items={projects}
+                  onChange={(id) => setEditedTask({ ...editedTask, projectId: id })}
+                  placeholder="Proyecto"
+                />
+              ) : (
                 <div style={{
-                  width: '24px', height: '24px', borderRadius: '50%',
-                  background: DESIGN_TOKENS.primary.base, color: 'white',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: '10px', fontWeight: 700, flexShrink: 0,
+                  padding: '4px 10px',
+                  background: project?.color ? project.color + '20' : DESIGN_TOKENS.neutral[100],
+                  color: project?.color || DESIGN_TOKENS.neutral[600],
+                  borderRadius: '4px', fontSize: '12px', textAlign: 'center',
+                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                 }}>
-                  {initials}
+                  {project?.name || '—'}
                 </div>
-                <span style={{ fontSize: '12px', color: DESIGN_TOKENS.neutral[700], overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {assignee.name || assignee.email}
-                </span>
-              </div>
-            );
-          })()
-        )}
+              );
+            case 'estado':
+              return isEditing ? (
+                <PillSelect
+                  value={editedTask.status}
+                  options={STATUS_OPTIONS}
+                  onChange={(v) => setEditedTask({ ...editedTask, status: v })}
+                />
+              ) : (
+                <div style={{
+                  padding: '4px 10px', background: status.bg, color: status.color,
+                  borderRadius: '4px', fontSize: '11px', fontWeight: 600,
+                  textAlign: 'center', whiteSpace: 'nowrap',
+                }}>
+                  {status.label}
+                </div>
+              );
+            case 'prioridad':
+              return isEditing ? (
+                <PillSelect
+                  value={editedTask.priority}
+                  options={PRIORITY_OPTIONS}
+                  onChange={(v) => setEditedTask({ ...editedTask, priority: v })}
+                />
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Flag size={14} color={priority.color} fill={priority.color} />
+                  <span style={{ color: priority.color, fontSize: '12px' }}>{priority.label}</span>
+                </div>
+              );
+            case 'fecha_inicio':
+              return isEditing ? (
+                <input type="date" value={editedTask.startDate || ''}
+                  onChange={(e) => setEditedTask({ ...editedTask, startDate: e.target.value })}
+                  style={dateInputStyle} />
+              ) : (
+                <div style={{ color: DESIGN_TOKENS.neutral[600], fontSize: '12px' }}>{task.startDate || '—'}</div>
+              );
+            case 'fecha_limite':
+              return isEditing ? (
+                <input type="date" value={editedTask.endDate || ''}
+                  onChange={(e) => setEditedTask({ ...editedTask, endDate: e.target.value })}
+                  style={dateInputStyle} />
+              ) : (
+                <div style={{ color: DESIGN_TOKENS.neutral[600], fontSize: '12px' }}>{task.endDate || '—'}</div>
+              );
+            case 'semana':
+              return isEditing ? (
+                <ArrayPillSelect
+                  value={editedTask.weekId}
+                  items={weeks}
+                  onChange={(id) => setEditedTask({ ...editedTask, weekId: id })}
+                  placeholder="Semana"
+                />
+              ) : (
+                <div style={{ color: DESIGN_TOKENS.neutral[500], fontSize: '12px' }}>{week?.name || '—'}</div>
+              );
+            case 'asignado':
+              return isEditing ? (
+                <ArrayPillSelect
+                  value={editedTask.assigneeId}
+                  items={users}
+                  labelKey="name"
+                  onChange={(id) => setEditedTask({ ...editedTask, assigneeId: id })}
+                  placeholder="Asignado"
+                />
+              ) : (() => {
+                const assignee = users.find(u => u.id === task.assigneeId);
+                if (!assignee) return <div style={{ color: DESIGN_TOKENS.neutral[400], fontSize: '12px' }}>—</div>;
+                const initials = assignee.name
+                  ? assignee.name.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase()
+                  : assignee.email?.[0]?.toUpperCase() || '?';
+                return (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <div style={{
+                      width: '24px', height: '24px', borderRadius: '50%',
+                      background: DESIGN_TOKENS.primary.base, color: 'white',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: '10px', fontWeight: 700, flexShrink: 0,
+                    }}>{initials}</div>
+                    <span style={{ fontSize: '12px', color: DESIGN_TOKENS.neutral[700], overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {assignee.name || assignee.email}
+                    </span>
+                  </div>
+                );
+              })();
+            default:
+              return null;
+          }
+        };
 
-        {/* ACTIONS */}
-        {isEditing ? (
-          <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-            <button
-              onClick={handleSave}
-              style={{
-                padding: '6px 12px', background: DESIGN_TOKENS.primary.base, color: 'white',
-                border: 'none', borderRadius: '6px', cursor: 'pointer',
-                fontSize: '12px', fontWeight: 600, whiteSpace: 'nowrap',
-                transition: 'background 0.15s',
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.background = DESIGN_TOKENS.primary.dark}
-              onMouseLeave={(e) => e.currentTarget.style.background = DESIGN_TOKENS.primary.base}
-            >
-              Guardar
-            </button>
-            <button
-              onClick={() => { setEditedTask(task); setIsEditing(false); }}
-              style={{
-                padding: '6px', background: DESIGN_TOKENS.neutral[100],
-                color: DESIGN_TOKENS.neutral[600], border: 'none',
-                borderRadius: '6px', cursor: 'pointer', display: 'flex',
-                transition: 'background 0.15s',
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.background = DESIGN_TOKENS.neutral[200]}
-              onMouseLeave={(e) => e.currentTarget.style.background = DESIGN_TOKENS.neutral[100]}
-            >
-              <X size={13} />
-            </button>
-          </div>
-        ) : (
-          <button
-            onClick={() => onDelete(task.id)}
+        return (
+          <div
             style={{
-              padding: '6px', background: 'transparent', border: 'none',
-              color: DESIGN_TOKENS.neutral[400], cursor: 'pointer',
-              borderRadius: '4px', display: 'flex',
+              display: 'grid',
+              gridTemplateColumns: dynGrid,
+              gap: '8px',
+              padding: '12px 32px',
+              background: isDragging ? DESIGN_TOKENS.primary.lightest : 'white',
+              borderTop: isEditing ? '1px solid #e2e8f0' : 'none',
+              borderRight: isEditing ? '1px solid #e2e8f0' : 'none',
+              borderBottom: isEditing ? '1px solid #e2e8f0' : `1px solid ${DESIGN_TOKENS.border.color.subtle}`,
+              borderLeft: isEditing ? `3px solid ${DESIGN_TOKENS.primary.base}` : 'none',
+              borderRadius: isEditing ? '8px' : '0',
+              boxShadow: isEditing ? '0 2px 10px rgba(0,102,255,0.08)' : (isDragging ? DESIGN_TOKENS.shadows.lg : 'none'),
+              margin: isEditing ? '4px 0' : '0',
+              outline: isDragging ? `2px solid ${DESIGN_TOKENS.primary.base}` : 'none',
+              alignItems: 'center',
+              fontSize: '13px',
+              transition: 'all 0.15s',
             }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = DESIGN_TOKENS.danger.light;
-              e.currentTarget.style.color = DESIGN_TOKENS.danger.base;
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'transparent';
-              e.currentTarget.style.color = DESIGN_TOKENS.neutral[400];
-            }}
+            onMouseEnter={(e) => { if (!isDragging && !isEditing) e.currentTarget.style.background = DESIGN_TOKENS.neutral[50]; }}
+            onMouseLeave={(e) => { if (!isDragging && !isEditing) e.currentTarget.style.background = 'white'; }}
+            onDoubleClick={() => setIsEditing(true)}
           >
-            <Trash2 size={14} />
-          </button>
-        )}
-      </div>
+            {/* DRAG HANDLE */}
+            <div
+              {...attributes}
+              {...listeners}
+              style={{
+                cursor: isDragging ? 'grabbing' : 'grab',
+                color: DESIGN_TOKENS.neutral[400],
+                display: 'flex', opacity: 0.5, transition: 'opacity 0.2s',
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.opacity = 1}
+              onMouseLeave={(e) => e.currentTarget.style.opacity = 0.5}
+            >
+              <GripVertical size={16} />
+            </div>
+
+            {/* DYNAMIC COLUMNS */}
+            {visibleCols.map(col => (
+              <React.Fragment key={col.key}>{renderCell(col.key)}</React.Fragment>
+            ))}
+
+            {/* ACTIONS */}
+            {isEditing ? (
+              <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                <button
+                  onClick={handleSave}
+                  style={{
+                    padding: '6px 12px', background: DESIGN_TOKENS.primary.base, color: 'white',
+                    border: 'none', borderRadius: '6px', cursor: 'pointer',
+                    fontSize: '12px', fontWeight: 600, whiteSpace: 'nowrap',
+                    transition: 'background 0.15s',
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = DESIGN_TOKENS.primary.dark}
+                  onMouseLeave={(e) => e.currentTarget.style.background = DESIGN_TOKENS.primary.base}
+                >
+                  Guardar
+                </button>
+                <button
+                  onClick={() => { setEditedTask(task); setIsEditing(false); }}
+                  style={{
+                    padding: '6px', background: DESIGN_TOKENS.neutral[100],
+                    color: DESIGN_TOKENS.neutral[600], border: 'none',
+                    borderRadius: '6px', cursor: 'pointer', display: 'flex',
+                    transition: 'background 0.15s',
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = DESIGN_TOKENS.neutral[200]}
+                  onMouseLeave={(e) => e.currentTarget.style.background = DESIGN_TOKENS.neutral[100]}
+                >
+                  <X size={13} />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => onDelete(task.id)}
+                style={{
+                  padding: '6px', background: 'transparent', border: 'none',
+                  color: DESIGN_TOKENS.neutral[400], cursor: 'pointer',
+                  borderRadius: '4px', display: 'flex',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = DESIGN_TOKENS.danger.light;
+                  e.currentTarget.style.color = DESIGN_TOKENS.danger.base;
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.color = DESIGN_TOKENS.neutral[400];
+                }}
+              >
+                <Trash2 size={14} />
+              </button>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 };
@@ -498,7 +491,9 @@ function ListView({
   users = [],
   onTasksChange = () => {},
   onListNameChange = () => {},
-  onListDelete = () => {}
+  onListDelete = () => {},
+  onError = () => {},
+  hideTitle = false,
 }) {
   const { currentEnvironment, currentWorkspace } = useApp();
   const [listName, setListName] = useState(initialListName);
@@ -517,6 +512,35 @@ function ListView({
   const [sortDirection, setSortDirection] = useState('asc');
   const [collapsedGroups, setCollapsedGroups] = useState({});
   const savingTaskRef = useRef(false);
+
+  const [columns, setColumns] = useState([
+    { key: 'nombre',       label: 'NOMBRE',       width: '1fr'   },
+    { key: 'proyecto',     label: 'PROYECTO',     width: '150px' },
+    { key: 'estado',       label: 'ESTADO',       width: '120px' },
+    { key: 'prioridad',    label: 'PRIORIDAD',    width: '120px' },
+    { key: 'fecha_inicio', label: 'FECHA INICIO', width: '120px' },
+    { key: 'fecha_limite', label: 'FECHA LÍMITE', width: '120px' },
+    { key: 'asignado',     label: 'ASIGNADO',     width: '140px' },
+  ]);
+  const [visibleColumns, setVisibleColumns] = useState([
+    'nombre', 'proyecto', 'estado', 'prioridad', 'fecha_inicio', 'fecha_limite', 'asignado'
+  ]);
+  const [draggedCol, setDraggedCol] = useState(null);
+  const [dragOverCol, setDragOverCol] = useState(null);
+  const [colMenu, setColMenu] = useState(null);
+
+  const reorderColumns = (fromKey, toKey) => {
+    if (!fromKey || !toKey || fromKey === toKey) return;
+    setColumns(prev => {
+      const next = [...prev];
+      const fromIdx = next.findIndex(c => c.key === fromKey);
+      const toIdx = next.findIndex(c => c.key === toKey);
+      if (fromIdx === -1 || toIdx === -1) return prev;
+      const [moved] = next.splice(fromIdx, 1);
+      next.splice(toIdx, 0, moved);
+      return next;
+    });
+  };
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -552,6 +576,7 @@ function ListView({
   };
 
   const [newTaskProjectError, setNewTaskProjectError] = useState(false);
+  const [confirmData, setConfirmData] = useState(null);
 
   const handleSaveNewTask = async (taskData) => {
     if (!taskData.title?.trim() || savingTaskRef.current) return;
@@ -572,7 +597,6 @@ function ListView({
         dueDate: taskData.endDate || null,
         listId,
         workspaceId: currentWorkspace?.id || null,
-        environmentId: currentEnvironment?.id || null,
         progress: 0,
       });
       onTasksChange([{ ...created, listId, endDate: created.dueDate }, ...tasks]);
@@ -585,25 +609,28 @@ function ListView({
   };
 
   const handleDeleteTask = async (taskId) => {
-    if (!confirm('¿Eliminar esta tarea?')) return;
     try {
       await dbTasks.delete(taskId);
       onTasksChange(tasks.filter(t => t.id !== taskId));
     } catch (err) {
       console.error('[ListView] Error eliminando tarea:', err);
+      onError(err.message || 'Error al eliminar la tarea');
     }
   };
 
   const handleDeleteList = () => {
-    if (confirm(`¿Eliminar la lista "${listName}"?`)) {
-      onListDelete(listId);
-    }
     setShowListMenu(false);
+    setConfirmData({
+      title: '¿Eliminar lista?',
+      message: `La lista "${listName}" y todas sus tareas serán eliminadas permanentemente.`,
+      onConfirm: () => onListDelete(listId),
+    });
   };
 
   const activeTask = listTasks.find(t => t.id === activeId);
 
   return (
+    <>
     <DndContext
       sensors={sensors}
       collisionDetection={closestCenter}
@@ -618,47 +645,49 @@ function ListView({
           borderBottom: `1px solid ${DESIGN_TOKENS.border.color.subtle}`,
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         }}>
-          <div style={{ flex: 1 }}>
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: '12px',
-              marginBottom: '8px', color: DESIGN_TOKENS.neutral[500],
-              fontSize: DESIGN_TOKENS.typography.size.sm,
-            }}>
-              <span>{currentEnvironment?.icon || '📁'} {currentEnvironment?.name || 'Sin entorno'}</span>
-              {currentWorkspace?.name && (
-                <>
-                  <ChevronRight size={14} />
-                  <span style={{ color: DESIGN_TOKENS.primary.base, fontWeight: DESIGN_TOKENS.typography.weight.semibold }}>
-                    {currentWorkspace.name}
-                  </span>
-                </>
+          {!hideTitle && (
+            <div style={{ flex: 1 }}>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: '12px',
+                marginBottom: '8px', color: DESIGN_TOKENS.neutral[500],
+                fontSize: DESIGN_TOKENS.typography.size.sm,
+              }}>
+                <span>{currentEnvironment?.icon || '📁'} {currentEnvironment?.name || 'Sin entorno'}</span>
+                {currentWorkspace?.name && (
+                  <>
+                    <ChevronRight size={14} />
+                    <span style={{ color: DESIGN_TOKENS.primary.base, fontWeight: DESIGN_TOKENS.typography.weight.semibold }}>
+                      {currentWorkspace.name}
+                    </span>
+                  </>
+                )}
+              </div>
+
+              {isEditingName ? (
+                <input
+                  type="text"
+                  value={listName}
+                  onChange={(e) => setListName(e.target.value)}
+                  onBlur={handleSaveListName}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleSaveListName();
+                    if (e.key === 'Escape') { setListName(initialListName); setIsEditingName(false); }
+                  }}
+                  autoFocus
+                  style={{
+                    fontSize: '28px', fontWeight: 700, border: 'none', outline: 'none',
+                    background: 'transparent', color: DESIGN_TOKENS.neutral[800],
+                    fontFamily: DESIGN_TOKENS.typography.fontFamily, width: '100%',
+                    borderBottom: `2px solid ${DESIGN_TOKENS.primary.base}`,
+                  }}
+                />
+              ) : (
+                <h1 style={{ fontSize: '28px', fontWeight: 700, margin: 0, color: DESIGN_TOKENS.neutral[800] }}>
+                  {listName}
+                </h1>
               )}
             </div>
-
-            {isEditingName ? (
-              <input
-                type="text"
-                value={listName}
-                onChange={(e) => setListName(e.target.value)}
-                onBlur={handleSaveListName}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleSaveListName();
-                  if (e.key === 'Escape') { setListName(initialListName); setIsEditingName(false); }
-                }}
-                autoFocus
-                style={{
-                  fontSize: '28px', fontWeight: 700, border: 'none', outline: 'none',
-                  background: 'transparent', color: DESIGN_TOKENS.neutral[800],
-                  fontFamily: DESIGN_TOKENS.typography.fontFamily, width: '100%',
-                  borderBottom: `2px solid ${DESIGN_TOKENS.primary.base}`,
-                }}
-              />
-            ) : (
-              <h1 style={{ fontSize: '28px', fontWeight: 700, margin: 0, color: DESIGN_TOKENS.neutral[800] }}>
-                {listName}
-              </h1>
-            )}
-          </div>
+          )}
 
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <GroupBySelector
@@ -734,30 +763,58 @@ function ListView({
           scrollbarColor: '#e5e7eb transparent',
         }}>
           <div style={{ minWidth: 'fit-content', width: '100%' }}>
-          {/* TABLE HEADER */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: ROW_GRID,
-            gap: '8px',
-            padding: '8px 32px',
-            background: 'white',
-            borderBottom: '2px solid #f1f5f9',
-            fontSize: '11px', fontWeight: 700, color: '#94a3b8',
-            textTransform: 'uppercase', letterSpacing: '1.5px',
-            position: 'sticky', top: 0, zIndex: 10,
-            minWidth: 'fit-content',
-          }}>
-            <div />
-            <div>Nombre</div>
-            <div>Proyecto</div>
-            <div>Estado</div>
-            <div>Prioridad</div>
-            <div>Fecha inicio</div>
-            <div>Fecha límite</div>
-            <div>Semana</div>
-            <div>Asignado</div>
-            <div />
-          </div>
+          {/* TABLE HEADER — dynamic columns with drag-and-drop */}
+          {(() => {
+            const visibleCols = columns.filter(c => visibleColumns.includes(c.key));
+            const dynGrid = `24px ${visibleCols.map(c => c.width).join(' ')} auto`;
+            return (
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: dynGrid,
+                gap: '8px',
+                padding: '8px 32px',
+                background: 'white',
+                borderBottom: '2px solid #f1f5f9',
+                fontSize: '11px', fontWeight: 700, color: '#94a3b8',
+                textTransform: 'uppercase', letterSpacing: '1.5px',
+                position: 'sticky', top: 0, zIndex: 10,
+                minWidth: 'fit-content',
+              }}>
+                <div />
+                {visibleCols.map(col => (
+                  <div
+                    key={col.key}
+                    draggable
+                    onDragStart={() => setDraggedCol(col.key)}
+                    onDragOver={e => { e.preventDefault(); setDragOverCol(col.key); }}
+                    onDrop={() => {
+                      if (draggedCol && dragOverCol && draggedCol !== dragOverCol) reorderColumns(draggedCol, dragOverCol);
+                      setDraggedCol(null); setDragOverCol(null);
+                    }}
+                    onDragEnd={() => { setDraggedCol(null); setDragOverCol(null); }}
+                    onClick={e => {
+                      const r = e.currentTarget.getBoundingClientRect();
+                      setColMenu({ col, x: r.left, y: r.bottom + 4 });
+                    }}
+                    style={{
+                      cursor: 'pointer',
+                      background: dragOverCol === col.key ? '#eff6ff' : 'transparent',
+                      borderRadius: '4px',
+                      padding: '2px 4px',
+                      display: 'flex', alignItems: 'center', gap: '3px',
+                      userSelect: 'none',
+                      color: draggedCol === col.key ? '#3b82f6' : '#94a3b8',
+                      transition: 'background 0.15s',
+                    }}
+                  >
+                    {col.label}
+                    <ChevronRight size={9} style={{ transform: 'rotate(90deg)', opacity: 0.5, flexShrink: 0 }} />
+                  </div>
+                ))}
+                <div />
+              </div>
+            );
+          })()}
 
           {/* TASKS */}
           {(() => {
@@ -796,23 +853,37 @@ function ListView({
                         projects={workspaceProjects}
                         users={users}
                         weeks={weeks}
+                        columns={columns}
+                        visibleColumns={visibleColumns}
                         onUpdate={async (updated) => {
+                          console.log('[updateTask] campo: assigneeId, valor:', updated.assigneeId);
+                          const dbPayload = {
+                            title: updated.title,
+                            status: updated.status,
+                            priority: updated.priority,
+                            projectId: updated.projectId || null,
+                            assigneeId: updated.assigneeId || null,
+                            startDate: updated.startDate || null,
+                            dueDate: updated.endDate || null,
+                          };
+                          console.log('[updateTask] enviando a Supabase:', dbPayload);
+                          // Optimistic update: refleja el cambio antes del await
+                          const prevTasks = tasks;
+                          onTasksChange(tasks.map(t => t.id === updated.id ? updated : t));
                           try {
-                            await dbTasks.update(updated.id, {
-                              title: updated.title,
-                              status: updated.status,
-                              priority: updated.priority,
-                              projectId: updated.projectId || null,
-                              assigneeId: updated.assigneeId || null,
-                              startDate: updated.startDate || null,
-                              dueDate: updated.endDate || null,  // endDate → dueDate
-                            });
-                            onTasksChange(tasks.map(t => t.id === updated.id ? updated : t));
+                            const result = await dbTasks.update(updated.id, dbPayload);
+                            console.log('[updateTask] respuesta Supabase:', result);
                           } catch (err) {
-                            console.error('[ListView] Error actualizando tarea:', err);
+                            console.log('[updateTask] error si hay:', err);
+                            // Revert on error
+                            onTasksChange(prevTasks);
                           }
                         }}
-                        onDelete={handleDeleteTask}
+                        onDelete={(taskId) => setConfirmData({
+                          title: '¿Eliminar tarea?',
+                          message: 'Esta acción no se puede deshacer.',
+                          onConfirm: () => handleDeleteTask(taskId),
+                        })}
                       />
                     ))}
                   </SortableContext>
@@ -827,6 +898,8 @@ function ListView({
                       onProjectChange={() => setNewTaskProjectError(false)}
                       onSave={handleSaveNewTask}
                       onCancel={() => { setShowNewTaskRow(false); setNewTaskGroupKey(null); setNewTaskProjectError(false); }}
+                      columns={columns}
+                      visibleColumns={visibleColumns}
                     />
                   )}
                 </GenericGroup>
@@ -843,6 +916,8 @@ function ListView({
               onProjectChange={() => setNewTaskProjectError(false)}
               onSave={handleSaveNewTask}
               onCancel={() => { setShowNewTaskRow(false); setNewTaskProjectError(false); }}
+              columns={columns}
+              visibleColumns={visibleColumns}
             />
           )}
 
@@ -881,13 +956,43 @@ function ListView({
         ) : null}
       </DragOverlay>
     </DndContext>
+
+    {colMenu && (
+      <ColumnMenu
+        col={colMenu.col}
+        x={colMenu.x}
+        y={colMenu.y}
+        columns={columns}
+        setColumns={setColumns}
+        visibleColumns={visibleColumns}
+        setVisibleColumns={setVisibleColumns}
+        onSort={(colKey, dir) => {
+          const sorted = [...listTasks].sort((a, b) => {
+            const va = String(a[colKey] ?? '');
+            const vb = String(b[colKey] ?? '');
+            return dir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
+          });
+          onTasksChange(sorted);
+        }}
+        setGroupBy={setGroupBy}
+        onClose={() => setColMenu(null)}
+      />
+    )}
+    <ConfirmModal
+      isOpen={!!confirmData}
+      title={confirmData?.title}
+      message={confirmData?.message}
+      onConfirm={() => { confirmData?.onConfirm(); setConfirmData(null); }}
+      onCancel={() => setConfirmData(null)}
+    />
+    </>
   );
 }
 
 // ============================================================================
 // NEW TASK ROW
 // ============================================================================
-const NewTaskRow = ({ projects = [], users = [], weeks = [], defaultData = {}, projectError = false, onProjectChange, onSave, onCancel }) => {
+const NewTaskRow = ({ projects = [], users = [], weeks = [], defaultData = {}, projectError = false, onProjectChange, onSave, onCancel, columns = [], visibleColumns = [] }) => {
   const [taskData, setTaskData] = useState({
     title: '',
     projectId: defaultData.projectId || null,
@@ -918,7 +1023,7 @@ const NewTaskRow = ({ projects = [], users = [], weeks = [], defaultData = {}, p
   return (
     <div style={{
       display: 'grid',
-      gridTemplateColumns: ROW_GRID,
+      gridTemplateColumns: `24px ${columns.filter(c => visibleColumns.includes(c.key)).map(c => c.width).join(' ')} auto`,
       gap: '8px',
       padding: '10px 32px',
       background: '#ffffff',

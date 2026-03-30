@@ -254,7 +254,7 @@ const CreateListModal = ({ isOpen, onClose, onSave, preselectedWorkspaceId }) =>
               color: DESIGN_TOKENS.neutral[700],
               marginBottom: '8px'
             }}>
-              Entorno (ubicación)
+              Equipo (ubicación)
             </label>
             <select
               value={formData.environmentId || ''}

@@ -104,6 +104,7 @@ const mapTask = (row) => {
     tags: row.tags || [],
     estimatedHours: row.estimated_hours,
     dependencies: row.dependencies || [],
+    roadmapPhaseId: row.roadmap_phase_id || null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -127,6 +128,7 @@ const toDbTask = (task) => {
   if (task.dependencies !== undefined) db.dependencies = task.dependencies;
   if (task.workspaceId !== undefined) db.workspace_id = task.workspaceId || null;
   if (task.environmentId !== undefined) db.environment_id = task.environmentId || null;
+  if (task.roadmapPhaseId) db.roadmap_phase_id = task.roadmapPhaseId;
   return db;
 };
 
@@ -253,12 +255,16 @@ export const dbEnvironments = {
 
   // Eliminar entorno
   delete: async (id) => {
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('environments')
       .delete()
-      .eq('id', id);
-    
+      .eq('id', id)
+      .select();
+
     if (error) throw error;
+    if (!data || data.length === 0) {
+      throw new Error('No se eliminó el equipo. Verifica las políticas de permisos en Supabase (RLS).');
+    }
   }
 };
 
@@ -401,7 +407,10 @@ export const dbProjects = {
     return mapProject(Array.isArray(data) ? data[0] : data);
   },
   delete: async (id) => {
-    await restFetch(`projects?id=eq.${id}`, 'DELETE');
+    const data = await restFetch(`projects?id=eq.${id}`, 'DELETE');
+    if (Array.isArray(data) && data.length === 0) {
+      throw new Error('No se eliminó el proyecto. Verifica las políticas de permisos en Supabase (RLS).');
+    }
   }
 };
 
@@ -456,7 +465,11 @@ export const dbTasks = {
     return mapTask(Array.isArray(data) ? data[0] : data);
   },
   delete: async (id) => {
-    await restFetch(`tasks?id=eq.${id}`, 'DELETE');
+    const { data, error } = await supabase.from('tasks').delete().eq('id', id).select('id');
+    if (error) throw error;
+    if (!data || data.length === 0) {
+      throw new Error('La tarea no existe o no tienes permisos para eliminarla');
+    }
   }
 };
 
@@ -493,18 +506,18 @@ export const dbComments = {
 // ============================================================================
 
 export const dbChatMessages = {
-  // Obtener mensajes de un workspace
-  getByWorkspace: async (workspaceId, limit = 100) => {
+  // Obtener mensajes de un environment
+  getByEnvironment: async (environmentId, limit = 100) => {
     const { data, error } = await supabase
       .from('chat_messages')
       .select(`
         *,
         user:users(id, name, avatar)
       `)
-      .eq('workspace_id', workspaceId)
+      .eq('environment_id', environmentId)
       .order('created_at', { ascending: true })
       .limit(limit);
-    
+
     if (error) throw error;
     return data;
   },
@@ -519,22 +532,22 @@ export const dbChatMessages = {
         user:users(id, name, avatar)
       `)
       .single();
-    
+
     if (error) throw error;
     return data;
   },
 
   // Suscribirse a nuevos mensajes en tiempo real
-  subscribe: (workspaceId, callback) => {
+  subscribe: (environmentId, callback) => {
     const channel = supabase
-      .channel(`chat:${workspaceId}`)
+      .channel(`chat:${environmentId}`)
       .on(
         'postgres_changes',
         {
           event: 'INSERT',
           schema: 'public',
           table: 'chat_messages',
-          filter: `workspace_id=eq.${workspaceId}`
+          filter: `environment_id=eq.${environmentId}`
         },
         callback
       )

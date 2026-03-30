@@ -13,7 +13,7 @@ const COLORS = [
 ];
 
 const EnvironmentSettings = ({ isOpen, onClose }) => {
-  const { currentEnvironment, updateEnvironment, deleteEnvironment, currentUser } = useApp();
+  const { currentEnvironment, updateEnvironment, deleteEnvironment } = useApp();
   
   const [formData, setFormData] = useState({
     name: currentEnvironment?.name || '',
@@ -29,7 +29,6 @@ const EnvironmentSettings = ({ isOpen, onClose }) => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
 
-  const isOwner = currentEnvironment?.ownerId === currentUser?.id;
 
   const handleSave = () => {
     if (!currentEnvironment) return;
@@ -360,138 +359,89 @@ const EnvironmentSettings = ({ isOpen, onClose }) => {
               Zona de peligro
             </h3>
 
-            {/* Transferir propiedad */}
-            {isOwner && (
-              <div style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                padding: '16px 0',
-                borderBottom: '1px solid #FEE2E2'
-              }}>
-                <div>
-                  <div style={{ fontSize: '15px', color: '#1D1D1F', fontWeight: 500, marginBottom: '4px' }}>
-                    Transferir la propiedad absoluta a otra persona
-                  </div>
-                  <div style={{ fontSize: '13px', color: '#86868B' }}>
-                    Solo el propietario puede eliminar el entorno
-                  </div>
+            {/* Eliminar equipo */}
+            <div style={{ paddingTop: '16px' }}>
+              <div style={{ marginBottom: '12px' }}>
+                <div style={{ fontSize: '15px', color: '#DC2626', fontWeight: 500, marginBottom: '4px' }}>
+                  Eliminar este equipo de trabajo para siempre
                 </div>
+                <div style={{ fontSize: '13px', color: '#86868B' }}>
+                  Esta acción no se puede deshacer
+                </div>
+              </div>
+
+              {!showDeleteConfirm ? (
                 <button
+                  onClick={() => setShowDeleteConfirm(true)}
                   style={{
-                    padding: '8px 16px',
-                    background: 'white',
-                    border: '1px solid #E8E8ED',
+                    padding: '10px 20px',
+                    background: '#DC2626',
+                    border: 'none',
                     borderRadius: '8px',
                     fontSize: '14px',
-                    fontWeight: 500,
+                    fontWeight: 600,
                     cursor: 'pointer',
-                    color: '#1D1D1F'
+                    color: 'white',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
                   }}
                 >
-                  Seleccionar nuevo propietario
+                  <Trash2 size={16} />
+                  Eliminar el equipo de trabajo
                 </button>
-              </div>
-            )}
-
-            {/* Eliminar entorno */}
-            {isOwner && (
-              <div style={{ paddingTop: '16px' }}>
-                <div style={{ marginBottom: '12px' }}>
-                  <div style={{ fontSize: '15px', color: '#DC2626', fontWeight: 500, marginBottom: '4px' }}>
-                    Eliminar este entorno de trabajo para siempre
-                  </div>
-                  <div style={{ fontSize: '13px', color: '#86868B' }}>
-                    Esta acción no se puede deshacer
-                  </div>
-                </div>
-                
-                {!showDeleteConfirm ? (
-                  <button
-                    onClick={() => setShowDeleteConfirm(true)}
+              ) : (
+                <div style={{
+                  padding: '16px',
+                  background: 'white',
+                  borderRadius: '8px',
+                  border: '1px solid #FEE2E2'
+                }}>
+                  <p style={{ fontSize: '14px', marginBottom: '12px', color: '#1D1D1F' }}>
+                    Escribe <strong>{currentEnvironment.name}</strong> para confirmar la eliminación:
+                  </p>
+                  <input
+                    type="text"
+                    value={deleteConfirmText}
+                    onChange={(e) => setDeleteConfirmText(e.target.value)}
+                    placeholder={currentEnvironment.name}
                     style={{
-                      padding: '10px 20px',
-                      background: '#DC2626',
-                      border: 'none',
+                      width: '100%',
+                      padding: '10px 12px',
+                      border: '1px solid #E8E8ED',
                       borderRadius: '8px',
                       fontSize: '14px',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      color: 'white',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px'
+                      marginBottom: '12px',
+                      outline: 'none'
                     }}
-                  >
-                    <Trash2 size={16} />
-                    Eliminar el entorno de trabajo
-                  </button>
-                ) : (
-                  <div style={{
-                    padding: '16px',
-                    background: 'white',
-                    borderRadius: '8px',
-                    border: '1px solid #FEE2E2'
-                  }}>
-                    <p style={{ fontSize: '14px', marginBottom: '12px', color: '#1D1D1F' }}>
-                      Escribe <strong>{currentEnvironment.name}</strong> para confirmar la eliminación:
-                    </p>
-                    <input
-                      type="text"
-                      value={deleteConfirmText}
-                      onChange={(e) => setDeleteConfirmText(e.target.value)}
-                      placeholder={currentEnvironment.name}
+                  />
+                  <div style={{ display: 'flex', gap: '12px' }}>
+                    <button
+                      onClick={() => { setShowDeleteConfirm(false); setDeleteConfirmText(''); }}
                       style={{
-                        width: '100%',
-                        padding: '10px 12px',
-                        border: '1px solid #E8E8ED',
-                        borderRadius: '8px',
-                        fontSize: '14px',
-                        marginBottom: '12px',
-                        outline: 'none'
+                        flex: 1, padding: '10px', background: 'white',
+                        border: '1px solid #E8E8ED', borderRadius: '8px',
+                        fontSize: '14px', fontWeight: 500, cursor: 'pointer'
                       }}
-                    />
-                    <div style={{ display: 'flex', gap: '12px' }}>
-                      <button
-                        onClick={() => {
-                          setShowDeleteConfirm(false);
-                          setDeleteConfirmText('');
-                        }}
-                        style={{
-                          flex: 1,
-                          padding: '10px',
-                          background: 'white',
-                          border: '1px solid #E8E8ED',
-                          borderRadius: '8px',
-                          fontSize: '14px',
-                          fontWeight: 500,
-                          cursor: 'pointer'
-                        }}
-                      >
-                        Cancelar
-                      </button>
-                      <button
-                        onClick={handleDelete}
-                        disabled={deleteConfirmText !== currentEnvironment.name}
-                        style={{
-                          flex: 1,
-                          padding: '10px',
-                          background: deleteConfirmText === currentEnvironment.name ? '#DC2626' : '#FCA5A5',
-                          border: 'none',
-                          borderRadius: '8px',
-                          fontSize: '14px',
-                          fontWeight: 600,
-                          cursor: deleteConfirmText === currentEnvironment.name ? 'pointer' : 'not-allowed',
-                          color: 'white'
-                        }}
-                      >
-                        Eliminar permanentemente
-                      </button>
-                    </div>
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={handleDelete}
+                      disabled={deleteConfirmText !== currentEnvironment.name}
+                      style={{
+                        flex: 1, padding: '10px', border: 'none', borderRadius: '8px',
+                        fontSize: '14px', fontWeight: 600, color: 'white',
+                        background: deleteConfirmText === currentEnvironment.name ? '#DC2626' : '#FCA5A5',
+                        cursor: deleteConfirmText === currentEnvironment.name ? 'pointer' : 'not-allowed',
+                      }}
+                    >
+                      Eliminar permanentemente
+                    </button>
                   </div>
-                )}
-              </div>
-            )}
+                </div>
+              )}
+            </div>
           </section>
         </div>
 

@@ -145,7 +145,7 @@ const CreateEnvironmentModal = ({ isOpen, onClose }) => {
             color: DESIGN_TOKENS.neutral[800],
             letterSpacing: DESIGN_TOKENS.typography.letterSpacing.tight
           }}>
-            Crear Entorno de Trabajo
+            Crear Equipo de Trabajo
           </h3>
           <button
             onClick={handleClose}
@@ -206,7 +206,7 @@ const CreateEnvironmentModal = ({ isOpen, onClose }) => {
                   color: DESIGN_TOKENS.neutral[800],
                   marginBottom: '4px'
                 }}>
-                  {formData.name || 'Nuevo Entorno'}
+                  {formData.name || 'Nuevo Equipo'}
                 </div>
                 <div style={{
                   fontSize: DESIGN_TOKENS.typography.size.sm,
@@ -481,7 +481,7 @@ const CreateEnvironmentModal = ({ isOpen, onClose }) => {
                 }
               }}
             >
-              {isSubmitting ? 'Creando...' : 'Crear Entorno'}
+              {isSubmitting ? 'Creando...' : 'Crear Equipo'}
             </button>
           </div>
         </form>

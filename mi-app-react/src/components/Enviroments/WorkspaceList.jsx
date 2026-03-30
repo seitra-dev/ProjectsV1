@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import ConfirmModal from '../ConfirmModal';
 import { createPortal } from 'react-dom';
 import {
   Plus, MoreVertical, ChevronRight, GripVertical, Pencil, Trash2,
@@ -569,6 +570,7 @@ const WorkspaceList = ({ onCreateWorkspace, onSelectWorkspace, onOpenChat, onOpe
   const addButtonRef = useRef(null);
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
   const dragState = useRef(null);
+  const [confirmData, setConfirmData] = useState(null);
 
   const handleMenuDragStart = useCallback((e) => {
     e.preventDefault();
@@ -645,10 +647,12 @@ const WorkspaceList = ({ onCreateWorkspace, onSelectWorkspace, onOpenChat, onOpe
   };
 
   const handleDelete = (workspace) => {
-    if (confirm(`¿Eliminar el espacio "${workspace.name}"?`)) {
-      deleteWorkspace(workspace.id);
-    }
     setContextMenu(null);
+    setConfirmData({
+      title: '¿Eliminar espacio de trabajo?',
+      message: `El espacio "${workspace.name}" y todo su contenido será eliminado permanentemente.`,
+      onConfirm: () => deleteWorkspace(workspace.id),
+    });
   };
 
   const handleContextMenu = (e, workspace) => {
@@ -692,10 +696,12 @@ const handleAddOption = (type) => {
     setShowAddMenu(true);
   };
 
-  const handleDeleteList = async (list) => {
-    if (confirm(`¿Eliminar la lista "${list.name}"?`)) {
-      await deleteList(list.id);
-    }
+  const handleDeleteList = (list) => {
+    setConfirmData({
+      title: '¿Eliminar lista?',
+      message: `La lista "${list.name}" será eliminada permanentemente.`,
+      onConfirm: async () => await deleteList(list.id),
+    });
   };
 
   const handleRenameList = async (list) => {
@@ -732,7 +738,7 @@ const handleAddOption = (type) => {
           fontSize: DESIGN_TOKENS.typography.size.sm,
           fontWeight: DESIGN_TOKENS.typography.weight.medium
         }}>
-          Selecciona un entorno
+          Selecciona un equipo
         </div>
       </div>
     );
@@ -1275,6 +1281,14 @@ const handleAddOption = (type) => {
           </button>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={!!confirmData}
+        title={confirmData?.title}
+        message={confirmData?.message}
+        onConfirm={() => { confirmData?.onConfirm(); setConfirmData(null); }}
+        onCancel={() => setConfirmData(null)}
+      />
 
       <style>{`
         @keyframes workspaceSlideIn {
