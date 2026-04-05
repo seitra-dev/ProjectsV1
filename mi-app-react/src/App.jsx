@@ -294,6 +294,12 @@ function AppContent() {
   const [darkMode, setDarkMode] = useState(false);
   const { addToast } = useToast();
 
+  // Detectar si Supabase redirigió con un hash de recuperación de contraseña
+  const [isRecoveryMode, setIsRecoveryMode] = useState(() => {
+    const hash = window.location.hash;
+    return hash.includes('type=recovery');
+  });
+
   // Leer sesión de localStorage de forma sincrónica — sin loading screen, sin async
   const [currentUser, setCurrentUser] = useState(() => {
     try {
@@ -323,12 +329,16 @@ function AppContent() {
     if (prefs?.darkMode) setDarkMode(prefs.darkMode);
   }, []);
 
-  // Escuchar cierre de sesión
+  // Escuchar cambios de sesión (cierre de sesión y recuperación de contraseña)
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'SIGNED_OUT') {
         setCurrentUser(null);
         setShowLanding(true);
+        setIsRecoveryMode(false);
+      } else if (event === 'PASSWORD_RECOVERY') {
+        setIsRecoveryMode(true);
+        setShowLanding(false);
       }
     });
     return () => subscription.unsubscribe();
@@ -456,6 +466,7 @@ if (isTransitioning) {
   );
 }
 
+  if (isRecoveryMode) return <ResetPasswordScreen onDone={() => { setIsRecoveryMode(false); window.location.hash = ''; }} />;
   if (showLanding) return <LandingPage onGetStarted={handleGetStarted} />;
   if (!currentUser) return <LoginScreen onLogin={handleLogin} />;
   return <MainApp user={currentUser} onLogout={handleLogout} darkMode={darkMode} toggleDarkMode={toggleDarkMode} />;
@@ -474,6 +485,11 @@ function LoginScreen({ onLogin }) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [showForgotModal, setShowForgotModal] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotError, setForgotError] = useState('');
+  const [forgotSuccess, setForgotSuccess] = useState(false);
 
   const switchMode = (toLogin) => {
     setIsLogin(toLogin);
@@ -498,6 +514,20 @@ function LoginScreen({ onLogin }) {
       console.error('[Google Login] Error:', err);
       setError('Error al iniciar sesión con Google');
       setIsLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async (e) => {
+    e.preventDefault();
+    setForgotError('');
+    setForgotLoading(true);
+    try {
+      await auth.resetPassword(forgotEmail.trim().toLowerCase());
+      setForgotSuccess(true);
+    } catch (err) {
+      setForgotError(err.message || 'Error al enviar el correo. Intenta de nuevo.');
+    } finally {
+      setForgotLoading(false);
     }
   };
 
@@ -803,6 +833,17 @@ function LoginScreen({ onLogin }) {
                   {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
                 </button>
               </div>
+              {isLogin && (
+                <div style={{ textAlign: 'right' }}>
+                  <button
+                    type="button"
+                    onClick={() => { setShowForgotModal(true); setForgotEmail(email); setForgotError(''); setForgotSuccess(false); }}
+                    style={{ background: 'none', border: 'none', color: '#667eea', fontSize: '0.8rem', fontWeight: 500, cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}
+                  >
+                    ¿Olvidaste tu contraseña?
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Mensajes */}
@@ -881,6 +922,259 @@ function LoginScreen({ onLogin }) {
           </p>
 
         </div>
+      </div>
+
+      {/* ── MODAL RECUPERAR CONTRASEÑA ── */}
+      {showForgotModal && (
+        <div
+          onClick={(e) => { if (e.target === e.currentTarget) { setShowForgotModal(false); setForgotSuccess(false); } }}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 9999, padding: '1rem',
+          }}
+        >
+          <div style={{
+            background: 'white', borderRadius: '16px', padding: '2rem',
+            width: '100%', maxWidth: '420px',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+            fontFamily: 'Inter, system-ui, sans-serif',
+          }}>
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700, color: '#1e293b' }}>Recuperar contraseña</h3>
+                <p style={{ margin: '0.4rem 0 0', fontSize: '0.85rem', color: '#64748b', lineHeight: 1.5 }}>
+                  Ingresa tu email y te enviaremos un enlace para restablecer tu contraseña.
+                </p>
+              </div>
+              <button
+                onClick={() => { setShowForgotModal(false); setForgotSuccess(false); }}
+                style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '2px', flexShrink: 0 }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {forgotSuccess ? (
+              <div>
+                <div style={{
+                  padding: '1rem', background: '#f0fdf4', border: '1px solid #86efac',
+                  borderRadius: '10px', marginBottom: '1.25rem',
+                  display: 'flex', gap: '10px', alignItems: 'flex-start',
+                }}>
+                  <CheckCircle size={18} color="#16a34a" style={{ flexShrink: 0, marginTop: '1px' }} />
+                  <span style={{ fontSize: '0.875rem', color: '#15803d', lineHeight: 1.5 }}>
+                    Te enviamos un correo con instrucciones para restablecer tu contraseña. Revisa también tu carpeta de spam.
+                  </span>
+                </div>
+                <button
+                  onClick={() => { setShowForgotModal(false); setForgotSuccess(false); }}
+                  style={{
+                    width: '100%', padding: '0.8rem', border: 'none', borderRadius: '10px',
+                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    color: 'white', fontSize: '0.9rem', fontWeight: 600,
+                    cursor: 'pointer', fontFamily: 'inherit',
+                  }}
+                >
+                  Volver al inicio de sesión
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleForgotPassword} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ fontSize: '0.82rem', fontWeight: 600, color: '#374151' }}>Email</label>
+                  <input
+                    type="email" required value={forgotEmail}
+                    onChange={(e) => setForgotEmail(e.target.value)}
+                    placeholder="tu@email.com"
+                    className="login-input"
+                    autoFocus
+                  />
+                </div>
+
+                {forgotError && (
+                  <div style={{ padding: '10px 14px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', color: '#dc2626', fontSize: '0.85rem' }}>
+                    {forgotError}
+                  </div>
+                )}
+
+                <button
+                  type="submit" disabled={forgotLoading}
+                  style={{
+                    width: '100%', padding: '0.8rem', border: 'none', borderRadius: '10px',
+                    background: forgotLoading ? '#94a3b8' : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    color: 'white', fontSize: '0.9rem', fontWeight: 600,
+                    cursor: forgotLoading ? 'not-allowed' : 'pointer',
+                    fontFamily: 'inherit', transition: 'all 0.2s',
+                  }}
+                >
+                  {forgotLoading ? 'Enviando...' : 'Enviar enlace de recuperación'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => { setShowForgotModal(false); setForgotSuccess(false); }}
+                  style={{
+                    width: '100%', padding: '0.75rem', border: '1.5px solid #e2e8f0', borderRadius: '10px',
+                    background: 'none', color: '#64748b', fontSize: '0.875rem', fontWeight: 500,
+                    cursor: 'pointer', fontFamily: 'inherit',
+                  }}
+                >
+                  Cancelar
+                </button>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================================
+// RESET PASSWORD SCREEN
+// ============================================================================
+function ResetPasswordScreen({ onDone }) {
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showNew, setShowNew] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    if (newPassword.length < 6) {
+      setError('La contraseña debe tener al menos 6 caracteres.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError('Las contraseñas no coinciden.');
+      return;
+    }
+    setIsLoading(true);
+    try {
+      await auth.updatePassword(newPassword);
+      setSuccess(true);
+      setTimeout(() => onDone(), 2500);
+    } catch (err) {
+      setError(err.message || 'Error al actualizar la contraseña. El enlace puede haber expirado.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', fontFamily: 'Inter, system-ui, sans-serif', padding: '1rem' }}>
+      <style>{`
+        .rp-input {
+          width: 100%; padding: 0.8rem 1rem; border-radius: 10px;
+          border: 1.5px solid #e2e8f0; background: #f8fafc;
+          font-size: 0.9rem; box-sizing: border-box;
+          transition: border-color 0.2s, box-shadow 0.2s; outline: none;
+          font-family: inherit; color: #1e293b;
+        }
+        .rp-input:focus { border-color: #667eea; background: white; box-shadow: 0 0 0 3px rgba(102,126,234,0.12); }
+        .rp-input::placeholder { color: #cbd5e1; }
+      `}</style>
+
+      <div style={{ background: 'white', borderRadius: '20px', padding: '2.5rem', width: '100%', maxWidth: '420px', boxShadow: '0 24px 64px rgba(0,0,0,0.2)' }}>
+
+        {/* Logo */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '1.75rem' }}>
+          <div style={{ width: 36, height: 36, borderRadius: '10px', background: 'linear-gradient(135deg, #667eea, #764ba2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Zap size={18} color="white" strokeWidth={2.5} />
+          </div>
+          <span style={{ fontSize: '1.1rem', fontWeight: 800, color: '#1e293b', letterSpacing: '-0.02em' }}>SEITRA</span>
+        </div>
+
+        {success ? (
+          <div>
+            <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+              <div style={{ width: 56, height: 56, borderRadius: '50%', background: '#f0fdf4', border: '2px solid #86efac', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem' }}>
+                <CheckCircle size={28} color="#16a34a" />
+              </div>
+              <h2 style={{ margin: '0 0 0.5rem', fontSize: '1.4rem', fontWeight: 700, color: '#1e293b' }}>¡Contraseña actualizada!</h2>
+              <p style={{ margin: 0, color: '#64748b', fontSize: '0.9rem' }}>Redirigiendo al inicio de sesión...</p>
+            </div>
+          </div>
+        ) : (
+          <>
+            <h2 style={{ margin: '0 0 0.5rem', fontSize: '1.5rem', fontWeight: 700, color: '#1e293b', letterSpacing: '-0.02em' }}>Nueva contraseña</h2>
+            <p style={{ margin: '0 0 1.75rem', color: '#64748b', fontSize: '0.9rem', lineHeight: 1.5 }}>
+              Ingresa tu nueva contraseña para recuperar el acceso a tu cuenta.
+            </p>
+
+            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '0.82rem', fontWeight: 600, color: '#374151' }}>Nueva contraseña</label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type={showNew ? 'text' : 'password'} required value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="Mínimo 6 caracteres"
+                    className="rp-input"
+                    style={{ paddingRight: '3rem' }}
+                    autoFocus
+                  />
+                  <button type="button" onClick={() => setShowNew(!showNew)} style={{ position: 'absolute', right: '0.9rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', display: 'flex', padding: 0 }}>
+                    {showNew ? <EyeOff size={17} /> : <Eye size={17} />}
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '0.82rem', fontWeight: 600, color: '#374151' }}>Confirmar contraseña</label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type={showConfirm ? 'text' : 'password'} required value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Repite la contraseña"
+                    className="rp-input"
+                    style={{ paddingRight: '3rem' }}
+                  />
+                  <button type="button" onClick={() => setShowConfirm(!showConfirm)} style={{ position: 'absolute', right: '0.9rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', display: 'flex', padding: 0 }}>
+                    {showConfirm ? <EyeOff size={17} /> : <Eye size={17} />}
+                  </button>
+                </div>
+              </div>
+
+              {error && (
+                <div style={{ padding: '10px 14px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', color: '#dc2626', fontSize: '0.85rem' }}>
+                  {error}
+                </div>
+              )}
+
+              <button
+                type="submit" disabled={isLoading}
+                style={{
+                  width: '100%', padding: '0.85rem', border: 'none', borderRadius: '10px',
+                  background: isLoading ? '#94a3b8' : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  color: 'white', fontSize: '0.95rem', fontWeight: 700,
+                  cursor: isLoading ? 'not-allowed' : 'pointer',
+                  boxShadow: isLoading ? 'none' : '0 4px 16px rgba(102,126,234,0.4)',
+                  transition: 'all 0.2s', fontFamily: 'inherit',
+                }}
+              >
+                {isLoading ? 'Actualizando...' : 'Actualizar contraseña'}
+              </button>
+
+              <button
+                type="button" onClick={onDone}
+                style={{
+                  width: '100%', padding: '0.75rem', border: '1.5px solid #e2e8f0', borderRadius: '10px',
+                  background: 'none', color: '#64748b', fontSize: '0.875rem', fontWeight: 500,
+                  cursor: 'pointer', fontFamily: 'inherit',
+                }}
+              >
+                Volver al inicio de sesión
+              </button>
+            </form>
+          </>
+        )}
       </div>
     </div>
   );
