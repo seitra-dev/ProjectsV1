@@ -128,7 +128,7 @@ const toDbTask = (task) => {
   if (task.dependencies !== undefined) db.dependencies = task.dependencies;
   if (task.workspaceId !== undefined) db.workspace_id = task.workspaceId || null;
   if (task.environmentId !== undefined) db.environment_id = task.environmentId || null;
-  if (task.roadmapPhaseId) db.roadmap_phase_id = task.roadmapPhaseId;
+  if ('roadmapPhaseId' in task) db.roadmap_phase_id = task.roadmapPhaseId || null;
   return db;
 };
 
@@ -139,6 +139,7 @@ const mapUser = (row) => {
     name: row.name,
     email: row.email,
     role: row.role || 'user',
+    system_role: row.system_role || row.role || 'user',
     avatar: row.avatar || '👤',
     createdAt: row.created_at,
   };
@@ -274,17 +275,14 @@ export const dbEnvironments = {
 
 export const dbEnvironmentMembers = {
   // Agregar miembro a entorno
-  add: async (environmentId, userId, role = 'member') => {
+  add: async (environmentId, userId, role = 'member', invitedBy = null) => {
+    const payload = { environment_id: environmentId, user_id: userId, role };
+    if (invitedBy) payload.invited_by = invitedBy;
     const { data, error } = await supabase
       .from('environment_members')
-      .insert({
-        environment_id: environmentId,
-        user_id: userId,
-        role
-      })
+      .insert(payload)
       .select()
       .single();
-    
     if (error) throw error;
     return data;
   },
@@ -293,14 +291,58 @@ export const dbEnvironmentMembers = {
   getByEnvironment: async (environmentId) => {
     const { data, error } = await supabase
       .from('environment_members')
-      .select(`
-        *,
-        users(id, name, email, avatar)
-      `)
+      .select(`*, users(id, name, email, avatar, system_role, role)`)
       .eq('environment_id', environmentId);
-    
+    if (error) throw error;
+    return data || [];
+  },
+
+  // Verificar si un usuario es miembro (devuelve el registro o null)
+  isMember: async (environmentId, userId) => {
+    const { data, error } = await supabase
+      .from('environment_members')
+      .select('*')
+      .eq('environment_id', environmentId)
+      .eq('user_id', userId)
+      .maybeSingle();
     if (error) throw error;
     return data;
+  },
+
+  // Verificar si un usuario es owner
+  isOwner: async (environmentId, userId) => {
+    const { data, error } = await supabase
+      .from('environment_members')
+      .select('role')
+      .eq('environment_id', environmentId)
+      .eq('user_id', userId)
+      .eq('role', 'owner')
+      .maybeSingle();
+    if (error) throw error;
+    return data !== null;
+  },
+
+  // Actualizar el rol de un miembro
+  updateRole: async (environmentId, userId, newRole) => {
+    const { data, error } = await supabase
+      .from('environment_members')
+      .update({ role: newRole })
+      .eq('environment_id', environmentId)
+      .eq('user_id', userId)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  // Obtener todas las membresías de un usuario (para filtrar entornos visibles)
+  getMyMemberships: async (userId) => {
+    const { data, error } = await supabase
+      .from('environment_members')
+      .select('environment_id, role, joined_at')
+      .eq('user_id', userId);
+    if (error) throw error;
+    return data || [];
   },
 
   // Eliminar miembro de entorno
@@ -310,7 +352,6 @@ export const dbEnvironmentMembers = {
       .delete()
       .eq('environment_id', environmentId)
       .eq('user_id', userId);
-    
     if (error) throw error;
   }
 };

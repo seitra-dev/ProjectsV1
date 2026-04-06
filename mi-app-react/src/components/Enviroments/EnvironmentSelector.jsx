@@ -2,20 +2,32 @@ import { useState, useRef, useEffect } from 'react';
 import { ChevronDown, Plus, Settings, Users } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { DESIGN_TOKENS } from '/src/styles/tokens';
+import AccessDeniedModal from './AccessDeniedModal';
+
+const ROLE_BADGE = {
+  owner:  { label: '👑 Propietario',   color: '#f59e0b', bg: '#fffbeb' },
+  admin:  { label: '⚙️ Admin',         color: '#6366f1', bg: '#eef2ff' },
+  member: { label: '👤 Miembro',       color: '#0ea5e9', bg: '#f0f9ff' },
+  viewer: { label: '👁️ Observador',   color: '#64748b', bg: '#f8fafc' },
+};
 
 
 // ============================================================================
 // ENVIRONMENT SELECTOR - Dropdown en TopBar
 // ============================================================================
 
-const EnvironmentSelector = ({ onCreateEnvironment, onOpenSettings }) => {
-  const { 
-    currentEnvironment, 
-    environments, 
-    setCurrentEnvironment 
+const EnvironmentSelector = ({ onCreateEnvironment, onOpenSettings, onManageMembers }) => {
+  const {
+    currentEnvironment,
+    environments,
+    setCurrentEnvironment,
+    getUserRoleInEnv,
+    isSuperAdmin,
+    canManageMembers,
   } = useApp();
 
   const [isOpen, setIsOpen] = useState(false);
+  const [accessDenied, setAccessDenied] = useState(null); // env que no puede ver
   const dropdownRef = useRef(null);
 
   // Cerrar al hacer clic fuera
@@ -30,8 +42,16 @@ const EnvironmentSelector = ({ onCreateEnvironment, onOpenSettings }) => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handleSelectEnvironment = (envId) => {
-    setCurrentEnvironment(envId);
+  const superAdmin = isSuperAdmin();
+
+  const handleSelectEnvironment = (env) => {
+    // Super admin siempre puede entrar; otros necesitan membresía
+    if (!superAdmin && !getUserRoleInEnv(env.id)) {
+      setAccessDenied(env);
+      setIsOpen(false);
+      return;
+    }
+    setCurrentEnvironment(env.id);
     setIsOpen(false);
   };
 
@@ -43,6 +63,11 @@ const EnvironmentSelector = ({ onCreateEnvironment, onOpenSettings }) => {
   const handleOpenSettings = () => {
     setIsOpen(false);
     onOpenSettings();
+  };
+
+  const handleManageMembers = () => {
+    setIsOpen(false);
+    onManageMembers?.();
   };
 
   return (
@@ -143,10 +168,12 @@ const EnvironmentSelector = ({ onCreateEnvironment, onOpenSettings }) => {
               {environments.map((env) => {
                 const isSelected = currentEnvironment?.id === env.id;
                 const accentColor = env.color || DESIGN_TOKENS.primary.base;
+                const role = getUserRoleInEnv(env.id);
+                const badge = role ? ROLE_BADGE[role] : null;
                 return (
                 <button
                   key={env.id}
-                  onClick={() => handleSelectEnvironment(env.id)}
+                  onClick={() => handleSelectEnvironment(env)}
                   style={{
                     width: '100%',
                     display: 'flex',
@@ -175,15 +202,10 @@ const EnvironmentSelector = ({ onCreateEnvironment, onOpenSettings }) => {
                   }}
                 >
                   <div style={{
-                    width: '30px',
-                    height: '30px',
-                    borderRadius: '8px',
+                    width: '30px', height: '30px', borderRadius: '8px',
                     background: isSelected ? accentColor : `${accentColor}20`,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '15px',
-                    flexShrink: 0,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: '15px', flexShrink: 0,
                     transition: `all ${DESIGN_TOKENS.transition.fast}`,
                   }}>
                     {env.icon || '📁'}
@@ -193,26 +215,28 @@ const EnvironmentSelector = ({ onCreateEnvironment, onOpenSettings }) => {
                       fontSize: DESIGN_TOKENS.typography.size.sm,
                       fontWeight: isSelected ? DESIGN_TOKENS.typography.weight.semibold : DESIGN_TOKENS.typography.weight.medium,
                       color: isSelected ? accentColor : 'var(--text-primary, #0f172a)',
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                     }}>
                       {env.name}
                     </div>
-                    <div style={{
-                      fontSize: DESIGN_TOKENS.typography.size.xs,
-                      color: 'var(--text-subtle, #94a3b8)',
-                    }}>
-                      {env.workspaces?.length || 0} espacios
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
+                      <span style={{ fontSize: DESIGN_TOKENS.typography.size.xs, color: 'var(--text-subtle, #94a3b8)' }}>
+                        {env.workspaces?.length || 0} espacios
+                      </span>
+                      {badge && (
+                        <span style={{
+                          fontSize: '0.68rem', fontWeight: 600, padding: '1px 5px',
+                          borderRadius: '4px', color: badge.color, background: badge.bg,
+                        }}>
+                          {badge.label}
+                        </span>
+                      )}
                     </div>
                   </div>
                   {isSelected && (
                     <div style={{
-                      width: '7px',
-                      height: '7px',
-                      borderRadius: '50%',
-                      background: accentColor,
-                      flexShrink: 0,
+                      width: '7px', height: '7px', borderRadius: '50%',
+                      background: accentColor, flexShrink: 0,
                       boxShadow: `0 0 0 2px ${accentColor}30`,
                     }} />
                   )}
@@ -309,36 +333,25 @@ const EnvironmentSelector = ({ onCreateEnvironment, onOpenSettings }) => {
                 Administrar entorno
               </button>
 
-              <button
-                onClick={() => {
-                  setIsOpen(false);
-                  // Aquí iría la lógica para abrir gestión de personas
-                }}
-                style={{
-                  width: '100%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '12px',
-                  padding: '10px 12px',
-                  background: 'transparent',
-                  border: 'none',
-                  borderRadius: DESIGN_TOKENS.border.radius.sm,
-                  cursor: 'pointer',
-                  transition: `all ${DESIGN_TOKENS.transition.fast}`,
-                  fontSize: DESIGN_TOKENS.typography.size.base,
-                  fontWeight: DESIGN_TOKENS.typography.weight.medium,
-                  color: DESIGN_TOKENS.neutral[700]
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'rgba(0, 0, 0, 0.03)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'transparent';
-                }}
-              >
-                <Users size={18} />
-                Personas
-              </button>
+              {canManageMembers(currentEnvironment?.id) && (
+                <button
+                  onClick={handleManageMembers}
+                  style={{
+                    width: '100%', display: 'flex', alignItems: 'center', gap: '12px',
+                    padding: '10px 12px', background: 'transparent', border: 'none',
+                    borderRadius: DESIGN_TOKENS.border.radius.sm, cursor: 'pointer',
+                    transition: `all ${DESIGN_TOKENS.transition.fast}`,
+                    fontSize: DESIGN_TOKENS.typography.size.base,
+                    fontWeight: DESIGN_TOKENS.typography.weight.medium,
+                    color: DESIGN_TOKENS.neutral[700],
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(0,0,0,0.03)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                >
+                  <Users size={18} />
+                  Gestionar acceso
+                </button>
+              )}
             </>
           )}
         </div>
@@ -346,16 +359,16 @@ const EnvironmentSelector = ({ onCreateEnvironment, onOpenSettings }) => {
 
       <style>{`
         @keyframes dropdownFadeIn {
-          from {
-            opacity: 0;
-            transform: translateY(-8px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
+          from { opacity: 0; transform: translateY(-8px); }
+          to   { opacity: 1; transform: translateY(0); }
         }
       `}</style>
+
+      <AccessDeniedModal
+        isOpen={accessDenied !== null}
+        onClose={() => setAccessDenied(null)}
+        environmentName={accessDenied?.name}
+      />
     </div>
   );
 };

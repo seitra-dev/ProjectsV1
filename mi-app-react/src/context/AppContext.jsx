@@ -1,5 +1,5 @@
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect } from 'react';
 import {
   dbEnvironments,
   dbEnvironmentMembers,
@@ -9,6 +9,7 @@ import {
   dbComments,
   dbChatMessages,
   dbLists,
+  dbUsers,
   handleSupabaseError
 } from '../lib/database';
 import { supabase } from '../lib/supabase';
@@ -34,6 +35,9 @@ export const AppProvider = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [lists, setLists] = useState([]);
 
+  // membershipMap: { [envId]: { role: 'owner'|'admin'|'member'|'viewer', ... } }
+  const [membershipMap, setMembershipMap] = useState({});
+
   // ==========================================================================
   // HELPERS (compatibilidad con AppContext-OLD)
   // ==========================================================================
@@ -48,7 +52,6 @@ export const AppProvider = ({ children }) => {
     const env = environments.find((e) => e.id === envId);
     if (!env) return;
 
-    // Cargar workspaces en caso de que aún no estén cargados
     const workspaces = env.workspaces ?? (await dbWorkspaces.getByEnvironment(envId));
     const envWithWorkspaces = { ...env, workspaces };
 
@@ -56,8 +59,6 @@ export const AppProvider = ({ children }) => {
     setEnvironments((prevEnvs) =>
       prevEnvs.map((e) => (e.id === envId ? envWithWorkspaces : e))
     );
-
-    // Resetear workspace al cambiar de entorno
     setCurrentWorkspace(null);
   };
 
@@ -66,16 +67,40 @@ export const AppProvider = ({ children }) => {
       setCurrentWorkspace(null);
       return;
     }
-
     const workspace = currentEnvironment?.workspaces?.find((w) => w.id === workspaceId);
     setCurrentWorkspace(workspace || null);
+  };
+
+  // ============================================================================
+  // PERMISOS
+  // ============================================================================
+
+  const isSuperAdmin = (user) =>
+    (user?.system_role || user?.role) === 'super_admin';
+
+  const getUserRoleInEnv = (envId) =>
+    membershipMap[envId]?.role || null;
+
+  const canManageMembers = (envId) => {
+    if (isSuperAdmin(currentUser)) return true;
+    const role = getUserRoleInEnv(envId);
+    return role === 'owner' || role === 'admin';
+  };
+
+  const canDeleteEnvironment = (envId) => {
+    if (isSuperAdmin(currentUser)) return true;
+    return getUserRoleInEnv(envId) === 'owner';
+  };
+
+  const canViewEnvironment = (envId) => {
+    if (isSuperAdmin(currentUser)) return true;
+    return membershipMap[envId] != null;
   };
 
   // ============================================================================
   // CARGAR DATOS INICIALES
   // ============================================================================
 
-  // Helper: obtener usuario de localStorage sin pasar por el SDK
   const getUserFromStorage = () => {
     try {
       const ref = import.meta.env.VITE_SUPABASE_URL?.split('//')[1]?.split('.')[0];
@@ -87,27 +112,61 @@ export const AppProvider = ({ children }) => {
     } catch { return null; }
   };
 
-  const loadEnvironments = async () => {
+  // Enriquece el usuario con system_role desde la tabla users
+  const enrichUserProfile = async (baseUser) => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      console.log('[AppContext] SDK session:', session?.user?.email, '| uid:', session?.user?.id);
-      console.log('[AppContext] iniciando carga de entornos...');
-      const envs = await dbEnvironments.getAll();
-      console.log('[AppContext] entornos encontrados:', envs);
+      const profile = await dbUsers.getById(baseUser.id);
+      if (profile) {
+        return {
+          ...baseUser,
+          system_role: profile.system_role || profile.role || 'user',
+          role: profile.role || 'user',
+          name: profile.name || baseUser.name,
+          avatar: profile.avatar || baseUser.avatar || '👤',
+        };
+      }
+    } catch (e) {
+      console.warn('[AppContext] No se pudo cargar perfil completo:', e);
+    }
+    return baseUser;
+  };
+
+  const loadEnvironments = async (userId, systemRole) => {
+    try {
+      console.log('[AppContext] cargando entornos para userId:', userId, '| systemRole:', systemRole);
+      let envs = [];
+      const newMembershipMap = {};
+
+      if (systemRole === 'super_admin') {
+        // Super admin ve TODOS los entornos
+        envs = await dbEnvironments.getAll();
+        // Carga sus propias membresías (informativo, no filtra)
+        try {
+          const memberships = await dbEnvironmentMembers.getMyMemberships(userId);
+          memberships.forEach(m => { newMembershipMap[m.environment_id] = m; });
+        } catch {}
+      } else {
+        // Otros roles: solo entornos donde son miembros
+        const memberships = await dbEnvironmentMembers.getMyMemberships(userId);
+        memberships.forEach(m => { newMembershipMap[m.environment_id] = m; });
+        const memberEnvIds = memberships.map(m => m.environment_id);
+
+        if (memberEnvIds.length > 0) {
+          const allEnvs = await dbEnvironments.getAll();
+          envs = allEnvs.filter(e => memberEnvIds.includes(e.id));
+        }
+      }
+
+      setMembershipMap(newMembershipMap);
       setEnvironments(envs);
 
       if (envs.length > 0) {
         setCurrentEnvironment(envs[0]);
-        console.log('[AppContext] llamando getByEnvironment con:', envs[0]?.id);
         const workspaces = await dbWorkspaces.getByEnvironment(envs[0].id);
-        console.log('[AppContext] workspaces recibidos:', workspaces);
         const loadedLists = await dbLists.getByEnvironment(envs[0].id);
         setEnvironments(prev =>
-          prev.map(env =>
-            env.id === envs[0].id ? { ...env, workspaces } : env
-          )
+          prev.map(env => env.id === envs[0].id ? { ...env, workspaces } : env)
         );
-        console.log('[AppContext] setCurrentEnvironment con workspaces:', { ...envs[0], workspaces });
         setCurrentEnvironment(prev => ({ ...prev, workspaces }));
         setLists(loadedLists);
       }
@@ -116,70 +175,91 @@ export const AppProvider = ({ children }) => {
     }
   };
 
-useEffect(() => {
-  // ── Fallback inmediato desde localStorage (no depende de onAuthStateChange) ──
-  const storedUser = getUserFromStorage();
-  if (storedUser) {
-    console.log('[AppContext] sesión encontrada en localStorage, cargando sin esperar SDK...');
-    setCurrentUser({
-      id: storedUser.id,
-      email: storedUser.email,
-      name: storedUser.user_metadata?.name || storedUser.email,
-      role: storedUser.user_metadata?.role || 'user',
-    });
-    loadEnvironments().finally(() => setIsLoading(false));
-  } else {
-    setIsLoading(false);
-  }
+  useEffect(() => {
+    const storedUser = getUserFromStorage();
+    if (storedUser) {
+      const baseUser = {
+        id: storedUser.id,
+        email: storedUser.email,
+        name: storedUser.user_metadata?.name || storedUser.email,
+        role: storedUser.user_metadata?.role || 'user',
+        system_role: storedUser.user_metadata?.system_role || storedUser.user_metadata?.role || 'user',
+      };
+      setCurrentUser(baseUser);
 
-  // ── Listener del SDK (complementario, por si el token se renueva) ──
-  const { data: { subscription } } = supabase.auth.onAuthStateChange(
-    async (event, session) => {
-      console.log('[AppContext] onAuthStateChange:', event, '| user:', session?.user?.email);
-      if (session?.user) {
-        setCurrentUser({
-          id: session.user.id,
-          email: session.user.email,
-          name: session.user.user_metadata?.name || session.user.email,
-          role: session.user.user_metadata?.role || 'user',
-        });
-        // Solo recargar entornos si aún no se cargaron
-        setEnvironments(prev => {
-          if (prev.length === 0) {
-            loadEnvironments();
-          }
-          return prev;
-        });
-      } else if (event === 'SIGNED_OUT') {
-        setCurrentUser(null);
-        setEnvironments([]);
-        setCurrentEnvironment(null);
-        setCurrentWorkspace(null);
-      }
+      // Enriquecer con perfil completo y luego cargar entornos
+      enrichUserProfile(baseUser).then(enriched => {
+        setCurrentUser(enriched);
+        loadEnvironments(enriched.id, enriched.system_role).finally(() => setIsLoading(false));
+      });
+    } else {
       setIsLoading(false);
     }
-  );
 
-  return () => subscription.unsubscribe();
-}, []);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        console.log('[AppContext] onAuthStateChange:', event, '| user:', session?.user?.email);
+        if (session?.user) {
+          const baseUser = {
+            id: session.user.id,
+            email: session.user.email,
+            name: session.user.user_metadata?.name || session.user.email,
+            role: session.user.user_metadata?.role || 'user',
+            system_role: session.user.user_metadata?.system_role || session.user.user_metadata?.role || 'user',
+          };
+          setCurrentUser(baseUser);
+          setEnvironments(prev => {
+            if (prev.length === 0) {
+              enrichUserProfile(baseUser).then(enriched => {
+                setCurrentUser(enriched);
+                loadEnvironments(enriched.id, enriched.system_role);
+              });
+            }
+            return prev;
+          });
+        } else if (event === 'SIGNED_OUT') {
+          setCurrentUser(null);
+          setEnvironments([]);
+          setCurrentEnvironment(null);
+          setCurrentWorkspace(null);
+          setMembershipMap({});
+        }
+        setIsLoading(false);
+      }
+    );
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   // ============================================================================
   // ENVIRONMENTS
   // ============================================================================
 
   const createEnvironment = async (data) => {
-  try {
-    const newEnv = await dbEnvironments.create({
-      name: data.name,
-      description: data.description || '',
-      color: data.color || '#6366f1',
-      icon: data.icon || '📊',
-    });
+    if (!currentUser?.id) {
+      throw new Error('Debes iniciar sesión para crear entornos.');
+    }
 
-      // Agregar workspaces vacío
+    try {
+      // 1. Crear entorno con owner_id
+      const newEnv = await dbEnvironments.create({
+        name: data.name,
+        description: data.description || '',
+        color: data.color || '#6366f1',
+        icon: data.icon || '📊',
+        owner_id: currentUser.id,
+      });
+
+      // 2. Registrar al creador como 'owner' en environment_members
+      await dbEnvironmentMembers.add(newEnv.id, currentUser.id, 'owner', currentUser.id);
+      setMembershipMap(prev => ({
+        ...prev,
+        [newEnv.id]: { environment_id: newEnv.id, role: 'owner', user_id: currentUser.id }
+      }));
+
+      // 3. Agregar a la lista local
       const envWithWorkspaces = { ...newEnv, workspaces: [] };
       setEnvironments(prev => [...prev, envWithWorkspaces]);
-      
       return envWithWorkspaces;
     } catch (error) {
       console.error('Error creando entorno:', error);
@@ -190,16 +270,12 @@ useEffect(() => {
   const updateEnvironment = async (envId, data) => {
     try {
       const updated = await dbEnvironments.update(envId, data);
-      
       setEnvironments(prev =>
         prev.map(env => env.id === envId ? { ...env, ...updated } : env)
       );
-
-      // Actualizar currentEnvironment si es el que se editó
       if (currentEnvironment?.id === envId) {
         setCurrentEnvironment(prev => ({ ...prev, ...updated }));
       }
-
       return updated;
     } catch (error) {
       console.error('Error actualizando entorno:', error);
@@ -210,10 +286,8 @@ useEffect(() => {
   const deleteEnvironment = async (envId) => {
     try {
       await dbEnvironments.delete(envId);
-      
       setEnvironments(prev => prev.filter(env => env.id !== envId));
-
-      // Si se eliminó el entorno actual, resetear
+      setMembershipMap(prev => { const next = { ...prev }; delete next[envId]; return next; });
       if (currentEnvironment?.id === envId) {
         setCurrentEnvironment(null);
         setCurrentWorkspace(null);
@@ -227,20 +301,13 @@ useEffect(() => {
   const setCurrentEnvironmentState = async (env) => {
     try {
       setCurrentEnvironment(env);
-      
-      if (env) {
-        // Cargar workspaces del entorno si no los tiene
-        if (!env.workspaces) {
-          const workspaces = await dbWorkspaces.getByEnvironment(env.id);
-          
-          // Actualizar el entorno con sus workspaces
-          const envWithWorkspaces = { ...env, workspaces };
-          setCurrentEnvironment(envWithWorkspaces);
-          
-          setEnvironments(prev =>
-            prev.map(e => e.id === env.id ? envWithWorkspaces : e)
-          );
-        }
+      if (env && !env.workspaces) {
+        const workspaces = await dbWorkspaces.getByEnvironment(env.id);
+        const envWithWorkspaces = { ...env, workspaces };
+        setCurrentEnvironment(envWithWorkspaces);
+        setEnvironments(prev =>
+          prev.map(e => e.id === env.id ? envWithWorkspaces : e)
+        );
       }
     } catch (error) {
       console.error('Error cargando workspaces:', error);
@@ -262,20 +329,13 @@ useEffect(() => {
         permission: data.settings?.permission || 'full',
         created_by: currentUser?.id
       });
-
-      // Recargar todos los workspaces del entorno desde Supabase (garantiza estado fresco)
       const freshWorkspaces = await dbWorkspaces.getByEnvironment(envId);
-
       setEnvironments(prev =>
-        prev.map(env =>
-          env.id === envId ? { ...env, workspaces: freshWorkspaces } : env
-        )
+        prev.map(env => env.id === envId ? { ...env, workspaces: freshWorkspaces } : env)
       );
-
       if (currentEnvironment?.id === envId) {
         setCurrentEnvironment(prev => ({ ...prev, workspaces: freshWorkspaces }));
       }
-
       return newWorkspace;
     } catch (error) {
       console.error('Error creando workspace:', error);
@@ -286,8 +346,6 @@ useEffect(() => {
   const updateWorkspace = async (workspaceId, data) => {
     try {
       const updated = await dbWorkspaces.update(workspaceId, data);
-
-      // Actualizar en environments
       setEnvironments(prev =>
         prev.map(env => ({
           ...env,
@@ -296,8 +354,6 @@ useEffect(() => {
           )
         }))
       );
-
-      // Actualizar en currentEnvironment
       if (currentEnvironment) {
         setCurrentEnvironment(prev => ({
           ...prev,
@@ -306,12 +362,9 @@ useEffect(() => {
           )
         }));
       }
-
-      // Actualizar currentWorkspace si es el que se editó
       if (currentWorkspace?.id === workspaceId) {
         setCurrentWorkspace(prev => ({ ...prev, ...updated }));
       }
-
       return updated;
     } catch (error) {
       console.error('Error actualizando workspace:', error);
@@ -322,24 +375,18 @@ useEffect(() => {
   const deleteWorkspace = async (workspaceId) => {
     try {
       await dbWorkspaces.delete(workspaceId);
-
-      // Eliminar de environments
       setEnvironments(prev =>
         prev.map(env => ({
           ...env,
           workspaces: env.workspaces?.filter(ws => ws.id !== workspaceId)
         }))
       );
-
-      // Eliminar de currentEnvironment
       if (currentEnvironment) {
         setCurrentEnvironment(prev => ({
           ...prev,
           workspaces: prev.workspaces?.filter(ws => ws.id !== workspaceId)
         }));
       }
-
-      // Si se eliminó el workspace actual, resetear
       if (currentWorkspace?.id === workspaceId) {
         setCurrentWorkspace(null);
       }
@@ -386,15 +433,22 @@ useEffect(() => {
     currentUser,
     isLoading,
     lists,
+    membershipMap,
 
     // Setters
     setEnvironments,
     setCurrentEnvironmentState,
     setCurrentWorkspaceState,
-    // Legacy-friendly setters (compatibilidad con AppContext-OLD)
     setCurrentEnvironment: setCurrentEnvironmentById,
     setCurrentWorkspace: setCurrentWorkspaceById,
     setCurrentUser,
+
+    // Permisos
+    isSuperAdmin: () => isSuperAdmin(currentUser),
+    getUserRoleInEnv,
+    canManageMembers,
+    canDeleteEnvironment,
+    canViewEnvironment,
 
     // Environments
     createEnvironment,
@@ -411,7 +465,7 @@ useEffect(() => {
     updateList,
     deleteList,
 
-    // Database utilities (para que los componentes puedan usarlos directamente)
+    // Database utilities
     db: {
       projects: dbProjects,
       tasks: dbTasks,

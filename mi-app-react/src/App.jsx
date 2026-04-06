@@ -23,6 +23,8 @@ import ProjectRoadmap from './components/ProjectRoadmap';
 import EnvironmentSelector from "./components/Enviroments/EnvironmentSelector";
 import CreateEnvironmentModal from "./components/Enviroments/CreateEnvironmentModal";
 import EnvironmentSettings from "./components/Enviroments/EnvironmentSettings";
+import EnvironmentMembersModal from "./components/Enviroments/EnvironmentMembersModal";
+import AnalyticsDashboard from "./components/AnalyticsDashboard";
 import { AppProvider, useApp } from './context/AppContext';
 import TeamChatView from './components/TeamChatView';
 import ListView from './components/ListView';
@@ -1717,7 +1719,7 @@ useEffect(() => {
           )}
 
           {activeView === 'analytics' && (
-            <AnalyticsView tasks={tasks} projects={projects} users={users} />
+            <AnalyticsDashboard />
           )}
         </div>
       </div>
@@ -1726,12 +1728,17 @@ useEffect(() => {
         <TaskDetailModal
           task={selectedTask}
           project={projects.find(p => p.id === selectedTask.projectId)}
+          projects={projects}
           users={users}
           comments={comments.filter(c => c.taskId === selectedTask.id)}
           onClose={() => setShowTaskDetail(false)}
           onUpdate={async (updated) => {
             await updateTask(updated.id, updated);
-            addToast('Tarea actualizada', 'success');
+          }}
+          onDelete={async (taskId) => {
+            await deleteTask(taskId);
+            setShowTaskDetail(false);
+            addToast('Tarea eliminada', 'info');
           }}
           onAddComment={async (comment) => {
             await createComment({
@@ -1760,6 +1767,7 @@ useEffect(() => {
 function TopBar({ user, onLogout, onMenuClick, searchQuery, onSearchChange, darkMode, toggleDarkMode, breadcrumbs, onBreadcrumbClick, onExportReport, isMobile }) {
   const [showCreateEnv, setShowCreateEnv] = useState(false);
   const [showEnvSettings, setShowEnvSettings] = useState(false);
+  const [showMembersModal, setShowMembersModal] = useState(false);
 
   return (
     <>
@@ -1812,9 +1820,10 @@ function TopBar({ user, onLogout, onMenuClick, searchQuery, onSearchChange, dark
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-          <EnvironmentSelector 
+          <EnvironmentSelector
             onCreateEnvironment={() => setShowCreateEnv(true)}
             onOpenSettings={() => setShowEnvSettings(true)}
+            onManageMembers={() => setShowMembersModal(true)}
           />
 
           <button onClick={onExportReport} style={iconButtonStyle} title="Exportar reporte completo"
@@ -1878,10 +1887,15 @@ function TopBar({ user, onLogout, onMenuClick, searchQuery, onSearchChange, dark
         onClose={() => setShowCreateEnv(false)}
       />
 
-      <EnvironmentSettings 
-          isOpen={showEnvSettings}
-          onClose={() => setShowEnvSettings(false)}
-        />
+      <EnvironmentSettings
+        isOpen={showEnvSettings}
+        onClose={() => setShowEnvSettings(false)}
+      />
+
+      <EnvironmentMembersModal
+        isOpen={showMembersModal}
+        onClose={() => setShowMembersModal(false)}
+      />
     </>
   );
 }
@@ -3219,24 +3233,15 @@ function TaskRow({ task, allTasks, users, expanded, onToggle, onEdit, onDelete, 
 // TABLE VIEW
 // ============================================================================
 function TableView({ tasks = [], users = [], onEdit, onTaskClick }) {
-  // 1. Helpers de estilo para evitar errores de "undefined"
   const getStatusStyle = (status) => {
-    const options = {
-      'Completado': { bg: DESIGN_TOKENS.success.light, color: DESIGN_TOKENS.success.dark, label: 'Completado' },
-      'Pendiente': { bg: DESIGN_TOKENS.warning.light, color: DESIGN_TOKENS.warning.dark, label: 'Pendiente' },
-      'Vencido': { bg: DESIGN_TOKENS.danger.light, color: DESIGN_TOKENS.danger.dark, label: 'Vencido' },
-      'En Proceso': { bg: DESIGN_TOKENS.info.light, color: DESIGN_TOKENS.info.dark, label: 'En Proceso' }
-    };
-    return options[status] || { bg: DESIGN_TOKENS.neutral[100], color: DESIGN_TOKENS.neutral[600], label: status || 'Sin estado' };
+    const key = (status || '').toLowerCase().replace(/ /g, '_');
+    return STATUS_OPTIONS[key] || { bg: DESIGN_TOKENS.neutral[100], color: DESIGN_TOKENS.neutral[600], label: status || 'Sin estado' };
   };
 
   const getPriorityStyle = (priority) => {
-    const options = {
-      'Alta': { color: DESIGN_TOKENS.danger.base, label: 'Alta' },
-      'Media': { color: DESIGN_TOKENS.warning.base, label: 'Media' },
-      'Baja': { color: DESIGN_TOKENS.success.base, label: 'Baja' }
-    };
-    return options[priority] || { color: DESIGN_TOKENS.neutral[400], label: priority || 'Normal' };
+    const key = (priority || '').toLowerCase();
+    const opt = PRIORITY_OPTIONS[key];
+    return opt ? { color: opt.color, label: opt.label } : { color: DESIGN_TOKENS.neutral[400], label: priority || 'Normal' };
   };
 
   // Estilos base reutilizables
@@ -4494,24 +4499,65 @@ function DetailItem({ label, children }) {
 }
 
 // 2. Ahora definimos el Modal que consume a DetailItem
-function TaskDetailModal({ task, project, users, comments, onClose, onUpdate, onAddComment }) {
+function TaskDetailModal({ task, project, projects = [], users, comments, onClose, onUpdate, onDelete, onAddComment }) {
   const [isEditing, setIsEditing] = useState(false);
-  const [editedTask, setEditedTask] = useState(task);
+  const [form, setForm] = useState({ ...task });
+  const [saving, setSaving] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [newComment, setNewComment] = useState('');
-  const [showHistory, setShowHistory] = useState(false);
   const { addToast } = useToast();
 
-  const assignee = users.find(u => u.id === task.assigneeId);
+  // Sync if the task changes from outside (e.g. after save)
+  useEffect(() => { setForm({ ...task }); }, [task.id]);
 
-  const handleSave = () => {
-    onUpdate(editedTask);
-    setIsEditing(false);
+  const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
+  const assignee = users.find(u => u.id === form.assigneeId);
+  const currentProject = projects.find(p => String(p.id) === String(form.projectId)) || project;
+  const roadmapPhases = currentProject?.roadmap?.phases?.filter(ph => ph.name) || [];
+  const currentPhase = roadmapPhases.find(ph => String(ph.id) === String(form.roadmapPhaseId)) || null;
+
+  const handleSave = async () => {
+    if (!form.title?.trim()) {
+      addToast('El título es requerido', 'error');
+      return;
+    }
+    if (form.startDate && form.endDate && new Date(form.endDate) < new Date(form.startDate)) {
+      addToast('La fecha fin no puede ser anterior a la fecha inicio', 'error');
+      return;
+    }
+    setSaving(true);
+    try {
+      await onUpdate(form);
+      setIsEditing(false);
+      addToast('Tarea actualizada correctamente', 'success');
+    } catch {
+      addToast('Error al guardar los cambios', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    try {
+      await onDelete(task.id);
+    } catch {
+      addToast('Error al eliminar la tarea', 'error');
+    }
   };
 
   const handleAddComment = () => {
     if (!newComment.trim()) return;
-    onAddComment({ text: newComment });
+    onAddComment({ text: newComment, content: newComment });
     setNewComment('');
+  };
+
+  const cancelEdit = () => { setForm({ ...task }); setIsEditing(false); setShowDeleteConfirm(false); };
+
+  // Shared input style for edit fields
+  const fi = {
+    width: '100%', padding: '7px 10px', border: '1.5px solid #e2e8f0',
+    borderRadius: '8px', fontSize: '0.875rem', fontFamily: 'inherit',
+    color: '#1e293b', background: 'white', outline: 'none', boxSizing: 'border-box',
   };
 
   if (!task) return null;
@@ -4519,15 +4565,18 @@ function TaskDetailModal({ task, project, users, comments, onClose, onUpdate, on
   return (
     <Modal onClose={onClose} title="Detalle de Tarea" size="large">
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '2rem' }}>
-        {/* Main Content */}
+
+        {/* ── COLUMNA IZQUIERDA ── */}
         <div>
+          {/* Título */}
           <div style={{ marginBottom: '1.5rem' }}>
             {isEditing ? (
               <input
                 type="text"
-                value={editedTask.title}
-                onChange={(e) => setEditedTask({ ...editedTask, title: e.target.value })}
-                style={{ ...inputStyle, fontSize: '1.5rem', fontWeight: 700 }}
+                value={form.title}
+                onChange={e => set('title', e.target.value)}
+                style={{ ...fi, fontSize: '1.25rem', fontWeight: 700, padding: '8px 12px' }}
+                placeholder="Título de la tarea"
               />
             ) : (
               <h3 style={{ fontSize: '1.5rem', fontWeight: 700, margin: 0, color: DESIGN_TOKENS.neutral[800] }}>
@@ -4536,16 +4585,18 @@ function TaskDetailModal({ task, project, users, comments, onClose, onUpdate, on
             )}
           </div>
 
+          {/* Descripción */}
           <div style={{ marginBottom: '2rem' }}>
             <h4 style={{ fontSize: '0.875rem', fontWeight: 700, color: DESIGN_TOKENS.neutral[600], marginBottom: '0.75rem', textTransform: 'uppercase' }}>
               Descripción
             </h4>
             {isEditing ? (
               <textarea
-                value={editedTask.description}
-                onChange={(e) => setEditedTask({ ...editedTask, description: e.target.value })}
+                value={form.description || ''}
+                onChange={e => set('description', e.target.value)}
                 rows={4}
-                style={{ ...inputStyle, resize: 'vertical' }}
+                style={{ ...fi, resize: 'vertical' }}
+                placeholder="Descripción de la tarea..."
               />
             ) : (
               <p style={{ fontSize: '0.95rem', color: DESIGN_TOKENS.neutral[700], lineHeight: 1.6, margin: 0 }}>
@@ -4554,28 +4605,15 @@ function TaskDetailModal({ task, project, users, comments, onClose, onUpdate, on
             )}
           </div>
 
-          {isEditing && (
-            <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '2rem' }}>
-              <button onClick={handleSave} style={primaryButtonStyle}>
-                <Save size={18} />
-                Guardar Cambios
-              </button>
-              <button onClick={() => setIsEditing(false)} style={secondaryButtonStyle}>
-                Cancelar
-              </button>
-            </div>
-          )}
-
-          {/* Comments Section */}
+          {/* Comentarios */}
           <div>
             <h4 style={{ fontSize: '1rem', fontWeight: 700, color: DESIGN_TOKENS.neutral[800], marginBottom: '1rem' }}>
               Comentarios ({comments.length})
             </h4>
-            
             <div style={{ marginBottom: '1.5rem' }}>
               <textarea
                 value={newComment}
-                onChange={(e) => setNewComment(e.target.value)}
+                onChange={e => setNewComment(e.target.value)}
                 placeholder="Escribe un comentario..."
                 rows={3}
                 style={{ ...inputStyle, resize: 'vertical' }}
@@ -4589,30 +4627,23 @@ function TaskDetailModal({ task, project, users, comments, onClose, onUpdate, on
                 Agregar Comentario
               </button>
             </div>
-
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               {comments.map(comment => {
                 const author = users.find(u => u.id === comment.userId);
                 return (
                   <div key={comment.id} style={{
-                    background: DESIGN_TOKENS.neutral[50],
-                    borderRadius: '8px',
-                    padding: '1rem',
-                    border: `1px solid ${DESIGN_TOKENS.neutral[200]}`
+                    background: DESIGN_TOKENS.neutral[50], borderRadius: '8px',
+                    padding: '1rem', border: `1px solid ${DESIGN_TOKENS.neutral[200]}`
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
                       <span style={{ fontSize: '1.25rem' }}>{author?.avatar}</span>
                       <div>
-                        <div style={{ fontSize: '0.875rem', fontWeight: 600, color: DESIGN_TOKENS.neutral[800] }}>
-                          {author?.name}
-                        </div>
-                        <div style={{ fontSize: '0.75rem', color: DESIGN_TOKENS.neutral[500] }}>
-                          {new Date(comment.createdAt).toLocaleString('es-ES')}
-                        </div>
+                        <div style={{ fontSize: '0.875rem', fontWeight: 600, color: DESIGN_TOKENS.neutral[800] }}>{author?.name}</div>
+                        <div style={{ fontSize: '0.75rem', color: DESIGN_TOKENS.neutral[500] }}>{new Date(comment.createdAt).toLocaleString('es-ES')}</div>
                       </div>
                     </div>
                     <p style={{ fontSize: '0.875rem', color: DESIGN_TOKENS.neutral[700], margin: 0, lineHeight: 1.5 }}>
-                      {comment.text}
+                      {comment.content || comment.text}
                     </p>
                   </div>
                 );
@@ -4621,13 +4652,11 @@ function TaskDetailModal({ task, project, users, comments, onClose, onUpdate, on
           </div>
         </div>
 
-        {/* Sidebar */}
+        {/* ── COLUMNA DERECHA (SIDEBAR) ── */}
         <div>
           <div style={{
-            background: DESIGN_TOKENS.neutral[50],
-            borderRadius: '12px',
-            padding: '1.5rem',
-            border: `1px solid ${DESIGN_TOKENS.neutral[200]}`,
+            background: DESIGN_TOKENS.neutral[50], borderRadius: '12px',
+            padding: '1.5rem', border: `1px solid ${DESIGN_TOKENS.neutral[200]}`,
             marginBottom: '1rem'
           }}>
             <h4 style={{ fontSize: '0.875rem', fontWeight: 700, color: DESIGN_TOKENS.neutral[600], marginBottom: '1rem', textTransform: 'uppercase' }}>
@@ -4635,78 +4664,134 @@ function TaskDetailModal({ task, project, users, comments, onClose, onUpdate, on
             </h4>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+
+              {/* Estado */}
               <DetailItem label="Estado">
-                <div style={{
-                  padding: '0.5rem 0.75rem',
-                  background: STATUS_OPTIONS[task.status]?.bg || DESIGN_TOKENS.neutral[100],
-                  color: STATUS_OPTIONS[task.status]?.color || DESIGN_TOKENS.neutral[600],
-                  borderRadius: '6px',
-                  fontSize: '0.875rem',
-                  fontWeight: 600,
-                  textAlign: 'center'
-                }}>
-                  {STATUS_OPTIONS[task.status]?.label || task.status}
-                </div>
+                {isEditing ? (
+                  <select value={form.status || 'todo'} onChange={e => set('status', e.target.value)} style={{ ...fi, cursor: 'pointer' }}>
+                    {Object.entries(STATUS_OPTIONS).map(([k, { label }]) => (
+                      <option key={k} value={k}>{label}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <div style={{
+                    padding: '0.5rem 0.75rem',
+                    background: STATUS_OPTIONS[task.status]?.bg || DESIGN_TOKENS.neutral[100],
+                    color: STATUS_OPTIONS[task.status]?.color || DESIGN_TOKENS.neutral[600],
+                    borderRadius: '6px', fontSize: '0.875rem', fontWeight: 600, textAlign: 'center',
+                  }}>
+                    {STATUS_OPTIONS[task.status]?.label || task.status}
+                  </div>
+                )}
               </DetailItem>
 
+              {/* Prioridad */}
               <DetailItem label="Prioridad">
-                <div style={{
-                  padding: '0.5rem 0.75rem',
-                  background: `${PRIORITY_OPTIONS[task.priority]?.color}15`,
-                  color: PRIORITY_OPTIONS[task.priority]?.color,
-                  borderRadius: '6px',
-                  fontSize: '0.875rem',
-                  fontWeight: 600,
-                  textAlign: 'center'
-                }}>
-                  {PRIORITY_OPTIONS[task.priority]?.label || task.priority}
-                </div>
+                {isEditing ? (
+                  <select value={form.priority || 'medium'} onChange={e => set('priority', e.target.value)} style={{ ...fi, cursor: 'pointer' }}>
+                    {Object.entries(PRIORITY_OPTIONS).map(([k, { label }]) => (
+                      <option key={k} value={k}>{label}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <div style={{
+                    padding: '0.5rem 0.75rem',
+                    background: `${PRIORITY_OPTIONS[task.priority]?.color}15`,
+                    color: PRIORITY_OPTIONS[task.priority]?.color,
+                    borderRadius: '6px', fontSize: '0.875rem', fontWeight: 600, textAlign: 'center',
+                  }}>
+                    {PRIORITY_OPTIONS[task.priority]?.label || task.priority}
+                  </div>
+                )}
               </DetailItem>
 
+              {/* Asignado a */}
               <DetailItem label="Asignado a">
-                {assignee && (
+                {isEditing ? (
+                  <select value={form.assigneeId || ''} onChange={e => set('assigneeId', e.target.value)} style={{ ...fi, cursor: 'pointer' }}>
+                    <option value="">Sin asignar</option>
+                    {users.map(u => (
+                      <option key={u.id} value={u.id}>{u.avatar} {u.name}</option>
+                    ))}
+                  </select>
+                ) : assignee ? (
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <span style={{ fontSize: '1.5rem' }}>{assignee.avatar}</span>
+                    <span style={{ fontSize: '0.875rem', fontWeight: 600, color: DESIGN_TOKENS.neutral[800] }}>{assignee.name}</span>
+                  </div>
+                ) : (
+                  <span style={{ fontSize: '0.875rem', color: DESIGN_TOKENS.neutral[500] }}>Sin asignar</span>
+                )}
+              </DetailItem>
+
+              {/* Proyecto */}
+              <DetailItem label="Proyecto">
+                {isEditing ? (
+                  <select value={form.projectId || ''} onChange={e => set('projectId', e.target.value)} style={{ ...fi, cursor: 'pointer' }}>
+                    <option value="">Sin proyecto</option>
+                    {projects.map(p => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    {currentProject?.color && (
+                      <div style={{ width: 10, height: 10, borderRadius: '50%', background: currentProject.color, flexShrink: 0 }} />
+                    )}
                     <span style={{ fontSize: '0.875rem', fontWeight: 600, color: DESIGN_TOKENS.neutral[800] }}>
-                      {assignee.name}
+                      {currentProject?.name || 'Sin proyecto'}
                     </span>
                   </div>
                 )}
               </DetailItem>
 
-              <DetailItem label="Proyecto">
-                <div style={{ fontSize: '0.875rem', fontWeight: 600, color: DESIGN_TOKENS.neutral[800] }}>
-                  {project?.name || 'Sin proyecto'}
-                </div>
-              </DetailItem>
-
+              {/* Fecha inicio */}
               <DetailItem label="Fecha inicio">
-                <div style={{ fontSize: '0.875rem', color: DESIGN_TOKENS.neutral[700] }}>
-                  {formatDate(task.startDate, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
-                </div>
+                {isEditing ? (
+                  <input type="date" value={form.startDate || ''} onChange={e => set('startDate', e.target.value)} style={fi} />
+                ) : (
+                  <div style={{ fontSize: '0.875rem', color: DESIGN_TOKENS.neutral[700] }}>
+                    {formatDate(task.startDate, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
+                  </div>
+                )}
               </DetailItem>
 
+              {/* Fecha fin */}
               <DetailItem label="Fecha fin">
-                <div style={{ fontSize: '0.875rem', color: DESIGN_TOKENS.neutral[700] }}>
-                  {formatDate(task.endDate, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
-                </div>
+                {isEditing ? (
+                  <input type="date" value={form.endDate || ''} onChange={e => set('endDate', e.target.value)} style={fi} />
+                ) : (
+                  <div style={{ fontSize: '0.875rem', color: DESIGN_TOKENS.neutral[700] }}>
+                    {formatDate(task.endDate, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
+                  </div>
+                )}
               </DetailItem>
 
+              {/* Progreso */}
               <DetailItem label="Progreso">
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                    <span style={{ fontSize: '0.75rem', color: DESIGN_TOKENS.neutral[600] }}>Completado</span>
-                    <span style={{ fontSize: '0.875rem', fontWeight: 700, color: DESIGN_TOKENS.primary.base }}>{task.progress}%</span>
+                {isEditing ? (
+                  <div>
+                    <input
+                      type="range" min="0" max="100"
+                      value={form.progress || 0}
+                      onChange={e => set('progress', Number(e.target.value))}
+                      style={{ width: '100%' }}
+                    />
+                    <div style={{ textAlign: 'right', fontSize: '0.75rem', color: DESIGN_TOKENS.neutral[600], marginTop: '2px' }}>
+                      {form.progress || 0}%
+                    </div>
                   </div>
-                  <div style={{ height: '8px', background: DESIGN_TOKENS.neutral[200], borderRadius: '4px', overflow: 'hidden' }}>
-                    <div style={{
-                      width: `${task.progress}%`,
-                      height: '100%',
-                      background: DESIGN_TOKENS.primary.base,
-                      transition: 'width 0.3s'
-                    }} />
+                ) : (
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                      <span style={{ fontSize: '0.75rem', color: DESIGN_TOKENS.neutral[600] }}>Completado</span>
+                      <span style={{ fontSize: '0.875rem', fontWeight: 700, color: DESIGN_TOKENS.primary.base }}>{task.progress}%</span>
+                    </div>
+                    <div style={{ height: '8px', background: DESIGN_TOKENS.neutral[200], borderRadius: '4px', overflow: 'hidden' }}>
+                      <div style={{ width: `${task.progress}%`, height: '100%', background: DESIGN_TOKENS.primary.base, transition: 'width 0.3s' }} />
+                    </div>
                   </div>
-                </div>
+                )}
               </DetailItem>
 
               {task.tags && task.tags.length > 0 && (
@@ -4714,12 +4799,9 @@ function TaskDetailModal({ task, project, users, comments, onClose, onUpdate, on
                   <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                     {task.tags.map(tag => (
                       <span key={tag} style={{
-                        padding: '0.375rem 0.75rem',
-                        background: DESIGN_TOKENS.primary.lighter,
-                        color: DESIGN_TOKENS.primary.dark,
-                        borderRadius: '12px',
-                        fontSize: '0.75rem',
-                        fontWeight: 600
+                        padding: '0.375rem 0.75rem', background: DESIGN_TOKENS.primary.lighter,
+                        color: DESIGN_TOKENS.primary.dark, borderRadius: '12px',
+                        fontSize: '0.75rem', fontWeight: 600,
                       }}>
                         #{tag}
                       </span>
@@ -4730,17 +4812,71 @@ function TaskDetailModal({ task, project, users, comments, onClose, onUpdate, on
             </div>
           </div>
 
+          {/* ── BOTONES DE ACCIÓN ── */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            {!isEditing && (
+            {isEditing ? (
+              <>
+                <button
+                  onClick={handleSave}
+                  disabled={saving}
+                  style={{
+                    ...primaryButtonStyle,
+                    background: saving ? '#94a3b8' : '#1e293b',
+                    boxShadow: 'none',
+                    cursor: saving ? 'not-allowed' : 'pointer',
+                  }}
+                  onMouseEnter={e => { if (!saving) e.currentTarget.style.background = '#334155'; }}
+                  onMouseLeave={e => { if (!saving) e.currentTarget.style.background = '#1e293b'; }}
+                >
+                  <Save size={16} />
+                  {saving ? 'Guardando...' : 'Guardar cambios'}
+                </button>
+
+                <button onClick={cancelEdit} style={secondaryButtonStyle}>
+                  <X size={16} />
+                  Cancelar
+                </button>
+
+                {onDelete && !showDeleteConfirm && (
+                  <button
+                    onClick={() => setShowDeleteConfirm(true)}
+                    style={{ ...secondaryButtonStyle, color: '#dc2626', borderColor: '#fecaca' }}
+                    onMouseEnter={e => { e.currentTarget.style.background = '#fef2f2'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                  >
+                    <Trash2 size={16} />
+                    Eliminar tarea
+                  </button>
+                )}
+
+                {showDeleteConfirm && (
+                  <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '12px' }}>
+                    <p style={{ margin: '0 0 10px', color: '#dc2626', fontWeight: 600, fontSize: '0.82rem' }}>
+                      ¿Eliminar esta tarea? Esta acción no se puede deshacer.
+                    </p>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button
+                        onClick={handleDelete}
+                        style={{ flex: 1, padding: '7px', background: '#dc2626', color: 'white', border: 'none', borderRadius: '7px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.82rem' }}
+                      >
+                        Sí, eliminar
+                      </button>
+                      <button
+                        onClick={() => setShowDeleteConfirm(false)}
+                        style={{ flex: 1, padding: '7px', background: 'white', color: '#374151', border: '1px solid #e2e8f0', borderRadius: '7px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.82rem' }}
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
               <button onClick={() => setIsEditing(true)} style={secondaryButtonStyle}>
                 <Edit size={18} />
-                Editar Tarea
+                Editar tarea
               </button>
             )}
-            <button onClick={() => setShowHistory(!showHistory)} style={secondaryButtonStyle}>
-              <History size={18} />
-              {showHistory ? 'Ocultar' : 'Ver'} Historial
-            </button>
           </div>
         </div>
       </div>
