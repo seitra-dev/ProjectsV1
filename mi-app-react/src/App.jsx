@@ -32,6 +32,7 @@ import BacklogView from './components/BacklogView';
 import LandingPage from './components/LandingPage';
 import SeitraAssistant from './components/SeitraAssistant';
 import CreateListModal from './components/Enviroments/CreateListModal';
+import UserSettingsDrawer from './components/UserSettingsDrawer';
 
 
 // ============================================================================
@@ -471,7 +472,15 @@ if (isTransitioning) {
   if (isRecoveryMode) return <ResetPasswordScreen onDone={() => { setIsRecoveryMode(false); window.location.hash = ''; }} />;
   if (showLanding) return <LandingPage onGetStarted={handleGetStarted} />;
   if (!currentUser) return <LoginScreen onLogin={handleLogin} />;
-  return <MainApp user={currentUser} onLogout={handleLogout} darkMode={darkMode} toggleDarkMode={toggleDarkMode} />;
+  return (
+    <MainApp
+      user={currentUser}
+      onLogout={handleLogout}
+      darkMode={darkMode}
+      toggleDarkMode={toggleDarkMode}
+      onUserUpdate={setCurrentUser}
+    />
+  );
 }
 
 // ============================================================================
@@ -1185,7 +1194,7 @@ function ResetPasswordScreen({ onDone }) {
 // ============================================================================
 // MAIN APP DASHBOARD
 // ============================================================================
-function MainApp({ user, onLogout, darkMode, toggleDarkMode }) {
+function MainApp({ user, onLogout, darkMode, toggleDarkMode, onUserUpdate }) {
   const { addToast } = useToast();
   const { currentWorkspace, currentEnvironment, lists } = useApp();
   const [activeView, setActiveView] = useState('dashboard');
@@ -1204,6 +1213,7 @@ function MainApp({ user, onLogout, darkMode, toggleDarkMode }) {
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showProjectManagement, setShowProjectManagement] = useState(false);
   const [selectedProjectForManagement, setSelectedProjectForManagement] = useState(null);
+  const [userSettingsOpen, setUserSettingsOpen] = useState(false);
 
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [isTablet, setIsTablet] = useState(window.innerWidth >= 768 && window.innerWidth < 1024);
@@ -1368,6 +1378,30 @@ useEffect(() => {
       addToast('Error al eliminar la tarea', 'error');
       throw error;
     }
+  };
+
+  const handleProfileSaved = (updatedRow) => {
+    if (!updatedRow || !onUserUpdate) return;
+    onUserUpdate((prev) => ({
+      ...(prev || {}),
+      id: updatedRow.id,
+      email: updatedRow.email || prev?.email,
+      name: updatedRow.name,
+      role: updatedRow.role ?? prev?.role,
+      avatar: updatedRow.avatar,
+    }));
+    setUsers((prev) => {
+      const i = prev.findIndex((u) => u.id === updatedRow.id);
+      if (i === -1) return [...prev, updatedRow];
+      const next = [...prev];
+      next[i] = { ...next[i], ...updatedRow };
+      return next;
+    });
+  };
+
+  const handleTaskRestoredFromTrash = (restored) => {
+    if (!restored?.id) return;
+    setTasks((prev) => (prev.some((t) => t.id === restored.id) ? prev : [restored, ...prev]));
   };
 
   // Comentarios
@@ -1598,6 +1632,7 @@ useEffect(() => {
         isMobile={isMobile}
         onClose={() => setSidebarOpen(false)}
         onSelectList={handleSelectList}
+        onOpenUserSettings={() => setUserSettingsOpen(true)}
       />
 
       <div style={mainContentWrapperStyle}>
@@ -1613,6 +1648,7 @@ useEffect(() => {
           onBreadcrumbClick={handleBreadcrumbClick}
           onExportReport={exportFullReport}
           isMobile={isMobile}
+          onOpenUserSettings={() => setUserSettingsOpen(true)}
         />
 
         <div style={contentAreaStyle}>
@@ -1634,6 +1670,10 @@ useEffect(() => {
               tasks={tasks.filter(t => t.listId === selectedList.id)}
               projects={projects}
               users={users}
+              onProjectUpdate={(p) => {
+                setProjects((prev) => prev.map((x) => (x.id === p.id ? p : x)));
+                if (selectedProject?.id === p.id) setSelectedProject(p);
+              }}
               onTasksChange={(newTasks) => {
                 setTasks(prev => [
                   ...prev.filter(t => t.listId !== selectedList.id),
@@ -1690,6 +1730,10 @@ useEffect(() => {
               tags={tags}
               onTaskClick={handleTaskClick}
               onProjectUpdate={handleProjectUpdate}
+              patchProjectInState={(p) => {
+                setProjects((prev) => prev.map((x) => (x.id === p.id ? p : x)));
+                if (selectedProject?.id === p.id) setSelectedProject(p);
+              }}
             />
             
           )}
@@ -1754,9 +1798,18 @@ useEffect(() => {
       {showShortcuts && (
         <KeyboardShortcutsModal onClose={() => setShowShortcuts(false)} />
       )}
-      {showShortcuts && (
-        <KeyboardShortcutsModal onClose={() => setShowShortcuts(false)} />
-      )}
+
+      <UserSettingsDrawer
+        isOpen={userSettingsOpen}
+        onClose={() => setUserSettingsOpen(false)}
+        user={user}
+        onProfileSaved={handleProfileSaved}
+        darkMode={darkMode}
+        toggleDarkMode={toggleDarkMode}
+        projects={projects}
+        onTaskRestored={handleTaskRestoredFromTrash}
+        addToast={addToast}
+      />
     </div>
   );
 }
@@ -1764,7 +1817,7 @@ useEffect(() => {
 // ============================================================================
 // TOP BAR
 // ============================================================================
-function TopBar({ user, onLogout, onMenuClick, searchQuery, onSearchChange, darkMode, toggleDarkMode, breadcrumbs, onBreadcrumbClick, onExportReport, isMobile }) {
+function TopBar({ user, onLogout, onMenuClick, searchQuery, onSearchChange, darkMode, toggleDarkMode, breadcrumbs, onBreadcrumbClick, onExportReport, isMobile, onOpenUserSettings }) {
   const [showCreateEnv, setShowCreateEnv] = useState(false);
   const [showEnvSettings, setShowEnvSettings] = useState(false);
   const [showMembersModal, setShowMembersModal] = useState(false);
@@ -1830,6 +1883,41 @@ function TopBar({ user, onLogout, onMenuClick, searchQuery, onSearchChange, dark
             onMouseEnter={e => { e.currentTarget.style.background = 'rgba(15,23,42,0.05)'; e.currentTarget.style.color = '#0f172a'; }}
             onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = '#64748b'; }}>
             <Download size={17} />
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onOpenUserSettings?.()}
+            title="Ajustes de cuenta"
+            style={{
+              width: 38,
+              height: 38,
+              borderRadius: '50%',
+              border: `1px solid ${DESIGN_TOKENS.border.color.subtle}`,
+              padding: 0,
+              cursor: 'pointer',
+              overflow: 'hidden',
+              flexShrink: 0,
+              background: DESIGN_TOKENS.neutral[100],
+            }}
+          >
+            {typeof user?.avatar === 'string' && (user.avatar.startsWith('http') || user.avatar.startsWith('data:')) ? (
+              <img src={user.avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+            ) : (
+              <span style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '100%',
+                height: '100%',
+                fontSize: 14,
+                fontWeight: 700,
+                color: DESIGN_TOKENS.neutral[700],
+                fontFamily: DESIGN_TOKENS.typography.fontFamily,
+              }}>
+                {(user?.name || user?.email || 'U').charAt(0).toUpperCase()}
+              </span>
+            )}
           </button>
 
           {/* ── DARK MODE SWITCH ── */}
@@ -2725,7 +2813,7 @@ function ProjectCardExtended({ project, onClick, onToggleFavorite, onDuplicate, 
 // ============================================================================
 // PROJECT DETAIL VIEW
 // ============================================================================
-function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTaskUpdate, onTaskDelete, users, comments, onCommentsChange, tags, onTaskClick, onProjectUpdate }) {
+function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTaskUpdate, onTaskDelete, users, comments, onCommentsChange, tags, onTaskClick, onProjectUpdate, patchProjectInState }) {
   const [viewMode, setViewMode] = useState('list');
   const [showNewTask, setShowNewTask] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
@@ -2933,6 +3021,8 @@ function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTask
           tasks={effectiveTasks}
           projects={projects}
           users={users}
+          customFieldsProjectId={project.id}
+          onProjectUpdate={patchProjectInState || (() => {})}
           onTasksChange={setLiveTasks}
           onListNameChange={() => {}}
           onListDelete={() => {}}

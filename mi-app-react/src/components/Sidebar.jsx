@@ -47,7 +47,7 @@ const sidebarFooterStyle = {
   borderBottomRightRadius: '24px',
 };
 
-function Sidebar({ isOpen, activeView, onViewChange, projects, onProjectSelect, user, toggleFavorite, isMobile, onClose, onSelectList }) {
+function Sidebar({ isOpen, activeView, onViewChange, projects, onProjectSelect, user, toggleFavorite, isMobile, onClose, onSelectList, onOpenUserSettings }) {
   const { setCurrentWorkspaceState } = useApp();
   const [showCreateWorkspace, setShowCreateWorkspace] = useState(false);
   const [showCreateList, setShowCreateList] = useState(false);
@@ -232,19 +232,30 @@ function Sidebar({ isOpen, activeView, onViewChange, projects, onProjectSelect, 
 
         {/* PERFIL USUARIO - ENMARCADO BONITO */}
         <div style={{ padding: '12px' }}>
-            <div style={{
+            <button
+              type="button"
+              onClick={() => onOpenUserSettings?.()}
+              title="Ajustes de cuenta"
+              style={{
                 ...sidebarFooterStyle,
                 background: 'var(--bg-input)',
                 border: '1px solid var(--border)',
                 borderRadius: '16px',
                 padding: '12px',
                 justifyContent: collapsed && !isMobile ? 'center' : 'flex-start',
-            }}>
+                width: '100%',
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+                textAlign: 'left',
+              }}
+            >
                 <div style={{
                     width: '38px',
                     height: '38px',
                     borderRadius: '12px',
-                    background: `linear-gradient(135deg, #0f172a 0%, #334155 100%)`,
+                    background: typeof user?.avatar === 'string' && (user.avatar.startsWith('http') || user.avatar.startsWith('data:'))
+                      ? 'transparent'
+                      : `linear-gradient(135deg, #0f172a 0%, #334155 100%)`,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -252,8 +263,15 @@ function Sidebar({ isOpen, activeView, onViewChange, projects, onProjectSelect, 
                     fontWeight: 700,
                     fontSize: '14px',
                     flexShrink: 0,
+                    overflow: 'hidden',
                 }}>
-                    {(user?.name || user?.email || 'U').charAt(0).toUpperCase()}
+                    {typeof user?.avatar === 'string' && (user.avatar.startsWith('http') || user.avatar.startsWith('data:')) ? (
+                      <img src={user.avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : (
+                      user?.avatar && String(user.avatar).length <= 4
+                        ? user.avatar
+                        : (user?.name || user?.email || 'U').charAt(0).toUpperCase()
+                    )}
                 </div>
                 {(!collapsed || isMobile) && (
                     <div style={{ overflow: 'hidden' }}>
@@ -265,7 +283,7 @@ function Sidebar({ isOpen, activeView, onViewChange, projects, onProjectSelect, 
                         </div>
                     </div>
                 )}
-            </div>
+            </button>
         </div>
       </div>
 

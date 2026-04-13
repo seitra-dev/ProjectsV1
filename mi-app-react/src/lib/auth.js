@@ -199,4 +199,13 @@ export const auth = {
       throw error;
     }
   },
+
+  /** Fusiona metadata en auth.users (p. ej. preferencias 2FA en UI). */
+  updateUserMetadata: async (data) => {
+    const { data: out, error } = await supabase.auth.updateUser({
+      data,
+    });
+    if (error) throw error;
+    return out?.user ?? null;
+  },
 };
