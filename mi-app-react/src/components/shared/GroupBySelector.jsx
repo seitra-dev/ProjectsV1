@@ -63,9 +63,55 @@ const DEFAULT_FIELDS = {
   dueDate:    'dueDate',
 };
 
-export function buildGroups(groupBy, tasks, projects, users, fieldMap = DEFAULT_FIELDS) {
+export function buildGroups(groupBy, tasks, projects, users, fieldMap = DEFAULT_FIELDS, customFieldDefinitions = []) {
   const f = { ...DEFAULT_FIELDS, ...fieldMap };
   const SIN_FECHA = 'Sin fecha';
+
+  if (typeof groupBy === 'string' && groupBy.startsWith('customField:')) {
+    const fieldId = groupBy.slice('customField:'.length);
+    const field = customFieldDefinitions.find((cf) => cf.id === fieldId);
+    const getVal = (t) => {
+      if (!field) return t.customFields?.[fieldId];
+      if (field.type === 'roadmap_sync' || field.preset_type === 'roadmap_phase') {
+        const v = t.roadmapPhaseId ?? t.customFields?.[fieldId];
+        return v == null || v === '' ? null : v;
+      }
+      return t.customFields?.[fieldId];
+    };
+    const map = new Map();
+    tasks.forEach((t) => {
+      const raw = getVal(t);
+      const sk = raw == null || raw === '' ? '__empty__' : String(raw);
+      if (!map.has(sk)) map.set(sk, []);
+      map.get(sk).push(t);
+    });
+    const groups = [];
+    let idx = 0;
+    map.forEach((groupTasks, sk) => {
+      let label = sk === '__empty__' ? `Sin ${field?.name || 'valor'}` : sk;
+      if (sk !== '__empty__' && field && (field.type === 'roadmap_sync' || field.preset_type === 'roadmap_phase')) {
+        const t0 = groupTasks[0];
+        const proj = projects.find((p) => p.id === t0?.projectId);
+        const ph = proj?.roadmap?.phases?.find((p) => String(p.id) === sk);
+        if (ph?.name) label = ph.name;
+      }
+      if (sk !== '__empty__' && field?.type === 'member_select') {
+        const u = users.find((x) => String(x.id) === String(sk));
+        if (u) label = u.name || u.email || label;
+      }
+      groups.push({
+        key: `cf_${fieldId}_${sk}`,
+        label,
+        color: ROTATIONAL_COLORS[idx % ROTATIONAL_COLORS.length],
+        tasks: groupTasks,
+        defaultData: {},
+      });
+      idx += 1;
+    });
+    return groups.length
+      ? groups
+      : [{ key: 'cf_empty', label: 'Sin tareas', color: '#94a3b8', tasks: [], defaultData: {} }];
+  }
 
   if (groupBy === 'none') {
     return [{ key: 'all', label: 'Todas las tareas', color: '#94a3b8', tasks, defaultData: {} }];
@@ -157,7 +203,7 @@ export function buildGroups(groupBy, tasks, projects, users, fieldMap = DEFAULT_
 // GROUP BY SELECTOR COMPONENT
 // ============================================================================
 
-export const GroupBySelector = ({ value, onChange }) => {
+export const GroupBySelector = ({ value, onChange, groupLabelOverride = null }) => {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
@@ -169,7 +215,8 @@ export const GroupBySelector = ({ value, onChange }) => {
 
   const current = GROUP_OPTIONS.find(o => o.value === value);
   const CurrentIcon = current?.Icon || Layers;
-  const isActive = value !== 'none';
+  const isActive = value !== 'none' || !!groupLabelOverride;
+  const displayLabel = groupLabelOverride || current?.label || 'Estado';
 
   return (
     <div ref={ref} style={{ position: 'relative' }}>
@@ -187,7 +234,7 @@ export const GroupBySelector = ({ value, onChange }) => {
       >
         <CurrentIcon size={14} />
         <span style={{ color: '#9ca3af', fontWeight: 400 }}>Grupo:</span>
-        <span>{current?.label || 'Estado'}</span>
+        <span>{displayLabel}</span>
         <ChevronDown size={13} style={{ opacity: 0.5 }} />
       </button>
 

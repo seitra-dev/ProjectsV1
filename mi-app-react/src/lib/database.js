@@ -40,6 +40,166 @@ const restFetch = async (path, method, body) => {
 };
 
 // ============================================================================
+// ESTADOS DE TAREA — fuente única de verdad para toda la app
+// ============================================================================
+
+/**
+ * Todos los estados válidos de una tarea en SEITRA.
+ * Importar desde aquí en cualquier componente para mantener consistencia.
+ */
+export const TASK_STATUS_OPTIONS = {
+  pending: {
+    label: 'Pendiente',
+    color: '#FF9800',
+    bg: '#FFF4E5',
+    dbValue: 'pending',
+  },
+  in_progress: {
+    label: 'En Progreso',
+    color: '#2196F3',
+    bg: '#E3F2FD',
+    dbValue: 'in_progress',
+  },
+  paused: {
+    label: 'En Pausa',
+    color: '#78909C',
+    bg: '#ECEFF1',
+    dbValue: 'paused',
+  },
+  expedite: {
+    label: 'Expedite',
+    color: '#FF1744',
+    bg: '#FFEBEE',
+    dbValue: 'expedite',
+  },
+  completed: {
+    label: 'Completado',
+    color: '#00D68F',
+    bg: '#E8F5E9',
+    dbValue: 'completed',
+  },
+  blocked: {
+    label: 'Bloqueado',
+    color: '#DC2626',
+    bg: '#FFEBEE',
+    dbValue: 'blocked',
+  },
+};
+
+/**
+ * Lista ordenada para selectores de UI.
+ */
+export const TASK_STATUS_LIST = [
+  'pending',
+  'in_progress',
+  'paused',
+  'expedite',
+  'completed',
+  'blocked',
+];
+
+// ============================================================================
+// SELECTOR: hasExpediteActive
+// Verifica si hay tareas Expedite activas para el usuario/proyecto.
+// ============================================================================
+
+/**
+ * Devuelve true si alguna de las tareas dadas está en estado 'expedite'.
+ * Filtra por userId y/o projectId si se proveen.
+ *
+ * @param {Array}  tasks     - Array de tareas (ya cargadas en el store).
+ * @param {string} [userId]  - ID del usuario autenticado.
+ * @param {string} [projectId] - ID del proyecto activo (opcional).
+ * @returns {Object} { active: boolean, task: Task|null }
+ */
+export const hasExpediteActive = (tasks = [], userId = null, projectId = null) => {
+  const expediteTasks = tasks.filter((t) => {
+    if (t.isDeleted) return false;
+    if (t.status !== 'expedite') return false;
+
+    // Si se filtra por proyecto
+    if (projectId && t.projectId !== projectId) return false;
+
+    // Si se filtra por usuario: aplica si la tarea es del usuario O no está asignada
+    if (userId && t.assigneeId && t.assigneeId !== userId) return false;
+
+    return true;
+  });
+
+  return {
+    active: expediteTasks.length > 0,
+    tasks: expediteTasks,
+    task: expediteTasks[0] ?? null,
+  };
+};
+
+// ============================================================================
+// SQL PARA SUPABASE (pegar en el SQL Editor de Supabase)
+// ============================================================================
+/*
+  ── EJECUTAR EN SUPABASE SQL EDITOR ──────────────────────────────────────────
+
+  -- 1. Validar que el status sea uno de los valores permitidos
+  ALTER TABLE tasks
+    DROP CONSTRAINT IF EXISTS tasks_status_check;
+
+  ALTER TABLE tasks
+    ADD CONSTRAINT tasks_status_check
+    CHECK (status IN (
+      'pending',
+      'in_progress',
+      'paused',
+      'expedite',
+      'completed',
+      'blocked',
+      'todo',
+      'done'
+    ));
+
+  -- 2. Trigger: bloquear cambio a 'in_progress' o 'completed'
+  --    si el usuario tiene una tarea 'expedite' activa.
+  CREATE OR REPLACE FUNCTION check_expedite_block()
+  RETURNS TRIGGER LANGUAGE plpgsql AS $$
+  BEGIN
+    -- Solo aplica cuando se intenta pasar a in_progress o completed
+    IF NEW.status IN ('in_progress', 'completed') THEN
+      -- Si la tarea que se edita es la misma en Expedite, se permite cerrarla
+      IF OLD.status = 'expedite' THEN
+        RETURN NEW;
+      END IF;
+
+      -- Verificar si el assignee tiene otra tarea expedite pendiente
+      IF NEW.assignee_id IS NOT NULL THEN
+        IF EXISTS (
+          SELECT 1 FROM tasks
+          WHERE assignee_id = NEW.assignee_id
+            AND status = 'expedite'
+            AND id <> NEW.id
+            AND is_deleted = FALSE
+        ) THEN
+          RAISE EXCEPTION
+            'EXPEDITE_BLOCK: El usuario tiene una tarea Expedite activa. '
+            'Resuelve la urgencia antes de avanzar otras tareas.'
+            USING ERRCODE = 'P0001';
+        END IF;
+      END IF;
+    END IF;
+
+    RETURN NEW;
+  END;
+  $$;
+
+  DROP TRIGGER IF EXISTS trg_check_expedite_block ON tasks;
+
+  CREATE TRIGGER trg_check_expedite_block
+    BEFORE UPDATE OF status ON tasks
+    FOR EACH ROW
+    EXECUTE FUNCTION check_expedite_block();
+
+  ── FIN SQL ───────────────────────────────────────────────────────────────────
+*/
+
+// ============================================================================
 // MAPPERS: DB (snake_case) <-> Frontend (camelCase)
 // ============================================================================
 
@@ -61,6 +221,7 @@ const mapProject = (row) => {
     members: row.members || [],
     favorite: row.favorite || false,
     roadmap: row.roadmap || { phases: [], userStories: [], risks: [], meetings: [] },
+    customFieldDefinitions: row.custom_field_definitions || [],
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -82,6 +243,7 @@ const toDbProject = (project) => {
   if (project.members !== undefined) db.members = project.members || [];
   if (project.favorite !== undefined) db.favorite = project.favorite;
   if (project.roadmap !== undefined) db.roadmap = project.roadmap;
+  if (project.customFieldDefinitions !== undefined) db.custom_field_definitions = project.customFieldDefinitions;
   return db;
 };
 
@@ -105,6 +267,9 @@ const mapTask = (row) => {
     estimatedHours: row.estimated_hours,
     dependencies: row.dependencies || [],
     roadmapPhaseId: row.roadmap_phase_id || null,
+    customFields: row.custom_fields != null && typeof row.custom_fields === 'object' ? row.custom_fields : {},
+    closedAt: row.closed_at || null,
+    isDeleted: row.is_deleted === true,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -129,6 +294,7 @@ const toDbTask = (task) => {
   if (task.workspaceId !== undefined) db.workspace_id = task.workspaceId || null;
   if (task.environmentId !== undefined) db.environment_id = task.environmentId || null;
   if ('roadmapPhaseId' in task) db.roadmap_phase_id = task.roadmapPhaseId || null;
+  if (task.customFields !== undefined) db.custom_fields = task.customFields;
   return db;
 };
 
@@ -209,39 +375,27 @@ export const dbUsers = {
 // ============================================================================
 
 export const dbEnvironments = {
-  // Obtener todos los entornos
   getAll: async () => {
     const { data, error } = await supabase
       .from('environments')
       .select('*')
       .order('created_at', { ascending: false });
-    
     if (error) throw error;
     return data;
   },
-
-  // Obtener entornos de un usuario
   getByUser: async (userId) => {
     const { data, error } = await supabase
       .from('environments')
-      .select(`
-        *,
-        environment_members!inner(user_id)
-      `)
+      .select(`*, environment_members!inner(user_id)`)
       .eq('environment_members.user_id', userId)
       .order('created_at', { ascending: false });
-    
     if (error) throw error;
     return data;
   },
-
-  // Crear entorno
   create: async (environmentData) => {
     const data = await restFetch('environments', 'POST', environmentData);
     return Array.isArray(data) ? data[0] : data;
   },
-
-  // Actualizar entorno
   update: async (id, updates) => {
     const { data, error } = await supabase
       .from('environments')
@@ -249,19 +403,15 @@ export const dbEnvironments = {
       .eq('id', id)
       .select()
       .single();
-    
     if (error) throw error;
     return data;
   },
-
-  // Eliminar entorno
   delete: async (id) => {
     const { data, error } = await supabase
       .from('environments')
       .delete()
       .eq('id', id)
       .select();
-
     if (error) throw error;
     if (!data || data.length === 0) {
       throw new Error('No se eliminó el equipo. Verifica las políticas de permisos en Supabase (RLS).');
@@ -274,7 +424,6 @@ export const dbEnvironments = {
 // ============================================================================
 
 export const dbEnvironmentMembers = {
-  // Agregar miembro a entorno
   add: async (environmentId, userId, role = 'member', invitedBy = null) => {
     const payload = { environment_id: environmentId, user_id: userId, role };
     if (invitedBy) payload.invited_by = invitedBy;
@@ -286,8 +435,6 @@ export const dbEnvironmentMembers = {
     if (error) throw error;
     return data;
   },
-
-  // Obtener miembros de un entorno
   getByEnvironment: async (environmentId) => {
     const { data, error } = await supabase
       .from('environment_members')
@@ -296,8 +443,6 @@ export const dbEnvironmentMembers = {
     if (error) throw error;
     return data || [];
   },
-
-  // Verificar si un usuario es miembro (devuelve el registro o null)
   isMember: async (environmentId, userId) => {
     const { data, error } = await supabase
       .from('environment_members')
@@ -308,8 +453,6 @@ export const dbEnvironmentMembers = {
     if (error) throw error;
     return data;
   },
-
-  // Verificar si un usuario es owner
   isOwner: async (environmentId, userId) => {
     const { data, error } = await supabase
       .from('environment_members')
@@ -321,8 +464,6 @@ export const dbEnvironmentMembers = {
     if (error) throw error;
     return data !== null;
   },
-
-  // Actualizar el rol de un miembro
   updateRole: async (environmentId, userId, newRole) => {
     const { data, error } = await supabase
       .from('environment_members')
@@ -334,8 +475,6 @@ export const dbEnvironmentMembers = {
     if (error) throw error;
     return data;
   },
-
-  // Obtener todas las membresías de un usuario (para filtrar entornos visibles)
   getMyMemberships: async (userId) => {
     const { data, error } = await supabase
       .from('environment_members')
@@ -344,8 +483,6 @@ export const dbEnvironmentMembers = {
     if (error) throw error;
     return data || [];
   },
-
-  // Eliminar miembro de entorno
   remove: async (environmentId, userId) => {
     const { error } = await supabase
       .from('environment_members')
@@ -361,39 +498,25 @@ export const dbEnvironmentMembers = {
 // ============================================================================
 
 export const dbWorkspaces = {
-  // Obtener workspaces de un entorno
   getByEnvironment: async (environmentId) => {
-    console.log('[dbWorkspaces] buscando workspaces para env:', environmentId);
     const url = `${SUPA_URL}/rest/v1/workspaces?environment_id=eq.${environmentId}&order=created_at.desc`;
-    console.log('[dbWorkspaces] URL completa:', url);
-    console.log('[dbWorkspaces] token usado:', getAuthToken()?.substring(0, 30) + '...');
     const response = await fetch(url, { method: 'GET', headers: restHeaders() });
-    console.log('[dbWorkspaces] respuesta status:', response.status);
     const data = await response.json();
-    console.log('[dbWorkspaces] data recibida:', data);
     if (!response.ok) throw new Error(data.message || data.hint || `HTTP ${response.status}`);
     return data || [];
   },
-
-  // Obtener workspace por ID
   getById: async (id) => {
     const data = await restFetch(`workspaces?id=eq.${id}`, 'GET');
     return Array.isArray(data) ? data[0] : data;
   },
-
-  // Crear workspace
   create: async (workspaceData) => {
     const data = await restFetch('workspaces', 'POST', workspaceData);
     return Array.isArray(data) ? data[0] : data;
   },
-
-  // Actualizar workspace
   update: async (id, updates) => {
     const data = await restFetch(`workspaces?id=eq.${id}`, 'PATCH', updates);
     return Array.isArray(data) ? data[0] : data;
   },
-
-  // Eliminar workspace
   delete: async (id) => {
     await restFetch(`workspaces?id=eq.${id}`, 'DELETE');
   }
@@ -464,6 +587,7 @@ export const dbTasks = {
     const { data, error } = await supabase
       .from('tasks')
       .select('*')
+      .eq('is_deleted', false)
       .order('created_at', { ascending: false });
     if (error) throw error;
     return (data || []).map(mapTask);
@@ -473,12 +597,18 @@ export const dbTasks = {
       .from('tasks')
       .select('*')
       .eq('project_id', projectId)
+      .eq('is_deleted', false)
       .order('created_at', { ascending: false });
     if (error) throw error;
     return (data || []).map(mapTask);
   },
   getById: async (id) => {
-    const { data, error } = await supabase.from('tasks').select('*').eq('id', id).single();
+    const { data, error } = await supabase
+      .from('tasks')
+      .select('*')
+      .eq('id', id)
+      .eq('is_deleted', false)
+      .single();
     if (error) throw error;
     return mapTask(data);
   },
@@ -487,12 +617,18 @@ export const dbTasks = {
       .from('tasks')
       .select('*')
       .eq('list_id', listId)
+      .eq('is_deleted', false)
       .order('created_at', { ascending: false });
     if (error) throw error;
     return (data || []).map(mapTask);
   },
   getSubtasks: async (parentId) => {
-    const { data, error } = await supabase.from('tasks').select('*').eq('parent_id', parentId).order('created_at', { ascending: false });
+    const { data, error } = await supabase
+      .from('tasks')
+      .select('*')
+      .eq('parent_id', parentId)
+      .eq('is_deleted', false)
+      .order('created_at', { ascending: false });
     if (error) throw error;
     return (data || []).map(mapTask);
   },
@@ -511,7 +647,23 @@ export const dbTasks = {
     if (!data || data.length === 0) {
       throw new Error('La tarea no existe o no tienes permisos para eliminarla');
     }
-  }
+  },
+  getDeleted: async () => {
+    const { data, error } = await supabase
+      .from('tasks')
+      .select('*')
+      .eq('is_deleted', true)
+      .order('updated_at', { ascending: false });
+    if (error) throw error;
+    return (data || []).map(mapTask);
+  },
+  restore: async (id) => {
+    const data = await restFetch(`tasks?id=eq.${id}`, 'PATCH', {
+      is_deleted: false,
+      updated_at: new Date().toISOString(),
+    });
+    return mapTask(Array.isArray(data) ? data[0] : data);
+  },
 };
 
 // ============================================================================
@@ -547,57 +699,37 @@ export const dbComments = {
 // ============================================================================
 
 export const dbChatMessages = {
-  // Obtener mensajes de un environment
   getByEnvironment: async (environmentId, limit = 100) => {
     const { data, error } = await supabase
       .from('chat_messages')
-      .select(`
-        *,
-        user:users(id, name, avatar)
-      `)
+      .select(`*, user:users(id, name, avatar)`)
       .eq('environment_id', environmentId)
       .order('created_at', { ascending: true })
       .limit(limit);
-
     if (error) throw error;
     return data;
   },
-
-  // Crear mensaje
   create: async (messageData) => {
     const { data, error } = await supabase
       .from('chat_messages')
       .insert(messageData)
-      .select(`
-        *,
-        user:users(id, name, avatar)
-      `)
+      .select(`*, user:users(id, name, avatar)`)
       .single();
-
     if (error) throw error;
     return data;
   },
-
-  // Suscribirse a nuevos mensajes en tiempo real
   subscribe: (environmentId, callback) => {
     const channel = supabase
       .channel(`chat:${environmentId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'chat_messages',
-          filter: `environment_id=eq.${environmentId}`
-        },
-        callback
-      )
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'chat_messages',
+        filter: `environment_id=eq.${environmentId}`
+      }, callback)
       .subscribe();
-
     return channel;
   },
-
-  // Cancelar suscripción
   unsubscribe: (channel) => {
     supabase.removeChannel(channel);
   }
@@ -653,17 +785,14 @@ export const dbLists = {
 
 export const handleSupabaseError = (error) => {
   console.error('Supabase Error:', error);
-  
-  // Errores comunes
-  if (error.code === '23505') {
-    return 'Este registro ya existe (duplicado)';
+
+  // Error específico del trigger Expedite
+  if (error.message?.includes('EXPEDITE_BLOCK')) {
+    return '⚠️ Tienes una tarea Expedite activa. Resuélvela antes de avanzar otras tareas.';
   }
-  if (error.code === '23503') {
-    return 'Error de referencia: un campo apunta a un registro que no existe';
-  }
-  if (error.code === '42P01') {
-    return 'La tabla no existe';
-  }
-  
+  if (error.code === '23505') return 'Este registro ya existe (duplicado)';
+  if (error.code === '23503') return 'Error de referencia: un campo apunta a un registro que no existe';
+  if (error.code === '42P01') return 'La tabla no existe';
+
   return error.message || 'Error desconocido en la base de datos';
 };
