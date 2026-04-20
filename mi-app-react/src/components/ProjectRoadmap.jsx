@@ -10,7 +10,7 @@ import { DESIGN_TOKENS } from '../styles/tokens';
 // PROJECT ROADMAP - Dynamic Component
 // ============================================================================
 
-const ProjectRoadmap = ({ project, tasks = [], onProjectUpdate }) => {
+const ProjectRoadmap = ({ project, tasks = [], onProjectUpdate, onTaskCreate, onTaskUpdate, onTaskDelete }) => {
   const [activeTab, setActiveTab] = useState('overview');
 
   // Inicializar estructura si no existe
@@ -244,7 +244,11 @@ const ProjectRoadmap = ({ project, tasks = [], onProjectUpdate }) => {
           <PlanTab
             phases={roadmapData.phases || []}
             tasks={tasks}
+            projectId={project.id}
             onUpdate={(phases) => updateRoadmap({ phases })}
+            onTaskCreate={onTaskCreate}
+            onTaskUpdate={onTaskUpdate}
+            onTaskDelete={onTaskDelete}
           />
         )}
         {activeTab === 'stories' && (
@@ -632,7 +636,7 @@ const PhaseTimeline = ({ phases }) => {
 // PLAN TAB
 // ============================================================================
 
-const PlanTab = ({ phases, tasks = [], onUpdate }) => {
+const PlanTab = ({ phases, tasks = [], projectId, onUpdate, onTaskCreate, onTaskUpdate, onTaskDelete }) => {
   const [openPhase, setOpenPhase] = useState(phases[0]?.id || null);
   const [isCreating, setIsCreating] = useState(false);
   const [confirmData, setConfirmData] = useState(null);
@@ -682,10 +686,14 @@ const PlanTab = ({ phases, tasks = [], onUpdate }) => {
           phaseTasks={tasks.filter(t => String(t.roadmapPhaseId) === String(phase.id))}
           isOpen={openPhase === phase.id}
           isCreating={isCreating && phase.id === openPhase}
+          projectId={projectId}
           onToggle={() => setOpenPhase(openPhase === phase.id ? null : phase.id)}
           onUpdate={(updates) => handleUpdatePhase(phase.id, updates)}
           onDelete={() => handleDeletePhase(phase.id)}
           onFinishCreating={() => setIsCreating(false)}
+          onTaskCreate={onTaskCreate}
+          onTaskUpdate={onTaskUpdate}
+          onTaskDelete={onTaskDelete}
         />
       ))}
 
@@ -738,7 +746,8 @@ const PlanTab = ({ phases, tasks = [], onUpdate }) => {
 
 const TASK_STATUS_STYLE = {
   todo:        { label: 'Pendiente',   color: '#94a3b8', bg: '#f1f5f9' },
-  in_progress: { label: 'En Progreso', color: '#3b82f6', bg: '#eff6ff' },
+  in_progress: { label: 'En Curso',    color: '#3b82f6', bg: '#eff6ff' },
+  waiting:     { label: 'En Espera',   color: '#0369a1', bg: '#e0f2fe' },
   review:      { label: 'En Revisión', color: '#f59e0b', bg: '#fffbeb' },
   completed:   { label: 'Completado',  color: '#10b981', bg: '#f0fdf4' },
 };
@@ -1051,7 +1060,8 @@ const PhaseCard = ({ phase, phaseTasks = [], isOpen, isCreating, onToggle, onUpd
 
 const ACTIVITY_STATUS = {
   pending:     { label: 'Pendiente',   color: '#94a3b8', bg: '#f1f5f9' },
-  in_progress: { label: 'En Progreso', color: '#3b82f6', bg: '#eff6ff' },
+  in_progress: { label: 'En Curso',    color: '#3b82f6', bg: '#eff6ff' },
+  waiting:     { label: 'En Espera',   color: '#0369a1', bg: '#e0f2fe' },
   review:      { label: 'En Revisión', color: '#f59e0b', bg: '#fffbeb' },
   done:        { label: 'Completado',  color: '#10b981', bg: '#f0fdf4' },
 };

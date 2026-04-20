@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import { dbUsers, dbProjects, dbTasks, dbComments } from './lib/database';
+import { dbUsers, dbProjects, dbTasks, dbComments, dbEnvironmentMembers, hasExpediteActive } from './lib/database';
 import { supabase } from './lib/supabase';
 import { auth } from './lib/auth'; 
 
@@ -25,6 +25,7 @@ import CreateEnvironmentModal from "./components/Enviroments/CreateEnvironmentMo
 import EnvironmentSettings from "./components/Enviroments/EnvironmentSettings";
 import EnvironmentMembersModal from "./components/Enviroments/EnvironmentMembersModal";
 import AnalyticsDashboard from "./components/AnalyticsDashboard";
+import ManagementView from "./components/ManagementView";
 import { AppProvider, useApp } from './context/AppContext';
 import TeamChatView from './components/TeamChatView';
 import ListView from './components/ListView';
@@ -33,6 +34,7 @@ import LandingPage from './components/LandingPage';
 import SeitraAssistant from './components/SeitraAssistant';
 import CreateListModal from './components/Enviroments/CreateListModal';
 import UserSettingsDrawer from './components/UserSettingsDrawer';
+import SelectEnvironmentPrompt from './components/SelectEnvironmentPrompt';
 
 
 // ============================================================================
@@ -251,11 +253,15 @@ function useKeyboardShortcuts(shortcuts) {
 // ];
 
 const STATUS_OPTIONS = {
-  todo: { label: 'Por Hacer', color: DESIGN_TOKENS.neutral[600], bg: DESIGN_TOKENS.neutral[100] },
-  in_progress: { label: 'En Progreso', color: DESIGN_TOKENS.info.dark, bg: DESIGN_TOKENS.info.light },
-  in_review: { label: 'En Revisión', color: DESIGN_TOKENS.warning.dark, bg: DESIGN_TOKENS.warning.light },
-  completed: { label: 'Completado', color: DESIGN_TOKENS.success.dark, bg: DESIGN_TOKENS.success.light },
-  blocked: { label: 'Bloqueado', color: DESIGN_TOKENS.danger.dark, bg: DESIGN_TOKENS.danger.light }
+  todo:        { label: 'Por Hacer',   color: DESIGN_TOKENS.neutral[600],  bg: DESIGN_TOKENS.neutral[100]  },
+  pending:     { label: 'Pendiente',   color: '#FF9800',                   bg: '#FFF4E5'                   },
+  in_progress: { label: 'En Curso',    color: DESIGN_TOKENS.info.dark,     bg: DESIGN_TOKENS.info.light    },
+  waiting:     { label: 'En Espera',   color: '#0369a1',                   bg: '#e0f2fe'                   },
+  in_review:   { label: 'En Revisión', color: DESIGN_TOKENS.warning.dark,  bg: DESIGN_TOKENS.warning.light },
+  paused:      { label: 'En Pausa',    color: '#78909C',                   bg: '#ECEFF1'                   },
+  expedite:    { label: 'Expedite',    color: '#FF1744',                   bg: '#FFEBEE'                   },
+  completed:   { label: 'Completado',  color: DESIGN_TOKENS.success.dark,  bg: DESIGN_TOKENS.success.light },
+  blocked:     { label: 'Bloqueado',   color: DESIGN_TOKENS.danger.dark,   bg: DESIGN_TOKENS.danger.light  },
 };
 
 const PRIORITY_OPTIONS = {
@@ -297,10 +303,15 @@ function AppContent() {
   const [darkMode, setDarkMode] = useState(false);
   const { addToast } = useToast();
 
-  // Detectar si Supabase redirigió con un hash de recuperación de contraseña
+  // Detectar si Supabase redirigió con un token de recuperación de contraseña.
+  // Flujo implícito: el token llega en el hash (#type=recovery)
+  // Flujo PKCE (por defecto en Supabase moderno): el código llega en query param (?code=...)
+  // en la ruta /reset-password, y el SDK dispara PASSWORD_RECOVERY via onAuthStateChange.
   const [isRecoveryMode, setIsRecoveryMode] = useState(() => {
     const hash = window.location.hash;
-    return hash.includes('type=recovery');
+    const params = new URLSearchParams(window.location.search);
+    const isResetPath = window.location.pathname.includes('reset-password');
+    return hash.includes('type=recovery') || (isResetPath && params.has('code'));
   });
 
   // Leer sesión de localStorage de forma sincrónica — sin loading screen, sin async
@@ -312,7 +323,7 @@ function AppContent() {
       const session = JSON.parse(raw);
       if (!session?.access_token || !session?.user) return null;
       const u = session.user;
-      return { id: u.id, email: u.email, name: u.user_metadata?.name || u.email, role: u.user_metadata?.role || 'user', avatar: '👤' };
+      return { id: u.id, email: u.email, name: u.user_metadata?.name || u.email, role: u.user_metadata?.role || 'user', avatar: u.user_metadata?.avatar_url || '👤' };
     } catch { return null; }
   });
 
@@ -332,15 +343,68 @@ function AppContent() {
     if (prefs?.darkMode) setDarkMode(prefs.darkMode);
   }, []);
 
-  // Escuchar cambios de sesión (cierre de sesión y recuperación de contraseña)
+  // Al montar con sesión restaurada desde localStorage, sincronizar el perfil
+  // completo desde la BD. Esto garantiza que el avatar (y cualquier otro dato)
+  // sea el que está en public.users, que es la fuente de verdad, incluso si
+  // solo está guardado como data: URL y no en user_metadata.
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+    if (!currentUser?.id) return;
+    auth.getCurrentUser().then((fullUser) => {
+      if (!fullUser?.id) return;
+      setCurrentUser((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          name: fullUser.name || prev.name,
+          avatar: fullUser.avatar || prev.avatar,
+          role: fullUser.role || prev.role,
+        };
+      });
+    }).catch(() => { /* silencioso — no bloquea la app */ });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps — solo al montar
+
+  // Verificar sesión al montar (maneja el caso F5 con token expirado o renovado)
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) {
+        // Supabase confirma que no hay sesión válida
+        setCurrentUser(null);
+        setShowLanding(false); // mostrar login, no landing
+      }
+      // Si session existe, INITIAL_SESSION la gestionará abajo
+    }).catch(() => {});
+  }, []);
+
+  // Escuchar TODOS los eventos de autenticación
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT') {
         setCurrentUser(null);
         setShowLanding(true);
         setIsRecoveryMode(false);
+
       } else if (event === 'PASSWORD_RECOVERY') {
         setIsRecoveryMode(true);
+        setShowLanding(false);
+
+      } else if (
+        session?.user &&
+        (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED')
+      ) {
+        // Sesión válida confirmada por Supabase (restaurada, login nuevo, o token renovado)
+        setCurrentUser(prev => {
+          // Si ya tenemos los datos del mismo usuario (enriquecidos), no los pisamos
+          if (prev?.id === session.user.id) return prev;
+          const u = session.user;
+          return {
+            id: u.id,
+            email: u.email,
+            name: u.user_metadata?.name || u.email,
+            role: u.user_metadata?.role || 'user',
+            system_role: u.user_metadata?.system_role || u.user_metadata?.role || 'user',
+            avatar: u.user_metadata?.avatar_url || '👤',
+          };
+        });
         setShowLanding(false);
       }
     });
@@ -471,7 +535,7 @@ if (isTransitioning) {
 
   if (isRecoveryMode) return <ResetPasswordScreen onDone={() => { setIsRecoveryMode(false); window.location.hash = ''; }} />;
   if (showLanding) return <LandingPage onGetStarted={handleGetStarted} />;
-  if (!currentUser) return <LoginScreen onLogin={handleLogin} />;
+  if (!currentUser) return <LoginScreen onLogin={handleLogin} onShowLanding={() => setShowLanding(true)} />;
   return (
     <MainApp
       user={currentUser}
@@ -487,7 +551,7 @@ if (isTransitioning) {
 // SEITRA LOGIN 
 // ============================================================================
 
-function LoginScreen({ onLogin }) {
+function LoginScreen({ onLogin, onShowLanding }) {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
@@ -691,165 +755,198 @@ function LoginScreen({ onLogin }) {
     }
   };
 
+  const canvasRef = React.useRef(null);
+  React.useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    let raf;
+    const resize = () => {
+      canvas.width = canvas.offsetWidth * (window.devicePixelRatio || 1);
+      canvas.height = canvas.offsetHeight * (window.devicePixelRatio || 1);
+      ctx.scale(window.devicePixelRatio || 1, window.devicePixelRatio || 1);
+    };
+    resize();
+    window.addEventListener('resize', resize);
+
+    const orbs = [
+      { x: 0.2, y: 0.3, r: 0.38, color: '#1a1aff', dx: 0.0003, dy: 0.0002 },
+      { x: 0.7, y: 0.6, r: 0.32, color: '#4f46e5', dx: -0.0002, dy: 0.0003 },
+      { x: 0.5, y: 0.1, r: 0.28, color: '#7c3aed', dx: 0.0002, dy: -0.0003 },
+      { x: 0.85, y: 0.2, r: 0.24, color: '#2563eb', dx: -0.0003, dy: -0.0002 },
+    ];
+
+    const draw = () => {
+      const W = canvas.offsetWidth;
+      const H = canvas.offsetHeight;
+      const bg = ctx.createLinearGradient(0, 0, W, H);
+      bg.addColorStop(0, '#05051a');
+      bg.addColorStop(1, '#0a0830');
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, W, H);
+
+      orbs.forEach(o => {
+        o.x += o.dx;
+        o.y += o.dy;
+        if (o.x < 0 || o.x > 1) o.dx *= -1;
+        if (o.y < 0 || o.y > 1) o.dy *= -1;
+        const grd = ctx.createRadialGradient(o.x * W, o.y * H, 0, o.x * W, o.y * H, o.r * Math.min(W, H));
+        grd.addColorStop(0, o.color + 'cc');
+        grd.addColorStop(1, o.color + '00');
+        ctx.fillStyle = grd;
+        ctx.fillRect(0, 0, W, H);
+      });
+      raf = requestAnimationFrame(draw);
+    };
+    draw();
+    return () => { cancelAnimationFrame(raf); window.removeEventListener('resize', resize); };
+  }, []);
+
+  const ACCENT = '#494a97';
+
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', fontFamily: 'Inter, system-ui, sans-serif' }}>
+    <div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0d0d2b', fontFamily: 'Inter, system-ui, sans-serif' }}>
 
       <style>{`
-        .login-input {
+        @keyframes loginFadeUp {
+          from { opacity: 0; transform: translateY(22px) scale(0.98); }
+          to   { opacity: 1; transform: translateY(0)   scale(1); }
+        }
+        .lf-input-wrap {
+          position: relative; border-radius: 10px;
+          border: 1.5px solid #e2e8f0; background: #f8fafc;
+          transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .lf-input-wrap:focus-within {
+          border-color: ${ACCENT};
+          box-shadow: 0 0 0 3px ${ACCENT}22;
+          background: #fff;
+        }
+        .lf-label {
+          position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+          font-size: 0.85rem; color: #94a3b8; pointer-events: none;
+          transition: top 0.18s, font-size 0.18s, color 0.18s, transform 0.18s;
+          background: transparent; padding: 0 2px;
+        }
+        .lf-input-wrap:focus-within .lf-label,
+        .lf-input-wrap.lf-filled .lf-label {
+          top: 0; transform: translateY(-50%);
+          font-size: 0.72rem; color: ${ACCENT}; background: #fff;
+        }
+        .lf-input {
+          width: 100%; padding: 20px 14px 6px; border: none; background: transparent;
+          font-size: 0.9rem; outline: none; color: #1e293b;
+          font-family: inherit; box-sizing: border-box; border-radius: 10px;
+        }
+        .lf-input::placeholder { color: transparent; }
+        .lf-social-btn {
+          width: 52px; height: 52px; border-radius: 12px;
+          border: 1.5px solid #e8ecf0; background: #f8fafc;
+          display: flex; align-items: center; justify-content: center;
+          cursor: pointer; transition: all 0.2s;
+        }
+        .lf-social-btn:hover { background: white; border-color: #cbd5e1; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+        .lf-forgot-input {
           width: 100%; padding: 0.8rem 1rem; border-radius: 10px;
           border: 1.5px solid #e2e8f0; background: #f8fafc;
           font-size: 0.9rem; box-sizing: border-box;
           transition: border-color 0.2s, box-shadow 0.2s; outline: none;
           font-family: inherit; color: #1e293b;
         }
-        .login-input:focus {
-          border-color: #667eea; background: white;
-          box-shadow: 0 0 0 3px rgba(102,126,234,0.12);
+        .lf-forgot-input:focus {
+          border-color: ${ACCENT}; background: white;
+          box-shadow: 0 0 0 3px ${ACCENT}22;
         }
-        .login-input::placeholder { color: #cbd5e1; }
-        .social-btn {
-          flex: 1; display: flex; align-items: center; justify-content: center;
-          gap: 8px; padding: 0.7rem 1rem; border-radius: 10px;
-          border: 1.5px solid #e8ecf0; background: #f8fafc;
-          color: #374151; font-weight: 600; font-size: 0.85rem;
-          cursor: pointer; transition: all 0.2s; font-family: inherit;
-        }
-        .social-btn:hover { background: white; border-color: #cbd5e1; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
-        .left-panel-blob {
-          position: absolute; border-radius: 50%; filter: blur(60px); pointer-events: none;
-        }
-        @media (max-width: 768px) { .login-left-panel { display: none !important; } }
+        .lf-forgot-input::placeholder { color: #cbd5e1; }
       `}</style>
 
-      {/* ── PANEL IZQUIERDO ── */}
-      <div className="login-left-panel" style={{
-        flex: 1, position: 'relative', overflow: 'hidden',
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-        display: 'flex', flexDirection: 'column', justifyContent: 'center',
-        alignItems: 'center', padding: '3rem',
-      }}>
-        {/* Blobs decorativos */}
-        <div className="left-panel-blob" style={{ width: 320, height: 320, background: 'rgba(255,255,255,0.08)', top: '-80px', left: '-80px' }} />
-        <div className="left-panel-blob" style={{ width: 240, height: 240, background: 'rgba(255,255,255,0.06)', bottom: '40px', right: '-60px' }} />
-        <div className="left-panel-blob" style={{ width: 160, height: 160, background: 'rgba(255,255,255,0.1)', bottom: '200px', left: '30px' }} />
-
-        <div style={{ position: 'relative', zIndex: 1, textAlign: 'center', maxWidth: '400px' }}>
-          {/* Ícono central */}
-          <div style={{
-            width: 72, height: 72, borderRadius: '20px',
-            background: 'rgba(255,255,255,0.18)', backdropFilter: 'blur(8px)',
-            border: '1px solid rgba(255,255,255,0.3)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            margin: '0 auto 2rem',
-            boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
-          }}>
-            <Sparkles size={36} color="white" strokeWidth={1.5} />
-          </div>
-
-          <h1 style={{
-            fontSize: 'clamp(1.5rem, 3vw, 2rem)', fontWeight: 700,
-            color: 'white', lineHeight: 1.3, margin: '0 0 1.5rem',
-            letterSpacing: '-0.02em',
-          }}>
-            Accede fácilmente a tu hub personal de claridad y productividad
-          </h1>
-
-          <p style={{ color: 'rgba(255,255,255,0.72)', fontSize: '0.95rem', lineHeight: 1.6, margin: 0 }}>
-            Organiza tus proyectos, tareas y equipos en un solo lugar. Sin caos, con resultados.
-          </p>
-
-          {/* Píldoras de features */}
-          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center', marginTop: '2.5rem' }}>
-            {['Proyectos', 'Tareas', 'Equipos', 'Roadmap'].map(tag => (
-              <span key={tag} style={{
-                padding: '6px 14px', borderRadius: '20px',
-                background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.25)',
-                color: 'white', fontSize: '0.78rem', fontWeight: 500,
-              }}>{tag}</span>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* ── PANEL DERECHO ── */}
+      {/* ── CARD ── */}
       <div style={{
-        flex: 1, background: 'white', display: 'flex', flexDirection: 'column',
-        justifyContent: 'center', alignItems: 'center',
-        padding: '2.5rem', overflowY: 'auto',
+        width: 'min(980px, 95vw)', height: 'min(620px, 94vh)',
+        borderRadius: 28, display: 'flex', overflow: 'hidden',
+        boxShadow: '0 40px 100px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.06)',
+        animation: 'loginFadeUp 0.55s cubic-bezier(.22,1,.36,1) both',
       }}>
-        <div style={{ width: '100%', maxWidth: '400px' }}>
 
-          {/* Logo SEITRA */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2rem' }}>
+        {/* ── LEFT: form panel ── */}
+        <div style={{
+          width: 420, flexShrink: 0, background: 'white',
+          display: 'flex', flexDirection: 'column', justifyContent: 'center',
+          padding: '2.5rem 2.75rem', overflowY: 'auto',
+        }}>
+
+          {/* Logo grid icon */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: '2rem' }}>
             <div style={{
-              width: 36, height: 36, borderRadius: '10px',
-              background: 'linear-gradient(135deg, #667eea, #764ba2)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: 38, height: 38, borderRadius: 10,
+              background: ACCENT, display: 'grid',
+              gridTemplateColumns: '1fr 1fr', gap: 3, padding: 8,
             }}>
-              <Zap size={18} color="white" strokeWidth={2.5} />
+              {[...Array(4)].map((_, i) => (
+                <div key={i} style={{ background: 'rgba(255,255,255,0.85)', borderRadius: 2 }} />
+              ))}
             </div>
-            <span style={{ fontSize: '1.1rem', fontWeight: 800, color: '#1e293b', letterSpacing: '-0.02em' }}>SEITRA</span>
+            <span style={{ fontWeight: 800, fontSize: '1.05rem', color: '#1e293b', letterSpacing: '-0.02em' }}>SEITRA</span>
           </div>
 
-          {/* Título y subtítulo */}
-          <h2 style={{ fontSize: '1.6rem', fontWeight: 700, color: '#1e293b', margin: '0 0 0.5rem', letterSpacing: '-0.02em' }}>
-            {isLogin ? 'Iniciar sesión' : 'Crear cuenta'}
+          {/* Title */}
+          <h2 style={{ fontSize: '1.55rem', fontWeight: 700, color: '#1e293b', margin: '0 0 0.35rem', letterSpacing: '-0.02em' }}>
+            {isLogin ? 'Bienvenido de vuelta' : 'Crear cuenta'}
           </h2>
-          <p style={{ color: '#64748b', fontSize: '0.9rem', margin: '0 0 1.75rem', lineHeight: 1.5 }}>
-            Accede a tus tareas, notas y proyectos en cualquier momento y mantén todo fluyendo en un solo lugar.
+          <p style={{ color: '#64748b', fontSize: '0.85rem', margin: '0 0 1.75rem', lineHeight: 1.5 }}>
+            {isLogin ? 'Ingresa tus credenciales para continuar.' : 'Únete a Seitra y organiza tu trabajo.'}
           </p>
 
-          {/* FORMULARIO */}
-          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          {/* FORM */}
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
 
             {/* Nombre (solo registro) */}
             {!isLogin && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: '0.82rem', fontWeight: 600, color: '#374151' }}>Nombre completo</label>
+              <div
+                className={`lf-input-wrap${name ? ' lf-filled' : ''}`}
+              >
+                <label className="lf-label">Nombre completo</label>
                 <input
                   type="text" required={!isLogin} value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="Tu nombre"
-                  className="login-input"
+                  className="lf-input"
                 />
               </div>
             )}
 
             {/* Email */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <label style={{ fontSize: '0.82rem', fontWeight: 600, color: '#374151' }}>Tu email</label>
+            <div className={`lf-input-wrap${email ? ' lf-filled' : ''}`}>
+              <label className="lf-label">Email</label>
               <input
                 type="email" required value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="tu@email.com"
-                className="login-input"
+                className="lf-input"
               />
             </div>
 
             {/* Contraseña */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <label style={{ fontSize: '0.82rem', fontWeight: 600, color: '#374151' }}>Contraseña</label>
-              <div style={{ position: 'relative' }}>
+            <div>
+              <div className={`lf-input-wrap${password ? ' lf-filled' : ''}`} style={{ position: 'relative' }}>
+                <label className="lf-label">Contraseña</label>
                 <input
                   type={showPassword ? 'text' : 'password'} required value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="login-input"
+                  className="lf-input"
                   style={{ paddingRight: '3rem' }}
                 />
                 <button
                   type="button" onClick={() => setShowPassword(!showPassword)}
                   style={{ position: 'absolute', right: '0.9rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', display: 'flex', padding: 0 }}
                 >
-                  {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
               </div>
               {isLogin && (
-                <div style={{ textAlign: 'right' }}>
+                <div style={{ textAlign: 'right', marginTop: 6 }}>
                   <button
                     type="button"
                     onClick={() => { setShowForgotModal(true); setForgotEmail(email); setForgotError(''); setForgotSuccess(false); }}
-                    style={{ background: 'none', border: 'none', color: '#667eea', fontSize: '0.8rem', fontWeight: 500, cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}
+                    style={{ background: 'none', border: 'none', color: ACCENT, fontSize: '0.78rem', fontWeight: 500, cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}
                   >
                     ¿Olvidaste tu contraseña?
                   </button>
@@ -857,81 +954,124 @@ function LoginScreen({ onLogin }) {
               )}
             </div>
 
-            {/* Mensajes */}
+            {/* Messages */}
             {success && (
-              <div style={{ padding: '10px 14px', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: '8px', color: '#16a34a', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{ padding: '9px 12px', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 8, color: '#16a34a', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: 7 }}>
                 ✓ {success}
               </div>
             )}
             {error && (
-              <div style={{ padding: '10px 14px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', color: '#dc2626', fontSize: '0.85rem' }}>
+              <div style={{ padding: '9px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, color: '#dc2626', fontSize: '0.82rem' }}>
                 {error}
               </div>
             )}
 
-            {/* Botón submit */}
+            {/* Submit */}
             <button
               type="submit" disabled={isLoading}
               style={{
-                width: '100%', padding: '0.85rem', border: 'none', borderRadius: '10px',
-                background: isLoading ? '#94a3b8' : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                width: '100%', padding: '0.85rem', border: 'none', borderRadius: 10,
+                background: isLoading ? '#94a3b8' : `linear-gradient(135deg, ${ACCENT} 0%, #6d28d9 100%)`,
                 color: 'white', fontSize: '0.95rem', fontWeight: 700,
                 cursor: isLoading ? 'not-allowed' : 'pointer',
-                boxShadow: isLoading ? 'none' : '0 4px 16px rgba(102,126,234,0.4)',
-                transition: 'all 0.2s', marginTop: '0.25rem',
-                fontFamily: 'inherit',
+                boxShadow: isLoading ? 'none' : `0 4px 18px ${ACCENT}55`,
+                transition: 'all 0.2s', marginTop: '0.15rem',
+                fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
               }}
             >
-              {isLoading ? 'Verificando...' : isLogin ? 'Iniciar sesión' : 'Comenzar'}
+              {isLoading && (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                  <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83">
+                    <animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="0.8s" repeatCount="indefinite"/>
+                  </path>
+                </svg>
+              )}
+              {isLoading ? 'Verificando...' : isLogin ? 'Iniciar sesión' : 'Comenzar gratis'}
             </button>
           </form>
 
-          {/* Divisor */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', margin: '1.5rem 0' }}>
-            <div style={{ flex: 1, height: '1px', background: '#e8ecf0' }} />
-            <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 500, whiteSpace: 'nowrap' }}>o continuar con</span>
-            <div style={{ flex: 1, height: '1px', background: '#e8ecf0' }} />
+          {/* Divider */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '1.25rem 0' }}>
+            <div style={{ flex: 1, height: 1, background: '#e8ecf0' }} />
+            <span style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 500, whiteSpace: 'nowrap' }}>o continuar con</span>
+            <div style={{ flex: 1, height: 1, background: '#e8ecf0' }} />
           </div>
 
-          {/* Botones sociales */}
-          <div style={{ display: 'flex', gap: '10px' }}>
+          {/* Social buttons */}
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
             <button
               type="button" onClick={handleGoogleSignIn} disabled={isLoading}
-              className="social-btn"
+              className="lf-social-btn"
               style={{ opacity: isLoading ? 0.6 : 1, cursor: isLoading ? 'not-allowed' : 'pointer' }}
+              title="Google"
             >
-              <svg width="16" height="16" viewBox="0 0 48 48" fill="none">
+              <svg width="20" height="20" viewBox="0 0 48 48" fill="none">
                 <path d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z" fill="#FFC107"/>
                 <path d="M6.306 14.691l6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 16.318 4 9.656 8.337 6.306 14.691z" fill="#FF3D00"/>
                 <path d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238A11.91 11.91 0 0 1 24 36c-5.202 0-9.619-3.317-11.283-7.946l-6.522 5.025C9.505 39.556 16.227 44 24 44z" fill="#4CAF50"/>
                 <path d="M43.611 20.083H42V20H24v8h11.303a12.04 12.04 0 0 1-4.087 5.571l.003-.002 6.19 5.238C36.971 39.205 44 34 44 24c0-1.341-.138-2.65-.389-3.917z" fill="#1976D2"/>
               </svg>
-              Google
             </button>
             <button
-              type="button" className="social-btn"
-              style={{ background: '#1877F2', border: '1.5px solid #1877F2', color: 'white' }}
-              onMouseEnter={e => { e.currentTarget.style.background = '#1565d8'; e.currentTarget.style.borderColor = '#1565d8'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = '#1877F2'; e.currentTarget.style.borderColor = '#1877F2'; }}
+              type="button" className="lf-social-btn" title="Facebook"
+              onMouseEnter={e => { e.currentTarget.style.background = '#1877F2'; e.currentTarget.style.borderColor = '#1877F2'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = ''; e.currentTarget.style.borderColor = ''; }}
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="white">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="#1877F2">
                 <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
               </svg>
-              Facebook
             </button>
           </div>
 
-          {/* Switch mode link */}
-          <p style={{ textAlign: 'center', marginTop: '1.75rem', fontSize: '0.875rem', color: '#64748b' }}>
+          {/* Switch mode */}
+          <p style={{ textAlign: 'center', marginTop: '1.5rem', fontSize: '0.85rem', color: '#64748b' }}>
             {isLogin ? '¿No tienes cuenta? ' : '¿Ya tienes cuenta? '}
             <button
               type="button" onClick={() => switchMode(!isLogin)}
-              style={{ background: 'none', border: 'none', color: '#667eea', fontWeight: 600, cursor: 'pointer', fontSize: '0.875rem', padding: 0, fontFamily: 'inherit' }}
+              style={{ background: 'none', border: 'none', color: ACCENT, fontWeight: 600, cursor: 'pointer', fontSize: '0.85rem', padding: 0, fontFamily: 'inherit' }}
             >
               {isLogin ? 'Regístrate' : 'Inicia sesión'}
             </button>
           </p>
 
+          {/* Back to landing */}
+          <p style={{ textAlign: 'center', marginTop: '0.6rem' }}>
+            <button
+              type="button" onClick={onShowLanding}
+              style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '0.78rem', padding: 0, fontFamily: 'inherit', display: 'inline-flex', alignItems: 'center', gap: 4, transition: 'color 0.15s' }}
+              onMouseEnter={e => e.currentTarget.style.color = ACCENT}
+              onMouseLeave={e => e.currentTarget.style.color = '#94a3b8'}
+            >
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M10 12L6 8l4-4"/>
+              </svg>
+              Ver más sobre Seitra
+            </button>
+          </p>
+        </div>
+
+        {/* ── RIGHT: canvas panel ── */}
+        <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+          <canvas
+            ref={canvasRef}
+            style={{ width: '100%', height: '100%', display: 'block' }}
+          />
+          {/* Bottom overlay text */}
+          <div style={{
+            position: 'absolute', bottom: 0, left: 0, right: 0,
+            padding: '2.5rem 2.5rem',
+            background: 'linear-gradient(to top, rgba(5,5,26,0.92) 0%, transparent 100%)',
+          }}>
+            <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.72rem', letterSpacing: '0.12em', textTransform: 'uppercase', margin: '0 0 0.6rem', fontWeight: 600 }}>
+              Productividad sin límites
+            </p>
+            <h3 style={{ color: 'white', fontSize: '1.4rem', fontWeight: 700, margin: '0 0 0.5rem', lineHeight: 1.3, letterSpacing: '-0.02em' }}>
+              Todo tu equipo, un solo espacio.
+            </h3>
+            <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.85rem', margin: 0, lineHeight: 1.55 }}>
+              Proyectos, tareas y métricas en tiempo real.
+            </p>
+          </div>
         </div>
       </div>
 
@@ -940,18 +1080,17 @@ function LoginScreen({ onLogin }) {
         <div
           onClick={(e) => { if (e.target === e.currentTarget) { setShowForgotModal(false); setForgotSuccess(false); } }}
           style={{
-            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)',
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             zIndex: 9999, padding: '1rem',
           }}
         >
           <div style={{
-            background: 'white', borderRadius: '16px', padding: '2rem',
+            background: 'white', borderRadius: 16, padding: '2rem',
             width: '100%', maxWidth: '420px',
-            boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
             fontFamily: 'Inter, system-ui, sans-serif',
           }}>
-            {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem' }}>
               <div>
                 <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700, color: '#1e293b' }}>Recuperar contraseña</h3>
@@ -971,10 +1110,10 @@ function LoginScreen({ onLogin }) {
               <div>
                 <div style={{
                   padding: '1rem', background: '#f0fdf4', border: '1px solid #86efac',
-                  borderRadius: '10px', marginBottom: '1.25rem',
-                  display: 'flex', gap: '10px', alignItems: 'flex-start',
+                  borderRadius: 10, marginBottom: '1.25rem',
+                  display: 'flex', gap: 10, alignItems: 'flex-start',
                 }}>
-                  <CheckCircle size={18} color="#16a34a" style={{ flexShrink: 0, marginTop: '1px' }} />
+                  <CheckCircle size={18} color="#16a34a" style={{ flexShrink: 0, marginTop: 1 }} />
                   <span style={{ fontSize: '0.875rem', color: '#15803d', lineHeight: 1.5 }}>
                     Te enviamos un correo con instrucciones para restablecer tu contraseña. Revisa también tu carpeta de spam.
                   </span>
@@ -982,8 +1121,8 @@ function LoginScreen({ onLogin }) {
                 <button
                   onClick={() => { setShowForgotModal(false); setForgotSuccess(false); }}
                   style={{
-                    width: '100%', padding: '0.8rem', border: 'none', borderRadius: '10px',
-                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    width: '100%', padding: '0.8rem', border: 'none', borderRadius: 10,
+                    background: `linear-gradient(135deg, ${ACCENT} 0%, #6d28d9 100%)`,
                     color: 'white', fontSize: '0.9rem', fontWeight: 600,
                     cursor: 'pointer', fontFamily: 'inherit',
                   }}
@@ -993,19 +1132,19 @@ function LoginScreen({ onLogin }) {
               </div>
             ) : (
               <form onSubmit={handleForgotPassword} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   <label style={{ fontSize: '0.82rem', fontWeight: 600, color: '#374151' }}>Email</label>
                   <input
                     type="email" required value={forgotEmail}
                     onChange={(e) => setForgotEmail(e.target.value)}
                     placeholder="tu@email.com"
-                    className="login-input"
+                    className="lf-forgot-input"
                     autoFocus
                   />
                 </div>
 
                 {forgotError && (
-                  <div style={{ padding: '10px 14px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', color: '#dc2626', fontSize: '0.85rem' }}>
+                  <div style={{ padding: '10px 14px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, color: '#dc2626', fontSize: '0.85rem' }}>
                     {forgotError}
                   </div>
                 )}
@@ -1013,8 +1152,8 @@ function LoginScreen({ onLogin }) {
                 <button
                   type="submit" disabled={forgotLoading}
                   style={{
-                    width: '100%', padding: '0.8rem', border: 'none', borderRadius: '10px',
-                    background: forgotLoading ? '#94a3b8' : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    width: '100%', padding: '0.8rem', border: 'none', borderRadius: 10,
+                    background: forgotLoading ? '#94a3b8' : `linear-gradient(135deg, ${ACCENT} 0%, #6d28d9 100%)`,
                     color: 'white', fontSize: '0.9rem', fontWeight: 600,
                     cursor: forgotLoading ? 'not-allowed' : 'pointer',
                     fontFamily: 'inherit', transition: 'all 0.2s',
@@ -1027,7 +1166,7 @@ function LoginScreen({ onLogin }) {
                   type="button"
                   onClick={() => { setShowForgotModal(false); setForgotSuccess(false); }}
                   style={{
-                    width: '100%', padding: '0.75rem', border: '1.5px solid #e2e8f0', borderRadius: '10px',
+                    width: '100%', padding: '0.75rem', border: '1.5px solid #e2e8f0', borderRadius: 10,
                     background: 'none', color: '#64748b', fontSize: '0.875rem', fontWeight: 500,
                     cursor: 'pointer', fontFamily: 'inherit',
                   }}
@@ -1196,7 +1335,7 @@ function ResetPasswordScreen({ onDone }) {
 // ============================================================================
 function MainApp({ user, onLogout, darkMode, toggleDarkMode, onUserUpdate }) {
   const { addToast } = useToast();
-  const { currentWorkspace, currentEnvironment, lists } = useApp();
+  const { currentWorkspace, currentEnvironment, lists, canWorkWithoutEnvironment } = useApp();
   const [activeView, setActiveView] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [projects, setProjects] = useState([]);
@@ -1205,6 +1344,7 @@ function MainApp({ user, onLogout, darkMode, toggleDarkMode, onUserUpdate }) {
   const [comments, setComments] = useState([]);
   const [tags, setTags] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const searchInputRef = useRef(null);
   const [selectedProject, setSelectedProject] = useState(null);
   const [selectedList, setSelectedList] = useState(null);
   const [selectedTask, setSelectedTask] = useState(null);
@@ -1217,6 +1357,20 @@ function MainApp({ user, onLogout, darkMode, toggleDarkMode, onUserUpdate }) {
 
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [isTablet, setIsTablet] = useState(window.innerWidth >= 768 && window.innerWidth < 1024);
+
+  // ── GUARDIA DE ENTORNO ────────────────────────────────────────────────────
+  const VIEWS_SKIP_ENV = new Set(['management', 'tasks', 'chat', 'analytics', 'backlog']);
+  const needsEnvPrompt = !VIEWS_SKIP_ENV.has(activeView)
+    && !currentEnvironment
+    && !canWorkWithoutEnvironment();
+
+  // ── EXPEDITE GLOBAL: bloqueo cruzado entre listas y proyectos ──────────────
+  // Evalúa sobre TODOS los tasks del sistema para el usuario actual.
+  // El resultado se pasa a cualquier vista que necesite respetar el bloqueo.
+  const globalExpediteCheck = useMemo(
+    () => hasExpediteActive(tasks, user?.id),
+    [tasks, user?.id]
+  );
 
 useEffect(() => {
   const handleResize = () => {
@@ -1237,13 +1391,17 @@ useEffect(() => {
     loadData();
   }, [currentEnvironment?.id, currentWorkspace?.id]);
   const loadData = async () => {
-    console.log('[loadData] iniciando... currentEnvironment:', currentEnvironment?.id, '| currentWorkspace:', currentWorkspace?.id);
-    // allSettled: cada recurso carga de forma independiente — si uno falla, los demás siguen
+    // allSettled: cada recurso carga independientemente — un fallo no bloquea los demás
     const projectsPromise = currentWorkspace?.id
       ? dbProjects.getByWorkspace(currentWorkspace.id)
       : currentEnvironment?.id
         ? dbProjects.getByEnvironment(currentEnvironment.id)
         : dbProjects.getAll();
+
+    // Usuarios: siempre cargamos TODOS los del sistema para poder resolver
+    // nombres de asignados independientemente del equipo activo.
+    // El filtro por proyecto/equipo se aplica solo en el dropdown de asignación
+    // (ya lo hace projectMemberUsers en ListView/SortableTaskRow).
     const [projectsResult, tasksResult, usersResult] = await Promise.allSettled([
       projectsPromise,
       dbTasks.getAll(),
@@ -1251,21 +1409,15 @@ useEffect(() => {
     ]);
 
     if (projectsResult.status === 'fulfilled') {
-      console.log('[loadData] projects:', projectsResult.value?.length);
       setProjects(projectsResult.value);
     } else console.error('[loadData] Error cargando proyectos:', projectsResult.reason);
 
     if (tasksResult.status === 'fulfilled') setTasks(tasksResult.value);
-    else console.error('Error cargando tareas:', tasksResult.reason);
+    else console.error('[loadData] Error cargando tareas:', tasksResult.reason);
 
     if (usersResult.status === 'fulfilled') {
-      const usersData = usersResult.value;
-      console.log('[loadData] users resultado:', usersData);
-      if (!usersData || usersData.length === 0) {
-        setUsers(user ? [user] : []);
-      } else {
-        setUsers(usersData);
-      }
+      const raw = usersResult.value ?? [];
+      setUsers(raw.length > 0 ? raw : (user ? [user] : []));
     } else {
       console.error('[loadData] Error cargando usuarios:', usersResult.reason);
       setUsers(user ? [user] : []);
@@ -1615,7 +1767,7 @@ useEffect(() => {
   useKeyboardShortcuts([
     { key: 'n', ctrl: true, action: () => { setActiveView('new-task'); addToast('Nueva tarea', 'info'); } },
     { key: 'p', ctrl: true, action: () => { setActiveView('projects'); addToast('Proyectos', 'info'); } },
-    { key: 'k', ctrl: true, action: () => { document.querySelector('input[type="text"]')?.focus(); } },
+    { key: 'k', ctrl: true, action: () => { searchInputRef.current?.focus(); searchInputRef.current?.select(); } },
     { key: '?', ctrl: false, shift: true, action: () => setShowShortcuts(true) }
   ]);
 
@@ -1649,10 +1801,81 @@ useEffect(() => {
           onExportReport={exportFullReport}
           isMobile={isMobile}
           onOpenUserSettings={() => setUserSettingsOpen(true)}
+          searchInputRef={searchInputRef}
         />
 
+        {/* Search overlay — visible when there's a query */}
+        {searchQuery.trim().length > 0 && (
+          <SearchOverlay
+            query={searchQuery}
+            projects={projects}
+            tasks={tasks}
+            onSelectProject={(project) => {
+              handleProjectSelect(project);
+              setSearchQuery('');
+            }}
+            onSelectTask={(task) => {
+              handleTaskClick(task);
+              setSearchQuery('');
+            }}
+            onClose={() => setSearchQuery('')}
+          />
+        )}
+
+        {/* ── BANNER GLOBAL EXPEDITE ────────────────────────────────────────────
+            Visible en TODAS las vistas cuando el usuario tiene un Expedite
+            activo. Bloquea operaciones hasta resolver la urgencia.         */}
+        {globalExpediteCheck.active && (
+          <div style={{
+            position: 'sticky',
+            top: 0,
+            zIndex: 200,
+            background: 'linear-gradient(90deg, #B71C1C 0%, #D32F2F 100%)',
+            color: 'white',
+            padding: '10px 24px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            fontSize: '13px',
+            fontWeight: 600,
+            boxShadow: '0 3px 12px rgba(183,28,28,0.35)',
+            letterSpacing: '0.01em',
+          }}>
+            <span style={{
+              fontSize: '18px',
+              animation: 'expediteBannerPulse 1.5s ease-in-out infinite',
+            }}>🚨</span>
+            <span style={{ flex: 1 }}>
+              <strong>EXPEDITE ACTIVO:</strong>{' '}
+              &ldquo;{globalExpediteCheck.task?.title}&rdquo;
+              {globalExpediteCheck.task?.projectId && ' '}
+              &mdash; Todas tus tareas están bloqueadas hasta cerrar esta urgencia.
+            </span>
+            <span style={{
+              background: 'rgba(255,255,255,0.18)',
+              border: '1px solid rgba(255,255,255,0.35)',
+              borderRadius: '20px',
+              padding: '3px 12px',
+              fontSize: '11px',
+              fontWeight: 700,
+              letterSpacing: '0.08em',
+              whiteSpace: 'nowrap',
+            }}>
+              🔒 OPERACIONES BLOQUEADAS
+            </span>
+            <style>{`
+              @keyframes expediteBannerPulse {
+                0%, 100% { transform: scale(1); }
+                50%       { transform: scale(1.25); }
+              }
+            `}</style>
+          </div>
+        )}
+
         <div style={contentAreaStyle}>
-          {activeView === 'dashboard' && (
+          {/* ── GUARDIA: vista requiere entorno y el usuario no tiene uno ── */}
+          {needsEnvPrompt && <SelectEnvironmentPrompt />}
+          {!needsEnvPrompt && activeView === 'dashboard' && (
             <DashboardView
               user={user}
               users={users}
@@ -1663,13 +1886,15 @@ useEffect(() => {
             />
           )}
 
-          {activeView === 'list' && selectedList && (
+          {/* ── Vistas que requieren entorno ───────────────────────────────── */}
+          {!needsEnvPrompt && activeView === 'list' && selectedList && (
             <ListView
               listId={selectedList.id}
               listName={selectedList.name}
               tasks={tasks.filter(t => t.listId === selectedList.id)}
               projects={projects}
               users={users}
+              globalExpediteCheck={globalExpediteCheck}
               onProjectUpdate={(p) => {
                 setProjects((prev) => prev.map((x) => (x.id === p.id ? p : x)));
                 if (selectedProject?.id === p.id) setSelectedProject(p);
@@ -1693,7 +1918,7 @@ useEffect(() => {
             />
           )}
 
-          {activeView === 'projects' && (
+          {!needsEnvPrompt && activeView === 'projects' && (
             <ProjectsView
               projects={projects}
               createProject={createProject}
@@ -1708,7 +1933,7 @@ useEffect(() => {
             />
           )}
 
-          {activeView === 'workspace' && (
+          {!needsEnvPrompt && activeView === 'workspace' && (
             <WorkspaceView
               workspace={currentWorkspace}
               lists={(lists || []).filter(l => l.workspace_id === currentWorkspace?.id)}
@@ -1716,7 +1941,7 @@ useEffect(() => {
             />
           )}
 
-          {activeView === 'project-detail' && selectedProject && (
+          {!needsEnvPrompt && activeView === 'project-detail' && selectedProject && (
             <ProjectDetailView
               project={selectedProject}
               tasks={tasks}
@@ -1730,18 +1955,24 @@ useEffect(() => {
               tags={tags}
               onTaskClick={handleTaskClick}
               onProjectUpdate={handleProjectUpdate}
+              globalExpediteCheck={globalExpediteCheck}
               patchProjectInState={(p) => {
                 setProjects((prev) => prev.map((x) => (x.id === p.id ? p : x)));
                 if (selectedProject?.id === p.id) setSelectedProject(p);
               }}
+              onEnsureUserInPool={(u) => {
+                setUsers((prev) => prev.some(x => x.id === u.id) ? prev : [...prev, u]);
+              }}
             />
-            
           )}
+
+          {!needsEnvPrompt && activeView === 'calendar' && (
+            <CalendarView projects={projects} tasks={tasks} />
+          )}
+
+          {/* ── Vistas que NO requieren entorno (siempre disponibles) ─────── */}
           {activeView === 'chat' && (
-            <TeamChatView
-              user={user}
-              isMobile={isMobile}
-            />
+            <TeamChatView user={user} isMobile={isMobile} />
           )}
 
           {activeView === 'backlog' && (
@@ -1758,12 +1989,12 @@ useEffect(() => {
             />
           )}
 
-          {activeView === 'calendar' && (
-            <CalendarView projects={projects} tasks={tasks} />
-          )}
-
           {activeView === 'analytics' && (
             <AnalyticsDashboard />
+          )}
+
+          {activeView === 'management' && (
+            <ManagementView currentUser={user} />
           )}
         </div>
       </div>
@@ -1815,9 +2046,172 @@ useEffect(() => {
 }
 
 // ============================================================================
+// SEARCH OVERLAY
+// ============================================================================
+function SearchOverlay({ query, projects, tasks, onSelectProject, onSelectTask, onClose }) {
+  const [activeIdx, setActiveIdx] = useState(0);
+  const panelRef = useRef(null);
+  const q = query.toLowerCase().trim();
+
+  const matchedProjects = useMemo(() =>
+    projects.filter(p =>
+      p.name?.toLowerCase().includes(q) ||
+      p.description?.toLowerCase().includes(q)
+    ).slice(0, 5),
+    [projects, q]
+  );
+
+  const matchedTasks = useMemo(() =>
+    tasks.filter(t =>
+      !t.is_deleted &&
+      (t.title?.toLowerCase().includes(q) || t.description?.toLowerCase().includes(q))
+    ).slice(0, 7),
+    [tasks, q]
+  );
+
+  const allResults = [
+    ...matchedProjects.map(p => ({ type: 'project', item: p })),
+    ...matchedTasks.map(t => ({ type: 'task', item: t })),
+  ];
+
+  useEffect(() => { setActiveIdx(0); }, [q]);
+
+  // Keyboard navigation
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.key === 'Escape') { onClose(); return; }
+      if (e.key === 'ArrowDown') { e.preventDefault(); setActiveIdx(i => Math.min(i + 1, allResults.length - 1)); }
+      if (e.key === 'ArrowUp')   { e.preventDefault(); setActiveIdx(i => Math.max(i - 1, 0)); }
+      if (e.key === 'Enter' && allResults[activeIdx]) {
+        const r = allResults[activeIdx];
+        if (r.type === 'project') onSelectProject(r.item);
+        else onSelectTask(r.item);
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [allResults, activeIdx, onClose, onSelectProject, onSelectTask]);
+
+  // Click outside (ignore clicks on the search input itself)
+  useEffect(() => {
+    const handler = (e) => {
+      if (panelRef.current && !panelRef.current.contains(e.target)) {
+        const searchEl = document.querySelector('[data-search-bar]');
+        if (!searchEl || !searchEl.contains(e.target)) onClose();
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [onClose]);
+
+  if (q.length < 1) return null;
+
+  const TASK_STATUS_DOT = {
+    completed:   '#10b981',
+    in_progress: '#f59e0b',
+    blocked:     '#ef4444',
+    review:      '#8b5cf6',
+    paused:      '#94a3b8',
+    pending:     '#94a3b8',
+    todo:        '#cbd5e1',
+  };
+
+  return (
+    <div ref={panelRef} style={{
+      position: 'fixed', top: 62, left: '50%', transform: 'translateX(-50%)',
+      width: 'min(580px, 92vw)',
+      background: 'white', borderRadius: 14,
+      boxShadow: '0 24px 64px rgba(0,0,0,0.16), 0 0 0 1px rgba(0,0,0,0.06)',
+      zIndex: 9000, overflow: 'hidden',
+      animation: 'srchFadeIn 0.14s ease',
+    }}>
+      <style>{`
+        @keyframes srchFadeIn {
+          from { opacity: 0; transform: translateX(-50%) translateY(-6px); }
+          to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+        }
+        .sr-item:hover { background: #f8fafc; }
+      `}</style>
+
+      {allResults.length === 0 ? (
+        <div style={{ padding: '2.5rem 1rem', textAlign: 'center', color: '#9ca3af', fontSize: 14 }}>
+          Sin resultados para <strong style={{ color: '#374151' }}>"{query}"</strong>
+        </div>
+      ) : (
+        <>
+          {/* PROYECTOS */}
+          {matchedProjects.length > 0 && (
+            <div>
+              <div style={{ padding: '10px 16px 5px', fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                Proyectos
+              </div>
+              {matchedProjects.map((project, i) => {
+                const isActive = activeIdx === i;
+                return (
+                  <div key={project.id} className="sr-item"
+                    onMouseEnter={() => setActiveIdx(i)}
+                    onClick={() => { onSelectProject(project); onClose(); }}
+                    style={{ padding: '9px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, background: isActive ? '#ede9fe' : 'transparent', transition: 'background 0.1s' }}
+                  >
+                    <div style={{ width: 10, height: 10, borderRadius: '50%', background: project.color || '#6366f1', flexShrink: 0, boxShadow: `0 0 6px ${project.color || '#6366f1'}60` }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, fontSize: 13, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{project.name}</div>
+                      {project.description && (
+                        <div style={{ fontSize: 11, color: '#9ca3af', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{project.description}</div>
+                      )}
+                    </div>
+                    <Briefcase size={13} color="#c4b5fd" style={{ flexShrink: 0 }} />
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* TAREAS */}
+          {matchedTasks.length > 0 && (
+            <div>
+              {matchedProjects.length > 0 && <div style={{ height: 1, background: '#f1f5f9', margin: '4px 0' }} />}
+              <div style={{ padding: '10px 16px 5px', fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                Tareas
+              </div>
+              {matchedTasks.map((task, i) => {
+                const globalIdx = matchedProjects.length + i;
+                const isActive = activeIdx === globalIdx;
+                const proj = projects.find(p => p.id === task.projectId);
+                const dotColor = TASK_STATUS_DOT[task.status] || '#cbd5e1';
+                return (
+                  <div key={task.id} className="sr-item"
+                    onMouseEnter={() => setActiveIdx(globalIdx)}
+                    onClick={() => { onSelectTask(task); onClose(); }}
+                    style={{ padding: '9px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, background: isActive ? '#f0fdf4' : 'transparent', transition: 'background 0.1s' }}
+                  >
+                    <div style={{ width: 10, height: 10, borderRadius: 3, border: `2px solid ${dotColor}`, flexShrink: 0, background: task.status === 'completed' ? dotColor : 'transparent' }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 500, fontSize: 13, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{task.title}</div>
+                      {proj && <div style={{ fontSize: 11, color: '#9ca3af' }}>en {proj.name}</div>}
+                    </div>
+                    <Check size={13} color="#86efac" style={{ flexShrink: 0 }} />
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Ayuda teclado */}
+          <div style={{ padding: '7px 16px', borderTop: '1px solid #f1f5f9', display: 'flex', gap: 14, fontSize: 11, color: '#cbd5e1' }}>
+            <span>↑↓ navegar</span><span>↵ abrir</span><span>Esc cerrar</span>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ============================================================================
 // TOP BAR
 // ============================================================================
-function TopBar({ user, onLogout, onMenuClick, searchQuery, onSearchChange, darkMode, toggleDarkMode, breadcrumbs, onBreadcrumbClick, onExportReport, isMobile, onOpenUserSettings }) {
+function TopBar({ user, onLogout, onMenuClick, searchQuery, onSearchChange, darkMode, toggleDarkMode, breadcrumbs, onBreadcrumbClick, onExportReport, isMobile, onOpenUserSettings, searchInputRef }) {
   const [showCreateEnv, setShowCreateEnv] = useState(false);
   const [showEnvSettings, setShowEnvSettings] = useState(false);
   const [showMembersModal, setShowMembersModal] = useState(false);
@@ -1859,15 +2253,24 @@ function TopBar({ user, onLogout, onMenuClick, searchQuery, onSearchChange, dark
               ))}
             </div>
           ) : (
-            <div style={{ ...searchBarStyle, maxWidth: isMobile ? 'none' : searchBarStyle.maxWidth }}>
+            <div data-search-bar style={{ ...searchBarStyle, maxWidth: isMobile ? 'none' : searchBarStyle.maxWidth }}>
               <Search size={16} color="#94a3b8" />
               <input
+                ref={searchInputRef}
                 type="text"
-                placeholder="Buscar... (Ctrl+K)"
+                placeholder="Buscar proyectos o tareas... (Ctrl+K)"
                 value={searchQuery}
                 onChange={(e) => onSearchChange(e.target.value)}
                 style={searchInputStyle}
               />
+              {searchQuery && (
+                <button
+                  onClick={() => onSearchChange('')}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', display: 'flex', color: '#94a3b8', flexShrink: 0 }}
+                >
+                  <X size={14} />
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -2490,18 +2893,17 @@ function WorkspaceView({ workspace, lists = [], onSelectList }) {
 // ============================================================================
 function ProjectsView({ projects, createProject, deleteProject, users, currentUser, onSelectProject, toggleFavorite, duplicateProject, exportData, onOpenProjectManagement }) {
   const [showNewProject, setShowNewProject] = useState(false);
-  const [filterStatus, setFilterStatus] = useState('all');
+  const [filterStatus, setFilterStatus] = useState('in_progress');
   const [sortBy, setSortBy] = useState('recent');
+  const [viewMode, setViewMode] = useState('list'); // 'grid' | 'list'
   const [pendingDeleteProject, setPendingDeleteProject] = useState(null); // { id, name }
   const [deletingProject, setDeletingProject] = useState(false);
   const { addToast } = useToast();
   const { currentEnvironment, currentWorkspace } = useApp();
 
-  // Filtrar por entorno activo
+  // Filtrar estrictamente por entorno activo — sin fallback null
   const environmentProjects = currentEnvironment
-    ? projects.filter(p =>
-        p.environmentId === currentEnvironment.id || p.environmentId == null
-      )
+    ? projects.filter(p => p.environmentId === currentEnvironment.id)
     : projects;
 
   console.log(
@@ -2543,20 +2945,25 @@ function ProjectsView({ projects, createProject, deleteProject, users, currentUs
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem' }}>
-        <select 
-          value={filterStatus} 
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
+        <select
+          value={filterStatus}
           onChange={(e) => setFilterStatus(e.target.value)}
           style={selectStyle}
         >
           <option value="all">Todos los estados</option>
           <option value="active">Activos</option>
+          <option value="in_progress">En Curso</option>
+          <option value="waiting">En Espera</option>
+          <option value="review">En Revisión</option>
+          <option value="paused">En Pausa</option>
+          <option value="blocked">Bloqueados</option>
           <option value="completed">Completados</option>
           <option value="archived">Archivados</option>
         </select>
 
-        <select 
-          value={sortBy} 
+        <select
+          value={sortBy}
           onChange={(e) => setSortBy(e.target.value)}
           style={selectStyle}
         >
@@ -2564,26 +2971,88 @@ function ProjectsView({ projects, createProject, deleteProject, users, currentUs
           <option value="name">Nombre A-Z</option>
           <option value="deadline">Próximos a vencer</option>
         </select>
+
+        {/* Toggle vista */}
+        <div style={{ display: 'flex', border: '1px solid rgba(15,23,42,0.1)', borderRadius: '10px', overflow: 'hidden', marginLeft: 'auto' }}>
+          {[
+            { mode: 'grid', title: 'Vista tarjetas', icon: (
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <rect x="1" y="1" width="6" height="6" rx="1.5" fill="currentColor"/>
+                <rect x="9" y="1" width="6" height="6" rx="1.5" fill="currentColor"/>
+                <rect x="1" y="9" width="6" height="6" rx="1.5" fill="currentColor"/>
+                <rect x="9" y="9" width="6" height="6" rx="1.5" fill="currentColor"/>
+              </svg>
+            )},
+            { mode: 'list', title: 'Vista lista', icon: (
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <rect x="1" y="2" width="14" height="3" rx="1.5" fill="currentColor"/>
+                <rect x="1" y="6.5" width="14" height="3" rx="1.5" fill="currentColor"/>
+                <rect x="1" y="11" width="14" height="3" rx="1.5" fill="currentColor"/>
+              </svg>
+            )},
+          ].map(({ mode, title, icon }) => (
+            <button
+              key={mode}
+              title={title}
+              onClick={() => setViewMode(mode)}
+              style={{
+                padding: '8px 14px', border: 'none', cursor: 'pointer',
+                background: viewMode === mode ? DESIGN_TOKENS.primary.base : 'transparent',
+                color: viewMode === mode ? 'white' : DESIGN_TOKENS.neutral[400],
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                transition: 'all 0.15s',
+              }}
+            >
+              {icon}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-        gap: '1.5rem'
-      }}>
-        {filteredProjects.map((project, index) => (
-          <ProjectCardExtended
-            key={project.id}
-            project={project}
-            index={index}
-            onClick={() => onSelectProject(project)}
-            onToggleFavorite={() => toggleFavorite(project.id)}
-            onDuplicate={() => duplicateProject(project)}
-            onOpenManagement={() => onOpenProjectManagement(project)}
-            onDelete={() => setPendingDeleteProject({ id: project.id, name: project.name })}
-          />
-        ))}
-      </div>
+      {/* Contador */}
+      <p style={{ fontSize: '0.8125rem', color: DESIGN_TOKENS.neutral[400], margin: '0 0 1.25rem', fontWeight: 500 }}>
+        {filteredProjects.length} proyecto{filteredProjects.length !== 1 ? 's' : ''}
+        {filterStatus !== 'all' && (
+          <span> · <button onClick={() => setFilterStatus('all')} style={{ background: 'none', border: 'none', color: DESIGN_TOKENS.primary.base, cursor: 'pointer', fontSize: 'inherit', fontFamily: 'inherit', padding: 0, fontWeight: 600 }}>
+            Ver todos
+          </button></span>
+        )}
+      </p>
+
+      {viewMode === 'grid' ? (
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+          gap: '1.5rem'
+        }}>
+          {filteredProjects.map((project, index) => (
+            <ProjectCardExtended
+              key={project.id}
+              project={project}
+              index={index}
+              onClick={() => onSelectProject(project)}
+              onToggleFavorite={() => toggleFavorite(project.id)}
+              onDuplicate={() => duplicateProject(project)}
+              onOpenManagement={() => onOpenProjectManagement(project)}
+              onDelete={() => setPendingDeleteProject({ id: project.id, name: project.name })}
+            />
+          ))}
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          {filteredProjects.map((project, index) => (
+            <ProjectListRow
+              key={project.id}
+              project={project}
+              index={index}
+              onClick={() => onSelectProject(project)}
+              onToggleFavorite={() => toggleFavorite(project.id)}
+              onOpenManagement={() => onOpenProjectManagement(project)}
+              onDelete={() => setPendingDeleteProject({ id: project.id, name: project.name })}
+            />
+          ))}
+        </div>
+      )}
 
       {showNewProject && (
         <ProjectFormModal
@@ -2811,9 +3280,155 @@ function ProjectCardExtended({ project, onClick, onToggleFavorite, onDuplicate, 
 }
 
 // ============================================================================
+// PROJECT LIST ROW (vista lista-detalle)
+// ============================================================================
+const STATUS_ROW_MAP = {
+  active:      { bg: '#dbeafe', color: '#1e40af', label: 'Activo' },
+  in_progress: { bg: '#fef3c7', color: '#92400e', label: 'En Curso' },
+  waiting:     { bg: '#e0f2fe', color: '#0369a1', label: 'En Espera' },
+  review:      { bg: '#e0e7ff', color: '#3730a3', label: 'En Revisión' },
+  paused:      { bg: '#f3f4f6', color: '#6b7280', label: 'En Pausa' },
+  blocked:     { bg: '#fee2e2', color: '#991b1b', label: 'Bloqueado' },
+  completed:   { bg: '#d1fae5', color: '#065f46', label: 'Completado' },
+  archived:    { bg: '#f9fafb', color: '#9ca3af', label: 'Archivado' },
+};
+const PRIORITY_ROW_MAP = {
+  urgent: { bg: '#fee2e2', color: '#991b1b', label: 'Urgente' },
+  high:   { bg: '#fed7aa', color: '#9a3412', label: 'Alta' },
+  medium: { bg: '#dbeafe', color: '#1e40af', label: 'Media' },
+  low:    { bg: '#f3f4f6', color: '#6b7280', label: 'Baja' },
+};
+
+function ProjectListRow({ project, onClick, onToggleFavorite, onOpenManagement, onDelete, index = 0 }) {
+  const [showMenu, setShowMenu] = useState(false);
+  const sc = STATUS_ROW_MAP[project.status] || STATUS_ROW_MAP.active;
+  const pc = PRIORITY_ROW_MAP[project.priority] || PRIORITY_ROW_MAP.medium;
+
+  const daysLeft = (() => {
+    if (!project.endDate) return null;
+    return Math.round((new Date(project.endDate) - new Date()) / 86400000);
+  })();
+  const dateColor = daysLeft === null ? DESIGN_TOKENS.neutral[400]
+    : daysLeft < 0 ? DESIGN_TOKENS.danger.base
+    : daysLeft <= 7 ? '#f59e0b'
+    : DESIGN_TOKENS.neutral[400];
+
+  return (
+    <div
+      style={{
+        background: 'rgba(255,255,255,0.85)',
+        backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
+        border: '1px solid rgba(15,23,42,0.06)',
+        borderRadius: '14px',
+        padding: '0.9rem 1.25rem',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '1rem',
+        cursor: 'pointer',
+        transition: 'all 0.18s ease',
+        boxShadow: '0 1px 4px rgba(15,23,42,0.05)',
+        position: 'relative',
+        animation: `cardFadeIn 0.3s cubic-bezier(0.4,0,0.2,1) ${index * 0.03}s backwards`,
+      }}
+      onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 6px 24px rgba(15,23,42,0.1)'; e.currentTarget.style.borderColor = 'rgba(15,23,42,0.12)'; }}
+      onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 1px 4px rgba(15,23,42,0.05)'; e.currentTarget.style.borderColor = 'rgba(15,23,42,0.06)'; }}
+    >
+      {/* Franja de color */}
+      <div style={{ width: 5, alignSelf: 'stretch', borderRadius: 4, background: project.color || DESIGN_TOKENS.primary.base, flexShrink: 0 }} />
+
+      {/* Nombre + descripción */}
+      <div style={{ flex: 1, minWidth: 0 }} onClick={onClick}>
+        <div style={{ fontWeight: 700, fontSize: '0.9375rem', color: DESIGN_TOKENS.neutral[800], overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 2 }}>
+          {project.name}
+        </div>
+        {project.description && (
+          <div style={{ fontSize: '0.8125rem', color: DESIGN_TOKENS.neutral[500], overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 500 }}>
+            {project.description}
+          </div>
+        )}
+        {project.tags && project.tags.length > 0 && (
+          <div style={{ display: 'flex', gap: 4, marginTop: 5, flexWrap: 'wrap' }}>
+            {project.tags.slice(0, 3).map(tag => (
+              <span key={tag} style={{ padding: '2px 8px', background: DESIGN_TOKENS.primary.lightest, color: DESIGN_TOKENS.primary.base, borderRadius: 10, fontSize: '0.7rem', fontWeight: 600 }}>
+                #{tag}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Badges: status + priority */}
+      <div style={{ display: 'flex', gap: 6, flexShrink: 0 }} onClick={onClick}>
+        <span style={{ padding: '3px 9px', borderRadius: 5, fontSize: '0.72rem', fontWeight: 700, background: sc.bg, color: sc.color, whiteSpace: 'nowrap' }}>{sc.label}</span>
+        {project.priority && <span style={{ padding: '3px 9px', borderRadius: 5, fontSize: '0.72rem', fontWeight: 700, background: pc.bg, color: pc.color, whiteSpace: 'nowrap' }}>{pc.label}</span>}
+      </div>
+
+      {/* Fecha fin */}
+      <div style={{ flexShrink: 0, textAlign: 'right', minWidth: 100 }} onClick={onClick}>
+        {project.endDate ? (
+          <>
+            <div style={{ fontSize: '0.78rem', color: dateColor, fontWeight: 600 }}>{formatDate(project.endDate)}</div>
+            <div style={{ fontSize: '0.7rem', color: dateColor, marginTop: 1 }}>
+              {daysLeft < 0 ? `Vencido hace ${Math.abs(daysLeft)}d`
+                : daysLeft === 0 ? 'Vence hoy'
+                : `${daysLeft}d restantes`}
+            </div>
+          </>
+        ) : (
+          <span style={{ fontSize: '0.78rem', color: DESIGN_TOKENS.neutral[300] }}>Sin fecha</span>
+        )}
+      </div>
+
+      {/* Miembros */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, color: DESIGN_TOKENS.neutral[400], fontSize: '0.78rem' }} onClick={onClick}>
+        <Users size={13} />
+        <span>{project.members?.length ?? 0}</span>
+      </div>
+
+      {/* Favorito + menú */}
+      <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }}>
+        <button
+          onClick={e => { e.stopPropagation(); onToggleFavorite(); }}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, display: 'flex', transition: 'transform 0.2s' }}
+          onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.15)'}
+          onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+        >
+          {project.favorite
+            ? <Star size={16} fill={DESIGN_TOKENS.warning.base} color={DESIGN_TOKENS.warning.base} />
+            : <StarOff size={16} color={DESIGN_TOKENS.neutral[300]} />}
+        </button>
+        <button
+          onClick={e => { e.stopPropagation(); setShowMenu(v => !v); }}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, display: 'flex', color: DESIGN_TOKENS.neutral[400] }}
+        >
+          <MoreVertical size={16} />
+        </button>
+      </div>
+
+      {showMenu && (
+        <div style={{
+          position: 'absolute', top: '100%', right: '1rem', marginTop: 4,
+          background: 'white', border: `1px solid ${DESIGN_TOKENS.border.color.subtle}`,
+          borderRadius: DESIGN_TOKENS.border.radius.sm, boxShadow: DESIGN_TOKENS.shadows.xl,
+          zIndex: 50, minWidth: 160, overflow: 'hidden', animation: 'menuFadeIn 0.15s ease',
+        }}>
+          <button onClick={e => { e.stopPropagation(); setShowMenu(false); onOpenManagement(); }} style={menuItemStyle}>
+            <Copy size={15} /> Duplicar
+          </button>
+          <button onClick={e => { e.stopPropagation(); setShowMenu(false); onDelete(); }} style={{ ...menuItemStyle, color: DESIGN_TOKENS.danger.base }}>
+            <Trash2 size={15} /> Eliminar
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================================
 // PROJECT DETAIL VIEW
 // ============================================================================
-function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTaskUpdate, onTaskDelete, users, comments, onCommentsChange, tags, onTaskClick, onProjectUpdate, patchProjectInState }) {
+function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTaskUpdate, onTaskDelete, users, comments, onCommentsChange, tags, onTaskClick, onProjectUpdate, patchProjectInState, globalExpediteCheck, onEnsureUserInPool }) {
   const [viewMode, setViewMode] = useState('list');
   const [showNewTask, setShowNewTask] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
@@ -2821,10 +3436,68 @@ function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTask
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterAssignee, setFilterAssignee] = useState('all');
   const [headerCollapsed, setHeaderCollapsed] = useState(false);
-  const [pendingDeleteTask, setPendingDeleteTask] = useState(null); // { id, title }
+  const [pendingDeleteTask, setPendingDeleteTask] = useState(null);
   const [deletingTask, setDeletingTask] = useState(false);
   const [liveTasks, setLiveTasks] = useState(null);
+  const [showMembersModal, setShowMembersModal] = useState(false);
+  const [allSystemUsers, setAllSystemUsers] = useState([]);
+  const [loadingAllUsers, setLoadingAllUsers] = useState(false);
+  const [memberSearch, setMemberSearch] = useState('');
   const { addToast } = useToast();
+
+  // Cargar todos los usuarios del sistema al abrir el modal
+  useEffect(() => {
+    if (!showMembersModal) return;
+    setLoadingAllUsers(true);
+    dbUsers.getAll()
+      .then(data => setAllSystemUsers(data || []))
+      .catch(() => setAllSystemUsers([]))
+      .finally(() => setLoadingAllUsers(false));
+  }, [showMembersModal]);
+
+  // IDs de miembros actuales del proyecto
+  const memberIds = project?.members ?? [];
+  // Objetos usuario de los miembros actuales (busca en allSystemUsers o en users del entorno)
+  const projectMembers = useMemo(() => {
+    const pool = allSystemUsers.length > 0 ? allSystemUsers : users;
+    return memberIds.map(id => pool.find(u => u.id === id)).filter(Boolean);
+  }, [memberIds, allSystemUsers, users]);
+  // Todos los usuarios del sistema que aún NO son miembros del proyecto
+  const nonMembers = useMemo(() => {
+    const pool = allSystemUsers.length > 0 ? allSystemUsers : users;
+    const filtered = pool.filter(u => !memberIds.includes(u.id));
+    if (!memberSearch.trim()) return filtered;
+    const q = memberSearch.toLowerCase();
+    return filtered.filter(u =>
+      u.name?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q)
+    );
+  }, [allSystemUsers, users, memberIds, memberSearch]);
+
+  const handleAddMember = async (userId) => {
+    const newMembers = [...memberIds, userId];
+    try {
+      const updated = await dbProjects.update(project.id, { members: newMembers });
+      patchProjectInState?.({ ...project, ...updated, members: newMembers });
+      // Si el usuario no estaba en el pool del equipo, lo añadimos para que
+      // aparezca de inmediato en los selectores de "Asignado" de las tareas.
+      const addedUser = allSystemUsers.find(u => u.id === userId);
+      if (addedUser) onEnsureUserInPool?.(addedUser);
+      addToast('Miembro añadido al proyecto', 'success');
+    } catch (err) {
+      addToast('Error al añadir miembro: ' + err.message, 'error');
+    }
+  };
+
+  const handleRemoveMember = async (userId) => {
+    const newMembers = memberIds.filter(id => id !== userId);
+    try {
+      const updated = await dbProjects.update(project.id, { members: newMembers });
+      patchProjectInState?.({ ...project, ...updated, members: newMembers });
+      addToast('Miembro eliminado del proyecto', 'info');
+    } catch (err) {
+      addToast('Error al eliminar miembro: ' + err.message, 'error');
+    }
+  };
 
   const handleViewMode = (mode) => {
     setViewMode(mode);
@@ -3006,6 +3679,27 @@ function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTask
             ))}
           </select>
 
+          {/* ── Botón Miembros ── */}
+          <button
+            onClick={() => setShowMembersModal(true)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '6px',
+              padding: '8px 14px', background: 'white',
+              border: '1px solid #e2e8f0', borderRadius: '8px',
+              cursor: 'pointer', fontSize: '13px', fontWeight: 600,
+              color: '#374151', transition: 'all 0.15s',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.borderColor = '#94a3b8'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}
+          >
+            <Users size={16} />
+            Miembros
+            <span style={{
+              background: '#6366f1', color: 'white', borderRadius: '20px',
+              fontSize: '10px', fontWeight: 700, padding: '1px 7px', lineHeight: '16px',
+            }}>{projectMembers.length}</span>
+          </button>
+
           <button onClick={() => setShowNewTask(true)} style={primaryButtonStyle}>
             <ListPlus size={18} />
             Nueva Tarea
@@ -3027,6 +3721,7 @@ function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTask
           onListNameChange={() => {}}
           onListDelete={() => {}}
           onError={(msg) => addToast(msg, 'error')}
+          globalExpediteCheck={globalExpediteCheck}
           hideTitle
         />
       )}
@@ -3049,6 +3744,9 @@ function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTask
           project={project}
           tasks={projectTasks}
           onProjectUpdate={onProjectUpdate}
+          onTaskCreate={onTaskCreate}
+          onTaskUpdate={onTaskUpdate}
+          onTaskDelete={onTaskDelete}
         />
       )}
 
@@ -3081,6 +3779,179 @@ function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTask
           }}
           onCancel={() => setPendingDeleteTask(null)}
         />
+      )}
+
+      {/* ── MODAL GESTIÓN DE MIEMBROS ─────────────────────────────────────── */}
+      {showMembersModal && (
+        <div
+          onClick={e => { if (e.target === e.currentTarget) { setShowMembersModal(false); setMemberSearch(''); } }}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.45)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 9000, padding: '1rem',
+          }}
+        >
+          <div style={{
+            background: 'white', borderRadius: '16px', padding: '0',
+            width: '100%', maxWidth: '520px',
+            boxShadow: '0 24px 64px rgba(0,0,0,0.18)',
+            fontFamily: 'Inter, system-ui, sans-serif',
+            overflow: 'hidden',
+          }}>
+            {/* Header modal */}
+            <div style={{
+              padding: '20px 24px 16px',
+              borderBottom: '1px solid #f1f5f9',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#0f172a' }}>
+                  Miembros del proyecto
+                </h3>
+                <p style={{ margin: '2px 0 0', fontSize: '0.8rem', color: '#64748b' }}>
+                  {project.name} — {projectMembers.length} miembro{projectMembers.length !== 1 ? 's' : ''}
+                </p>
+              </div>
+              <button
+                onClick={() => { setShowMembersModal(false); setMemberSearch(''); }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: '4px', borderRadius: '6px', display: 'flex' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{ padding: '20px 24px', maxHeight: '65vh', overflowY: 'auto' }}>
+              {/* Miembros actuales */}
+              <p style={{ margin: '0 0 10px', fontSize: '11px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                En este proyecto
+              </p>
+              {projectMembers.length === 0 ? (
+                <p style={{ color: '#94a3b8', fontSize: '13px', margin: '0 0 20px' }}>Sin miembros asignados aún.</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '20px' }}>
+                  {projectMembers.map(u => {
+                    const initials = u.name
+                      ? u.name.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase()
+                      : u.email?.[0]?.toUpperCase() || '?';
+                    return (
+                      <div key={u.id} style={{
+                        display: 'flex', alignItems: 'center', gap: '10px',
+                        padding: '8px 12px', borderRadius: '8px',
+                        background: '#f8fafc', border: '1px solid #f1f5f9',
+                      }}>
+                        <div style={{
+                          width: '32px', height: '32px', borderRadius: '50%',
+                          background: '#6366f1', color: 'white',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: '11px', fontWeight: 700, flexShrink: 0,
+                        }}>{initials}</div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: '13px', fontWeight: 600, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.name}</div>
+                          <div style={{ fontSize: '11px', color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.email}</div>
+                        </div>
+                        {u.envRole && (
+                          <span style={{ fontSize: '10px', fontWeight: 600, color: '#6366f1', background: '#eef2ff', borderRadius: '20px', padding: '2px 8px' }}>
+                            {u.envRole}
+                          </span>
+                        )}
+                        <button
+                          onClick={() => handleRemoveMember(u.id)}
+                          title="Quitar del proyecto"
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#cbd5e1', padding: '4px', borderRadius: '4px', display: 'flex', transition: 'color 0.15s' }}
+                          onMouseEnter={e => e.currentTarget.style.color = '#ef4444'}
+                          onMouseLeave={e => e.currentTarget.style.color = '#cbd5e1'}
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Buscador + lista de usuarios disponibles */}
+              <p style={{ margin: '0 0 10px', fontSize: '11px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                Agregar persona
+              </p>
+
+              {/* Buscador */}
+              <div style={{ position: 'relative', marginBottom: '10px' }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2.5"
+                  style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
+                  <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                </svg>
+                <input
+                  type="text"
+                  placeholder="Buscar por nombre o email…"
+                  value={memberSearch}
+                  onChange={e => setMemberSearch(e.target.value)}
+                  style={{
+                    width: '100%', padding: '8px 10px 8px 30px', boxSizing: 'border-box',
+                    border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '13px',
+                    outline: 'none', fontFamily: 'inherit', color: '#1e293b',
+                  }}
+                  onFocus={e => e.target.style.borderColor = '#6366f1'}
+                  onBlur={e => e.target.style.borderColor = '#e2e8f0'}
+                />
+              </div>
+
+              {loadingAllUsers ? (
+                <p style={{ color: '#94a3b8', fontSize: '13px', textAlign: 'center', padding: '12px 0' }}>Cargando usuarios…</p>
+              ) : nonMembers.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '220px', overflowY: 'auto' }}>
+                  {nonMembers.map(u => {
+                    const initials = u.name
+                      ? u.name.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase()
+                      : u.email?.[0]?.toUpperCase() || '?';
+                    return (
+                      <div key={u.id} style={{
+                        display: 'flex', alignItems: 'center', gap: '10px',
+                        padding: '8px 12px', borderRadius: '8px',
+                        background: 'white', border: '1px solid #e2e8f0',
+                        transition: 'border-color 0.15s',
+                      }}
+                        onMouseEnter={e => e.currentTarget.style.borderColor = '#6366f1'}
+                        onMouseLeave={e => e.currentTarget.style.borderColor = '#e2e8f0'}
+                      >
+                        <div style={{
+                          width: '32px', height: '32px', borderRadius: '50%',
+                          background: '#e2e8f0', color: '#64748b',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: '11px', fontWeight: 700, flexShrink: 0,
+                        }}>{initials}</div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: '13px', fontWeight: 600, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.name || '—'}</div>
+                          <div style={{ fontSize: '11px', color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.email}</div>
+                        </div>
+                        <button
+                          onClick={() => handleAddMember(u.id)}
+                          style={{
+                            background: '#6366f1', color: 'white', border: 'none',
+                            borderRadius: '6px', padding: '5px 12px',
+                            fontSize: '12px', fontWeight: 600, cursor: 'pointer',
+                            transition: 'background 0.15s', flexShrink: 0,
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.background = '#4f46e5'}
+                          onMouseLeave={e => e.currentTarget.style.background = '#6366f1'}
+                        >
+                          + Añadir
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : memberSearch.trim() ? (
+                <p style={{ color: '#94a3b8', fontSize: '13px', textAlign: 'center', padding: '12px 0' }}>
+                  No hay resultados para "{memberSearch}".
+                </p>
+              ) : (
+                <p style={{ color: '#94a3b8', fontSize: '13px', textAlign: 'center', padding: '12px 0' }}>
+                  Todos los usuarios del sistema ya son miembros de este proyecto.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -3272,7 +4143,11 @@ function TaskRow({ task, allTasks, users, expanded, onToggle, onEdit, onDelete, 
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           {assignee && (
             <>
-              <span style={{ fontSize: '1.1rem' }}>{assignee.avatar}</span>
+              {typeof assignee?.avatar === 'string' && (assignee.avatar.startsWith('http') || assignee.avatar.startsWith('data:')) ? (
+                <img src={assignee.avatar} alt={assignee.name} style={{ width: '20px', height: '20px', borderRadius: '50%', objectFit: 'cover' }} />
+              ) : (
+                <span style={{ fontSize: '1.1rem' }}>{assignee.avatar || '👤'}</span>
+              )}
               <span style={{ fontSize: '0.8rem', color: DESIGN_TOKENS.neutral[600] }}>
                 {assignee.name.split(' ')[0]}
               </span>
@@ -3427,7 +4302,11 @@ function TableView({ tasks = [], users = [], onEdit, onTaskClick }) {
                   {/* Asignado */}
                   <td style={tdStyle}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize: '1.2rem' }}>{assignee?.avatar || '👤'}</span>
+                      {typeof assignee?.avatar === 'string' && (assignee.avatar.startsWith('http') || assignee.avatar.startsWith('data:')) ? (
+                        <img src={assignee.avatar} alt={assignee?.name} style={{ width: '20px', height: '20px', borderRadius: '50%', objectFit: 'cover' }} />
+                      ) : (
+                        <span style={{ fontSize: '1.2rem' }}>{assignee?.avatar || '👤'}</span>
+                      )}
                       <span style={{ fontWeight: 500 }}>{assignee?.name.split(' ')[0] || 'Sin asignar'}</span>
                     </div>
                   </td>
@@ -3915,16 +4794,17 @@ function ProjectPillDropdown({ projects, value, onChange }) {
           display: 'flex',
           alignItems: 'center',
           gap: '8px',
-          padding: selected ? '6px 12px 6px 8px' : '8px 14px',
-          borderRadius: '10px',
-          border: `1px solid ${open ? DESIGN_TOKENS.primary.base : 'rgba(15,23,42,0.08)'}`,
-          background: open ? 'rgba(0,102,255,0.04)' : 'var(--bg-surface, white)',
+          padding: '0.625rem 1rem',
+          borderRadius: '8px',
+          border: `1px solid ${open ? DESIGN_TOKENS.primary.base : DESIGN_TOKENS.neutral[200]}`,
+          background: open ? 'rgba(0,102,255,0.04)' : 'white',
           cursor: 'pointer',
-          fontSize: '13px',
+          fontSize: '0.875rem',
           fontWeight: 500,
-          color: selected ? 'var(--text-primary)' : 'var(--text-muted, #64748b)',
+          color: selected ? DESIGN_TOKENS.neutral[700] : DESIGN_TOKENS.neutral[700],
           transition: 'all 150ms',
           whiteSpace: 'nowrap',
+          fontFamily: DESIGN_TOKENS.typography.fontFamily,
         }}
       >
         {selected ? (
@@ -4102,16 +4982,16 @@ function AllTasksView({ tasks, projects, users, currentUser, onTaskClick }) {
   );
   console.log('[MyTasks] user.id:', currentUser?.id, 'resolvedId:', currentUserId, 'tasks asignadas:', myTasks.length);
 
-  // Filtrar proyectos por entorno
+  // Filtrar proyectos por entorno — estricto, sin fallback null
   const environmentProjects = currentEnvironment
-    ? projects.filter(p => p.environmentId === currentEnvironment.id || p.environmentId == null)
+    ? projects.filter(p => p.environmentId === currentEnvironment.id)
     : projects;
 
   // Filtrar tareas del usuario que pertenecen a proyectos del entorno actual
   const environmentTasks = currentEnvironment
     ? myTasks.filter(t => {
         const project = projects.find(p => p.id === t.projectId);
-        return project && (project.environmentId === currentEnvironment.id || project.environmentId == null);
+        return project && project.environmentId === currentEnvironment.id;
       })
     : myTasks;
 
@@ -4421,7 +5301,7 @@ function AnalyticsView({ tasks, projects, users }) {
           color={DESIGN_TOKENS.success.base}
         />
         <AnalyticsCard
-          label="En Progreso"
+          label="En Curso"
           value={inProgressTasks.length}
           icon={<Clock size={24} />}
           color={DESIGN_TOKENS.info.base}
@@ -4588,389 +5468,511 @@ function DetailItem({ label, children }) {
   );
 }
 
+// Shared micro-styles for TaskDetailModal
+const _tdIconBtn = {
+  background: 'none', border: 'none', cursor: 'pointer', color: '#64748b',
+  display: 'flex', alignItems: 'center', padding: '5px', borderRadius: '6px',
+  transition: 'background 150ms', fontFamily: 'inherit',
+};
+const _tdInlineInput = {
+  border: '1px solid #e2e8f0', borderRadius: '7px', padding: '4px 8px',
+  fontSize: '0.82rem', fontFamily: 'inherit', outline: 'none',
+  background: 'white', color: '#374151',
+};
+const _tdInlineSelect = {
+  border: '1px solid #e2e8f0', borderRadius: '7px', padding: '4px 8px',
+  fontSize: '0.82rem', fontFamily: 'inherit', outline: 'none',
+  background: 'white', color: '#374151', cursor: 'pointer',
+};
+
+// Field row for the task detail panel
+function TaskFieldRow({ label, icon, isEmpty, hideEmpty, children }) {
+  if (hideEmpty && isEmpty) return null;
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-start', padding: '5px 0', minHeight: 34 }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 5, width: 170, flexShrink: 0,
+        color: '#94a3b8', fontSize: '0.8rem', fontWeight: 500, paddingTop: 5,
+      }}>
+        {icon}
+        {label}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>{children}</div>
+    </div>
+  );
+}
+
 // 2. Ahora definimos el Modal que consume a DetailItem
 function TaskDetailModal({ task, project, projects = [], users, comments, onClose, onUpdate, onDelete, onAddComment }) {
-  const [isEditing, setIsEditing] = useState(false);
   const [form, setForm] = useState({ ...task });
   const [saving, setSaving] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [newComment, setNewComment] = useState('');
+  const [addingComment, setAddingComment] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [hideEmpty, setHideEmpty] = useState(false);
+  const [checklist, setChecklist] = useState(() => {
+    try { return JSON.parse(task.checklist || '[]'); } catch { return []; }
+  });
+  const [newCheckItem, setNewCheckItem] = useState('');
+  const [addingCheckItem, setAddingCheckItem] = useState(false);
   const { addToast } = useToast();
 
-  // Sync if the task changes from outside (e.g. after save)
-  useEffect(() => { setForm({ ...task }); }, [task.id]);
+  // Sync when task id changes
+  useEffect(() => {
+    setForm({ ...task });
+    try { setChecklist(JSON.parse(task.checklist || '[]')); } catch { setChecklist([]); }
+  }, [task.id]);
+
+  // Escape to close
+  useEffect(() => {
+    const h = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, [onClose]);
 
   const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
-  const assignee = users.find(u => u.id === form.assigneeId);
-  const currentProject = projects.find(p => String(p.id) === String(form.projectId)) || project;
-  const roadmapPhases = currentProject?.roadmap?.phases?.filter(ph => ph.name) || [];
-  const currentPhase = roadmapPhases.find(ph => String(ph.id) === String(form.roadmapPhaseId)) || null;
 
-  const handleSave = async () => {
-    if (!form.title?.trim()) {
-      addToast('El título es requerido', 'error');
-      return;
-    }
-    if (form.startDate && form.endDate && new Date(form.endDate) < new Date(form.startDate)) {
-      addToast('La fecha fin no puede ser anterior a la fecha inicio', 'error');
-      return;
-    }
+  const saveField = async (updates) => {
+    const updated = { ...form, ...updates };
+    setForm(updated);
     setSaving(true);
+    try { await onUpdate(updated); }
+    catch { addToast('Error al guardar', 'error'); }
+    finally { setSaving(false); }
+  };
+
+  const saveChecklist = async (list) => {
+    setChecklist(list);
+    onUpdate({ ...form, checklist: JSON.stringify(list) }).catch(() => {});
+  };
+
+  const handleAddComment = async () => {
+    if (!newComment.trim()) return;
+    setAddingComment(true);
     try {
-      await onUpdate(form);
-      setIsEditing(false);
-      addToast('Tarea actualizada correctamente', 'success');
-    } catch {
-      addToast('Error al guardar los cambios', 'error');
-    } finally {
-      setSaving(false);
-    }
+      await onAddComment({ content: newComment });
+      setNewComment('');
+    } catch { addToast('Error al agregar comentario', 'error'); }
+    finally { setAddingComment(false); }
   };
 
   const handleDelete = async () => {
-    try {
-      await onDelete(task.id);
-    } catch {
-      addToast('Error al eliminar la tarea', 'error');
-    }
+    try { await onDelete(task.id); }
+    catch { addToast('Error al eliminar la tarea', 'error'); }
   };
 
-  const handleAddComment = () => {
-    if (!newComment.trim()) return;
-    onAddComment({ text: newComment, content: newComment });
-    setNewComment('');
+  const addCheckItem = () => {
+    if (!newCheckItem.trim()) return;
+    const newList = [...checklist, { id: Date.now(), text: newCheckItem.trim(), done: false }];
+    saveChecklist(newList);
+    setNewCheckItem('');
+    setAddingCheckItem(false);
   };
 
-  const cancelEdit = () => { setForm({ ...task }); setIsEditing(false); setShowDeleteConfirm(false); };
+  const toggleCheck = (id) => saveChecklist(checklist.map(i => i.id === id ? { ...i, done: !i.done } : i));
+  const removeCheck = (id) => saveChecklist(checklist.filter(i => i.id !== id));
 
-  // Shared input style for edit fields
-  const fi = {
-    width: '100%', padding: '7px 10px', border: '1.5px solid #e2e8f0',
-    borderRadius: '8px', fontSize: '0.875rem', fontFamily: 'inherit',
-    color: '#1e293b', background: 'white', outline: 'none', boxSizing: 'border-box',
-  };
+  const statusDef = STATUS_OPTIONS[form.status] || STATUS_OPTIONS.todo;
+  const currentProject = projects.find(p => String(p.id) === String(form.projectId)) || project;
+  const assignee = users.find(u => u.id === form.assigneeId);
+  const checkDone = checklist.filter(i => i.done).length;
 
   if (!task) return null;
 
   return (
-    <Modal onClose={onClose} title="Detalle de Tarea" size="large">
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '2rem' }}>
+    <div
+      style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(3px)', display: 'flex' }}
+      onClick={onClose}
+    >
+      {/* Inject slideInRight animation */}
+      <style>{`
+        @keyframes tdSlideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        @keyframes tdSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+      `}</style>
 
-        {/* ── COLUMNA IZQUIERDA ── */}
-        <div>
-          {/* Título */}
-          <div style={{ marginBottom: '1.5rem' }}>
-            {isEditing ? (
-              <input
-                type="text"
-                value={form.title}
-                onChange={e => set('title', e.target.value)}
-                style={{ ...fi, fontSize: '1.25rem', fontWeight: 700, padding: '8px 12px' }}
-                placeholder="Título de la tarea"
-              />
-            ) : (
-              <h3 style={{ fontSize: '1.5rem', fontWeight: 700, margin: 0, color: DESIGN_TOKENS.neutral[800] }}>
-                {task.title}
-              </h3>
-            )}
-          </div>
-
-          {/* Descripción */}
-          <div style={{ marginBottom: '2rem' }}>
-            <h4 style={{ fontSize: '0.875rem', fontWeight: 700, color: DESIGN_TOKENS.neutral[600], marginBottom: '0.75rem', textTransform: 'uppercase' }}>
-              Descripción
-            </h4>
-            {isEditing ? (
-              <textarea
-                value={form.description || ''}
-                onChange={e => set('description', e.target.value)}
-                rows={4}
-                style={{ ...fi, resize: 'vertical' }}
-                placeholder="Descripción de la tarea..."
-              />
-            ) : (
-              <p style={{ fontSize: '0.95rem', color: DESIGN_TOKENS.neutral[700], lineHeight: 1.6, margin: 0 }}>
-                {task.description || 'Sin descripción'}
-              </p>
-            )}
-          </div>
-
-          {/* Comentarios */}
-          <div>
-            <h4 style={{ fontSize: '1rem', fontWeight: 700, color: DESIGN_TOKENS.neutral[800], marginBottom: '1rem' }}>
-              Comentarios ({comments.length})
-            </h4>
-            <div style={{ marginBottom: '1.5rem' }}>
-              <textarea
-                value={newComment}
-                onChange={e => setNewComment(e.target.value)}
-                placeholder="Escribe un comentario..."
-                rows={3}
-                style={{ ...inputStyle, resize: 'vertical' }}
-              />
-              <button
-                onClick={handleAddComment}
-                disabled={!newComment.trim()}
-                style={{ ...primaryButtonStyle, marginTop: '0.75rem' }}
-              >
-                <Send size={18} />
-                Agregar Comentario
-              </button>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {comments.map(comment => {
-                const author = users.find(u => u.id === comment.userId);
-                return (
-                  <div key={comment.id} style={{
-                    background: DESIGN_TOKENS.neutral[50], borderRadius: '8px',
-                    padding: '1rem', border: `1px solid ${DESIGN_TOKENS.neutral[200]}`
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                      <span style={{ fontSize: '1.25rem' }}>{author?.avatar}</span>
-                      <div>
-                        <div style={{ fontSize: '0.875rem', fontWeight: 600, color: DESIGN_TOKENS.neutral[800] }}>{author?.name}</div>
-                        <div style={{ fontSize: '0.75rem', color: DESIGN_TOKENS.neutral[500] }}>{new Date(comment.createdAt).toLocaleString('es-ES')}</div>
-                      </div>
-                    </div>
-                    <p style={{ fontSize: '0.875rem', color: DESIGN_TOKENS.neutral[700], margin: 0, lineHeight: 1.5 }}>
-                      {comment.content || comment.text}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+      {/* Panel */}
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          marginLeft: 'auto',
+          width: isExpanded ? '100%' : 'min(90%, 1280px)',
+          height: '100%',
+          background: '#fff',
+          display: 'flex',
+          flexDirection: 'column',
+          boxShadow: '-8px 0 48px rgba(0,0,0,0.13)',
+          animation: 'tdSlideIn 0.22s cubic-bezier(0.4,0,0.2,1)',
+        }}
+      >
+        {/* ── TOP BAR ── */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 20px', borderBottom: '1px solid #f1f5f9', flexShrink: 0 }}>
+          <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>Tarea</span>
+          <ChevronRight size={13} style={{ color: '#cbd5e1' }} />
+          <span style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 500 }}>
+            {String(task.id || '').substring(0, 8)}
+          </span>
+          <div style={{ flex: 1 }} />
+          {saving && (
+            <span style={{ fontSize: '0.72rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}>
+              <Loader size={12} style={{ animation: 'tdSpin 1s linear infinite' }} /> Guardando…
+            </span>
+          )}
+          <button title={isExpanded ? 'Reducir' : 'Expandir'} onClick={() => setIsExpanded(v => !v)} style={_tdIconBtn}>
+            {isExpanded ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+          </button>
+          <button title="Eliminar tarea" onClick={() => setShowDeleteConfirm(true)} style={{ ..._tdIconBtn, color: '#ef4444' }}>
+            <Trash2 size={16} />
+          </button>
+          <button onClick={onClose} style={_tdIconBtn}>
+            <X size={18} />
+          </button>
         </div>
 
-        {/* ── COLUMNA DERECHA (SIDEBAR) ── */}
-        <div>
-          <div style={{
-            background: DESIGN_TOKENS.neutral[50], borderRadius: '12px',
-            padding: '1.5rem', border: `1px solid ${DESIGN_TOKENS.neutral[200]}`,
-            marginBottom: '1rem'
-          }}>
-            <h4 style={{ fontSize: '0.875rem', fontWeight: 700, color: DESIGN_TOKENS.neutral[600], marginBottom: '1rem', textTransform: 'uppercase' }}>
-              Información
-            </h4>
+        {/* ── DELETE CONFIRM BAR ── */}
+        {showDeleteConfirm && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 20px', background: '#fef2f2', borderBottom: '1px solid #fecaca', flexShrink: 0 }}>
+            <AlertTriangle size={16} style={{ color: '#ef4444', flexShrink: 0 }} />
+            <span style={{ fontSize: '0.85rem', color: '#dc2626', fontWeight: 600 }}>¿Eliminar esta tarea? Esta acción no se puede deshacer.</span>
+            <button onClick={handleDelete} style={{ padding: '5px 16px', background: '#dc2626', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.82rem' }}>
+              Sí, eliminar
+            </button>
+            <button onClick={() => setShowDeleteConfirm(false)} style={{ padding: '5px 16px', background: 'white', color: '#374151', border: '1px solid #e2e8f0', borderRadius: 8, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.82rem' }}>
+              Cancelar
+            </button>
+          </div>
+        )}
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        {/* ── BODY ── */}
+        <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
 
-              {/* Estado */}
-              <DetailItem label="Estado">
-                {isEditing ? (
-                  <select value={form.status || 'todo'} onChange={e => set('status', e.target.value)} style={{ ...fi, cursor: 'pointer' }}>
+          {/* ─── LEFT: Task Content ─── */}
+          <div style={{ flex: 1, overflow: 'auto', padding: '28px 36px' }}>
+
+            {/* Title */}
+            <input
+              type="text"
+              value={form.title}
+              onChange={e => set('title', e.target.value)}
+              onBlur={e => { if (e.target.value.trim() && e.target.value !== task.title) saveField({ title: e.target.value }); }}
+              style={{
+                width: '100%', border: 'none', outline: 'none',
+                fontSize: '1.5rem', fontWeight: 800, color: '#0f172a',
+                fontFamily: 'inherit', background: 'transparent',
+                padding: 0, marginBottom: 20, boxSizing: 'border-box',
+              }}
+              placeholder="Título de la tarea"
+            />
+
+            {/* Fields */}
+            <div style={{ marginBottom: 28, borderTop: '1px solid #f8fafc', paddingTop: 12 }}>
+
+              <TaskFieldRow label="Estado" icon={<div style={{ width: 8, height: 8, borderRadius: '50%', background: statusDef.color, flexShrink: 0 }} />} hideEmpty={false} isEmpty={false}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <select
+                    value={form.status || 'todo'}
+                    onChange={e => saveField({ status: e.target.value })}
+                    style={{
+                      ..._tdInlineSelect,
+                      background: statusDef.bg, color: statusDef.color,
+                      fontWeight: 700, textTransform: 'uppercase', fontSize: '0.72rem',
+                      letterSpacing: '0.05em', border: 'none',
+                    }}
+                  >
                     {Object.entries(STATUS_OPTIONS).map(([k, { label }]) => (
                       <option key={k} value={k}>{label}</option>
                     ))}
                   </select>
-                ) : (
-                  <div style={{
-                    padding: '0.5rem 0.75rem',
-                    background: STATUS_OPTIONS[task.status]?.bg || DESIGN_TOKENS.neutral[100],
-                    color: STATUS_OPTIONS[task.status]?.color || DESIGN_TOKENS.neutral[600],
-                    borderRadius: '6px', fontSize: '0.875rem', fontWeight: 600, textAlign: 'center',
-                  }}>
-                    {STATUS_OPTIONS[task.status]?.label || task.status}
-                  </div>
-                )}
-              </DetailItem>
-
-              {/* Prioridad */}
-              <DetailItem label="Prioridad">
-                {isEditing ? (
-                  <select value={form.priority || 'medium'} onChange={e => set('priority', e.target.value)} style={{ ...fi, cursor: 'pointer' }}>
-                    {Object.entries(PRIORITY_OPTIONS).map(([k, { label }]) => (
-                      <option key={k} value={k}>{label}</option>
-                    ))}
-                  </select>
-                ) : (
-                  <div style={{
-                    padding: '0.5rem 0.75rem',
-                    background: `${PRIORITY_OPTIONS[task.priority]?.color}15`,
-                    color: PRIORITY_OPTIONS[task.priority]?.color,
-                    borderRadius: '6px', fontSize: '0.875rem', fontWeight: 600, textAlign: 'center',
-                  }}>
-                    {PRIORITY_OPTIONS[task.priority]?.label || task.priority}
-                  </div>
-                )}
-              </DetailItem>
-
-              {/* Asignado a */}
-              <DetailItem label="Asignado a">
-                {isEditing ? (
-                  <select value={form.assigneeId || ''} onChange={e => set('assigneeId', e.target.value)} style={{ ...fi, cursor: 'pointer' }}>
-                    <option value="">Sin asignar</option>
-                    {users.map(u => (
-                      <option key={u.id} value={u.id}>{u.avatar} {u.name}</option>
-                    ))}
-                  </select>
-                ) : assignee ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <span style={{ fontSize: '1.5rem' }}>{assignee.avatar}</span>
-                    <span style={{ fontSize: '0.875rem', fontWeight: 600, color: DESIGN_TOKENS.neutral[800] }}>{assignee.name}</span>
-                  </div>
-                ) : (
-                  <span style={{ fontSize: '0.875rem', color: DESIGN_TOKENS.neutral[500] }}>Sin asignar</span>
-                )}
-              </DetailItem>
-
-              {/* Proyecto */}
-              <DetailItem label="Proyecto">
-                {isEditing ? (
-                  <select value={form.projectId || ''} onChange={e => set('projectId', e.target.value)} style={{ ...fi, cursor: 'pointer' }}>
-                    <option value="">Sin proyecto</option>
-                    {projects.map(p => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
-                    ))}
-                  </select>
-                ) : (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    {currentProject?.color && (
-                      <div style={{ width: 10, height: 10, borderRadius: '50%', background: currentProject.color, flexShrink: 0 }} />
-                    )}
-                    <span style={{ fontSize: '0.875rem', fontWeight: 600, color: DESIGN_TOKENS.neutral[800] }}>
-                      {currentProject?.name || 'Sin proyecto'}
-                    </span>
-                  </div>
-                )}
-              </DetailItem>
-
-              {/* Fecha inicio */}
-              <DetailItem label="Fecha inicio">
-                {isEditing ? (
-                  <input type="date" value={form.startDate || ''} onChange={e => set('startDate', e.target.value)} style={fi} />
-                ) : (
-                  <div style={{ fontSize: '0.875rem', color: DESIGN_TOKENS.neutral[700] }}>
-                    {formatDate(task.startDate, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
-                  </div>
-                )}
-              </DetailItem>
-
-              {/* Fecha fin */}
-              <DetailItem label="Fecha fin">
-                {isEditing ? (
-                  <input type="date" value={form.endDate || ''} onChange={e => set('endDate', e.target.value)} style={fi} />
-                ) : (
-                  <div style={{ fontSize: '0.875rem', color: DESIGN_TOKENS.neutral[700] }}>
-                    {formatDate(task.endDate, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
-                  </div>
-                )}
-              </DetailItem>
-
-              {/* Progreso */}
-              <DetailItem label="Progreso">
-                {isEditing ? (
-                  <div>
-                    <input
-                      type="range" min="0" max="100"
-                      value={form.progress || 0}
-                      onChange={e => set('progress', Number(e.target.value))}
-                      style={{ width: '100%' }}
-                    />
-                    <div style={{ textAlign: 'right', fontSize: '0.75rem', color: DESIGN_TOKENS.neutral[600], marginTop: '2px' }}>
-                      {form.progress || 0}%
-                    </div>
-                  </div>
-                ) : (
-                  <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                      <span style={{ fontSize: '0.75rem', color: DESIGN_TOKENS.neutral[600] }}>Completado</span>
-                      <span style={{ fontSize: '0.875rem', fontWeight: 700, color: DESIGN_TOKENS.primary.base }}>{task.progress}%</span>
-                    </div>
-                    <div style={{ height: '8px', background: DESIGN_TOKENS.neutral[200], borderRadius: '4px', overflow: 'hidden' }}>
-                      <div style={{ width: `${task.progress}%`, height: '100%', background: DESIGN_TOKENS.primary.base, transition: 'width 0.3s' }} />
-                    </div>
-                  </div>
-                )}
-              </DetailItem>
-
-              {task.tags && task.tags.length > 0 && (
-                <DetailItem label="Etiquetas">
-                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                    {task.tags.map(tag => (
-                      <span key={tag} style={{
-                        padding: '0.375rem 0.75rem', background: DESIGN_TOKENS.primary.lighter,
-                        color: DESIGN_TOKENS.primary.dark, borderRadius: '12px',
-                        fontSize: '0.75rem', fontWeight: 600,
-                      }}>
-                        #{tag}
-                      </span>
-                    ))}
-                  </div>
-                </DetailItem>
-              )}
-            </div>
-          </div>
-
-          {/* ── BOTONES DE ACCIÓN ── */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            {isEditing ? (
-              <>
-                <button
-                  onClick={handleSave}
-                  disabled={saving}
-                  style={{
-                    ...primaryButtonStyle,
-                    background: saving ? '#94a3b8' : '#1e293b',
-                    boxShadow: 'none',
-                    cursor: saving ? 'not-allowed' : 'pointer',
-                  }}
-                  onMouseEnter={e => { if (!saving) e.currentTarget.style.background = '#334155'; }}
-                  onMouseLeave={e => { if (!saving) e.currentTarget.style.background = '#1e293b'; }}
-                >
-                  <Save size={16} />
-                  {saving ? 'Guardando...' : 'Guardar cambios'}
-                </button>
-
-                <button onClick={cancelEdit} style={secondaryButtonStyle}>
-                  <X size={16} />
-                  Cancelar
-                </button>
-
-                {onDelete && !showDeleteConfirm && (
                   <button
-                    onClick={() => setShowDeleteConfirm(true)}
-                    style={{ ...secondaryButtonStyle, color: '#dc2626', borderColor: '#fecaca' }}
-                    onMouseEnter={e => { e.currentTarget.style.background = '#fef2f2'; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                    title="Marcar como completada"
+                    onClick={() => saveField({ status: 'completed' })}
+                    style={{ ..._tdIconBtn, color: form.status === 'completed' ? '#10b981' : '#cbd5e1', padding: 2 }}
                   >
-                    <Trash2 size={16} />
-                    Eliminar tarea
+                    <CheckCircle2 size={17} />
+                  </button>
+                </div>
+              </TaskFieldRow>
+
+              <TaskFieldRow label="Fechas" icon={<Calendar size={13} />} isEmpty={!form.startDate && !form.endDate} hideEmpty={hideEmpty}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <input
+                    type="date" value={form.startDate || ''}
+                    onChange={e => set('startDate', e.target.value)}
+                    onBlur={e => saveField({ startDate: e.target.value || null })}
+                    style={_tdInlineInput}
+                  />
+                  <span style={{ color: '#cbd5e1', fontSize: '0.8rem' }}>→</span>
+                  <input
+                    type="date" value={form.endDate || ''}
+                    onChange={e => set('endDate', e.target.value)}
+                    onBlur={e => saveField({ endDate: e.target.value || null })}
+                    style={_tdInlineInput}
+                  />
+                </div>
+              </TaskFieldRow>
+
+              <TaskFieldRow label="Personas asignadas" icon={<Users size={13} />} isEmpty={!form.assigneeId} hideEmpty={hideEmpty}>
+                <select
+                  value={form.assigneeId || ''}
+                  onChange={e => saveField({ assigneeId: e.target.value || null })}
+                  style={_tdInlineSelect}
+                >
+                  <option value="">Vacío</option>
+                  {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                </select>
+              </TaskFieldRow>
+
+              <TaskFieldRow label="Prioridad" icon={<AlertCircle size={13} />} isEmpty={!form.priority} hideEmpty={hideEmpty}>
+                <select
+                  value={form.priority || ''}
+                  onChange={e => saveField({ priority: e.target.value || null })}
+                  style={_tdInlineSelect}
+                >
+                  <option value="">Vacío</option>
+                  {Object.entries(PRIORITY_OPTIONS).map(([k, { label }]) => (
+                    <option key={k} value={k}>{label}</option>
+                  ))}
+                </select>
+              </TaskFieldRow>
+
+              <TaskFieldRow label="Proyecto" icon={<Briefcase size={13} />} isEmpty={!form.projectId} hideEmpty={hideEmpty}>
+                <select
+                  value={form.projectId || ''}
+                  onChange={e => saveField({ projectId: e.target.value || null })}
+                  style={_tdInlineSelect}
+                >
+                  <option value="">Sin proyecto</option>
+                  {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </TaskFieldRow>
+
+              <TaskFieldRow label="Progreso" icon={<TrendingUp size={13} />} isEmpty={!form.progress} hideEmpty={hideEmpty}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <input
+                    type="range" min="0" max="100"
+                    value={form.progress || 0}
+                    onChange={e => set('progress', Number(e.target.value))}
+                    onMouseUp={e => saveField({ progress: Number(e.target.value) })}
+                    style={{ flex: 1, cursor: 'pointer', accentColor: DESIGN_TOKENS.primary.base, maxWidth: 140 }}
+                  />
+                  <span style={{ fontSize: '0.8rem', fontWeight: 700, color: DESIGN_TOKENS.primary.base, minWidth: 30 }}>
+                    {form.progress || 0}%
+                  </span>
+                </div>
+              </TaskFieldRow>
+
+              <TaskFieldRow label="Etiquetas" icon={<Tag size={13} />} isEmpty={!form.tags?.length} hideEmpty={hideEmpty}>
+                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                  {(form.tags || []).length > 0
+                    ? (form.tags).map(tag => (
+                      <span key={tag} style={{ padding: '2px 8px', background: '#eff6ff', color: '#1d4ed8', borderRadius: 12, fontSize: '0.72rem', fontWeight: 600 }}>#{tag}</span>
+                    ))
+                    : <span style={{ fontSize: '0.8rem', color: '#cbd5e1' }}>Vacío</span>
+                  }
+                </div>
+              </TaskFieldRow>
+
+              {/* Hide/show empty toggle */}
+              <div style={{ marginTop: 6 }}>
+                <button
+                  onClick={() => setHideEmpty(v => !v)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: '0.76rem', display: 'flex', alignItems: 'center', gap: 3, fontFamily: 'inherit', padding: 0 }}
+                >
+                  {hideEmpty ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
+                  {hideEmpty ? 'Mostrar propiedades vacías' : 'Ocultar propiedades vacías'}
+                </button>
+              </div>
+            </div>
+
+            {/* Description */}
+            <div style={{ marginBottom: 24 }}>
+              <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#94a3b8', display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Descripción
+              </label>
+              <textarea
+                value={form.description || ''}
+                onChange={e => set('description', e.target.value)}
+                placeholder="Agregar descripción..."
+                rows={4}
+                style={{
+                  width: '100%', border: '1.5px solid #f1f5f9', borderRadius: 10,
+                  padding: '10px 14px', fontSize: '0.875rem', fontFamily: 'inherit',
+                  resize: 'vertical', outline: 'none', color: '#374151',
+                  background: '#fafbfc', boxSizing: 'border-box', lineHeight: 1.65,
+                  transition: 'border-color 150ms',
+                }}
+                onFocus={e => { e.target.style.borderColor = '#cbd5e1'; e.target.style.background = 'white'; }}
+                onBlur={e => { e.target.style.borderColor = '#f1f5f9'; e.target.style.background = '#fafbfc'; if (e.target.value !== (task.description || '')) saveField({ description: e.target.value }); }}
+              />
+            </div>
+
+            {/* CHECKLIST — only when expanded */}
+            {isExpanded && (
+              <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 20 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <ClipboardList size={16} style={{ color: '#64748b' }} />
+                    <span style={{ fontWeight: 700, fontSize: '0.9rem', color: '#1e293b' }}>Listas de control</span>
+                    {checklist.length > 0 && (
+                      <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{checkDone} de {checklist.length}</span>
+                    )}
+                  </div>
+                  <button onClick={() => setAddingCheckItem(true)} style={{ ..._tdIconBtn, gap: 4, fontSize: '0.8rem', color: '#64748b' }}>
+                    <Plus size={15} /> Agregar elemento
+                  </button>
+                </div>
+
+                {checklist.length > 0 && (
+                  <div style={{ background: '#f8fafc', borderRadius: 10, border: '1px solid #f1f5f9', marginBottom: 12, overflow: 'hidden' }}>
+                    <div style={{ padding: '8px 16px 6px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                        <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748b' }}>Checklist</span>
+                        <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>{checkDone}/{checklist.length}</span>
+                      </div>
+                      <div style={{ height: 3, background: '#e2e8f0', borderRadius: 2, overflow: 'hidden' }}>
+                        <div style={{ width: `${checklist.length ? (checkDone / checklist.length * 100) : 0}%`, height: '100%', background: '#10b981', transition: 'width 0.3s' }} />
+                      </div>
+                    </div>
+                    {checklist.map(item => (
+                      <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 16px', borderTop: '1px solid #f1f5f9' }}>
+                        <input
+                          type="checkbox" checked={item.done}
+                          onChange={() => toggleCheck(item.id)}
+                          style={{ cursor: 'pointer', accentColor: '#10b981', width: 15, height: 15, flexShrink: 0 }}
+                        />
+                        <span style={{ flex: 1, fontSize: '0.875rem', color: item.done ? '#94a3b8' : '#374151', textDecoration: item.done ? 'line-through' : 'none' }}>
+                          {item.text}
+                        </span>
+                        <button onClick={() => removeCheck(item.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#cbd5e1', padding: 2, display: 'flex' }}>
+                          <X size={13} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {addingCheckItem ? (
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <input
+                      autoFocus
+                      type="text" value={newCheckItem}
+                      onChange={e => setNewCheckItem(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') addCheckItem();
+                        if (e.key === 'Escape') { setAddingCheckItem(false); setNewCheckItem(''); }
+                      }}
+                      placeholder="Nuevo elemento…"
+                      style={{ flex: 1, padding: '7px 10px', border: '1.5px solid #e2e8f0', borderRadius: 8, fontSize: '0.875rem', fontFamily: 'inherit', outline: 'none' }}
+                    />
+                    <button onClick={addCheckItem} style={{ padding: '7px 16px', background: '#1e293b', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.82rem' }}>
+                      Agregar
+                    </button>
+                    <button onClick={() => { setAddingCheckItem(false); setNewCheckItem(''); }} style={_tdIconBtn}>
+                      <X size={16} />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setAddingCheckItem(true)}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: 4, fontFamily: 'inherit', padding: '4px 0' }}
+                  >
+                    <Plus size={13} /> Agregar lista de control
                   </button>
                 )}
+              </div>
+            )}
+          </div>
 
-                {showDeleteConfirm && (
-                  <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '12px' }}>
-                    <p style={{ margin: '0 0 10px', color: '#dc2626', fontWeight: 600, fontSize: '0.82rem' }}>
-                      ¿Eliminar esta tarea? Esta acción no se puede deshacer.
-                    </p>
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      <button
-                        onClick={handleDelete}
-                        style={{ flex: 1, padding: '7px', background: '#dc2626', color: 'white', border: 'none', borderRadius: '7px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.82rem' }}
-                      >
-                        Sí, eliminar
-                      </button>
-                      <button
-                        onClick={() => setShowDeleteConfirm(false)}
-                        style={{ flex: 1, padding: '7px', background: 'white', color: '#374151', border: '1px solid #e2e8f0', borderRadius: '7px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.82rem' }}
-                      >
-                        Cancelar
-                      </button>
+          {/* ─── RIGHT: Activity / Comments ─── */}
+          <div style={{ width: 340, borderLeft: '1px solid #f1f5f9', display: 'flex', flexDirection: 'column', flexShrink: 0, background: 'white' }}>
+            {/* Header */}
+            <div style={{ padding: '14px 18px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+              <span style={{ fontWeight: 700, fontSize: '0.9rem', color: '#1e293b' }}>Actividad</span>
+              <div style={{ display: 'flex', gap: 2 }}>
+                <button style={_tdIconBtn}><Search size={14} /></button>
+                <button style={_tdIconBtn}><Bell size={14} /></button>
+                <button style={_tdIconBtn}><Filter size={14} /></button>
+              </div>
+            </div>
+
+            {/* Comments list */}
+            <div style={{ flex: 1, overflow: 'auto', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {comments.length === 0 && (
+                <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: '0.82rem', marginTop: 48, lineHeight: 1.6 }}>
+                  <MessageSquare size={28} style={{ opacity: 0.3, display: 'block', margin: '0 auto 8px' }} />
+                  No hay comentarios aún
+                </div>
+              )}
+              {[...comments].reverse().map(comment => {
+                const author = users.find(u => u.id === comment.userId);
+                return (
+                  <div key={comment.id} style={{ display: 'flex', gap: 8 }}>
+                    <div style={{
+                      width: 28, height: 28, borderRadius: '50%', background: '#e2e8f0',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      flexShrink: 0, fontSize: '0.72rem', fontWeight: 700, color: '#64748b', overflow: 'hidden',
+                    }}>
+                      {typeof author?.avatar === 'string' && (author.avatar.startsWith('http') || author.avatar.startsWith('data:'))
+                        ? <img src={author.avatar} alt={author.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        : (author?.name?.charAt(0)?.toUpperCase() || '?')
+                      }
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 2 }}>
+                        <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#1e293b' }}>{author?.name || 'Usuario'}</span>
+                        <span style={{ fontSize: '0.68rem', color: '#94a3b8' }}>
+                          {new Date(comment.createdAt).toLocaleString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                      <p style={{ margin: 0, fontSize: '0.85rem', color: '#374151', lineHeight: 1.5 }}>
+                        {comment.content || comment.text}
+                      </p>
                     </div>
                   </div>
-                )}
-              </>
-            ) : (
-              <button onClick={() => setIsEditing(true)} style={secondaryButtonStyle}>
-                <Edit size={18} />
-                Editar tarea
-              </button>
-            )}
+                );
+              })}
+            </div>
+
+            {/* Comment input */}
+            <div style={{ padding: '12px 16px', borderTop: '1px solid #f1f5f9', flexShrink: 0 }}>
+              <textarea
+                value={newComment}
+                onChange={e => setNewComment(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAddComment(); } }}
+                placeholder="Escribe un comentario… (Enter para enviar)"
+                rows={3}
+                style={{
+                  width: '100%', border: '1.5px solid #e2e8f0', borderRadius: 10,
+                  padding: '10px 12px', fontSize: '0.85rem', fontFamily: 'inherit',
+                  resize: 'none', outline: 'none', color: '#374151',
+                  boxSizing: 'border-box', lineHeight: 1.5, transition: 'border-color 150ms',
+                }}
+                onFocus={e => e.target.style.borderColor = '#94a3b8'}
+                onBlur={e => e.target.style.borderColor = '#e2e8f0'}
+              />
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
+                <button
+                  onClick={handleAddComment}
+                  disabled={!newComment.trim() || addingComment}
+                  style={{
+                    padding: '6px 18px',
+                    background: newComment.trim() ? '#1e293b' : '#f1f5f9',
+                    color: newComment.trim() ? 'white' : '#94a3b8',
+                    border: 'none', borderRadius: 8, fontWeight: 700,
+                    cursor: newComment.trim() ? 'pointer' : 'default',
+                    fontFamily: 'inherit', fontSize: '0.82rem',
+                    display: 'flex', alignItems: 'center', gap: 6, transition: 'all 150ms',
+                  }}
+                >
+                  <Send size={13} />
+                  {addingComment ? 'Enviando…' : 'Comentar'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
-    </Modal>
+    </div>
   );
 }
 

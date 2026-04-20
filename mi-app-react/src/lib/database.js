@@ -55,10 +55,16 @@ export const TASK_STATUS_OPTIONS = {
     dbValue: 'pending',
   },
   in_progress: {
-    label: 'En Progreso',
+    label: 'En Curso',
     color: '#2196F3',
     bg: '#E3F2FD',
     dbValue: 'in_progress',
+  },
+  waiting: {
+    label: 'En Espera',
+    color: '#0369a1',
+    bg: '#e0f2fe',
+    dbValue: 'waiting',
   },
   paused: {
     label: 'En Pausa',
@@ -92,6 +98,7 @@ export const TASK_STATUS_OPTIONS = {
 export const TASK_STATUS_LIST = [
   'pending',
   'in_progress',
+  'waiting',
   'paused',
   'expedite',
   'completed',
@@ -210,6 +217,7 @@ const mapProject = (row) => {
     name: row.name,
     description: row.description || '',
     status: row.status || 'active',
+    priority: row.priority || 'medium',
     color: row.color || '#6366f1',
     startDate: row.start_date,
     endDate: row.end_date,
@@ -257,7 +265,7 @@ const mapTask = (row) => {
     priority: (row.priority || 'medium').toLowerCase(),
     projectId: row.project_id,
     listId: row.list_id || null,
-    assigneeId: row.assignee_id,
+    assigneeId: typeof row.assignee_id === 'object' ? row.assignee_id?.id : row.assignee_id,
     parentId: row.parent_id || null,
     dueDate: row.end_date,
     endDate: row.end_date,
@@ -562,15 +570,18 @@ export const dbProjects = {
     if (error) throw error;
     return mapProject(data);
   },
-  create: async (projectData) => {
+  create: async (projectData, currentUser = null) => {
+    if (currentUser) await setAuditUser(currentUser.id, currentUser.email, currentUser.name);
     const data = await restFetch('projects', 'POST', toDbProject(projectData));
     return mapProject(Array.isArray(data) ? data[0] : data);
   },
-  update: async (id, updates) => {
+  update: async (id, updates, currentUser = null) => {
+    if (currentUser) await setAuditUser(currentUser.id, currentUser.email, currentUser.name);
     const data = await restFetch(`projects?id=eq.${id}`, 'PATCH', toDbProject(updates));
     return mapProject(Array.isArray(data) ? data[0] : data);
   },
-  delete: async (id) => {
+  delete: async (id, currentUser = null) => {
+    if (currentUser) await setAuditUser(currentUser.id, currentUser.email, currentUser.name);
     const data = await restFetch(`projects?id=eq.${id}`, 'DELETE');
     if (Array.isArray(data) && data.length === 0) {
       throw new Error('No se eliminó el proyecto. Verifica las políticas de permisos en Supabase (RLS).');
@@ -632,16 +643,19 @@ export const dbTasks = {
     if (error) throw error;
     return (data || []).map(mapTask);
   },
-  create: async (taskData) => {
+  create: async (taskData, currentUser = null) => {
+    if (currentUser) await setAuditUser(currentUser.id, currentUser.email, currentUser.name);
     const data = await restFetch('tasks', 'POST', toDbTask(taskData));
     return mapTask(Array.isArray(data) ? data[0] : data);
   },
-  update: async (id, updates) => {
+  update: async (id, updates, currentUser = null) => {
+    if (currentUser) await setAuditUser(currentUser.id, currentUser.email, currentUser.name);
     const body = { ...toDbTask(updates), updated_at: new Date().toISOString() };
     const data = await restFetch(`tasks?id=eq.${id}`, 'PATCH', body);
     return mapTask(Array.isArray(data) ? data[0] : data);
   },
-  delete: async (id) => {
+  delete: async (id, currentUser = null) => {
+    if (currentUser) await setAuditUser(currentUser.id, currentUser.email, currentUser.name);
     const { data, error } = await supabase.from('tasks').delete().eq('id', id).select('id');
     if (error) throw error;
     if (!data || data.length === 0) {
@@ -776,6 +790,130 @@ export const dbLists = {
   },
   delete: async (id) => {
     await restFetch(`lists?id=eq.${id}`, 'DELETE');
+  },
+};
+
+// ============================================================================
+// MIEMBROS DEL PROYECTO
+// ============================================================================
+
+export const dbProjectMembers = {
+  getByProject: async (projectId) => {
+    const { data, error } = await supabase
+      .from('project_members')
+      .select(`*, users(id, name, email, avatar, system_role, role)`)
+      .eq('project_id', projectId);
+    if (error) throw error;
+    return (data || []).map(pm => ({
+      id: pm.user_id,
+      userId: pm.user_id,
+      projectId: pm.project_id,
+      role: pm.role,
+      name: pm.users?.name || 'Desconocido',
+      email: pm.users?.email || '',
+      avatar: pm.users?.avatar || '👤',
+    }));
+  },
+
+  add: async (projectId, userId, role = 'member') => {
+    const { data, error } = await supabase
+      .from('project_members')
+      .insert({ project_id: projectId, user_id: userId, role })
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  updateRole: async (projectId, userId, newRole) => {
+    const { data, error } = await supabase
+      .from('project_members')
+      .update({ role: newRole })
+      .eq('project_id', projectId)
+      .eq('user_id', userId)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  remove: async (projectId, userId) => {
+    const { error } = await supabase
+      .from('project_members')
+      .delete()
+      .eq('project_id', projectId)
+      .eq('user_id', userId);
+    if (error) throw error;
+  },
+};
+
+// ============================================================================
+// AUDITORÍA - Configurar usuario actual para triggers
+// ============================================================================
+
+export const setAuditUser = async (userId, userEmail, userName) => {
+  try {
+    await supabase.rpc('set_audit_user', {
+      user_id: userId,
+      user_email: userEmail,
+      user_name: userName,
+    });
+  } catch (err) {
+    // No bloquear la operación si falla; los triggers de Supabase
+    // siguen funcionando con auth.uid() como fallback.
+    console.warn('[setAuditUser] No se pudo establecer contexto de auditoría:', err?.message);
+  }
+};
+
+// ============================================================================
+// HISTORIAL - Consultar audit_log
+// ============================================================================
+
+export const dbAuditLog = {
+
+  getHistory: async (tableName, recordId) => {
+    const { data, error } = await supabase
+      .from('audit_log')
+      .select('*')
+      .eq('table_name', tableName)
+      .eq('record_id', recordId)
+      .order('changed_at', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  },
+
+  getRecentChanges: async (tableName, limit = 50) => {
+    const { data, error } = await supabase
+      .from('audit_log')
+      .select('*')
+      .eq('table_name', tableName)
+      .order('changed_at', { ascending: false })
+      .limit(limit);
+    if (error) throw error;
+    return data || [];
+  },
+
+  getUserActivity: async (userId, limit = 100) => {
+    const { data, error } = await supabase
+      .from('audit_log')
+      .select('*')
+      .eq('user_id', userId)
+      .order('changed_at', { ascending: false })
+      .limit(limit);
+    if (error) throw error;
+    return data || [];
+  },
+
+  getStatusChanges: async (recordId = null) => {
+    let query = supabase
+      .from('audit_log')
+      .select('*')
+      .eq('table_name', 'tasks')
+      .contains('changed_fields', ['status']);
+    if (recordId) query = query.eq('record_id', recordId);
+    const { data, error } = await query.order('changed_at', { ascending: false });
+    if (error) throw error;
+    return data || [];
   },
 };
 

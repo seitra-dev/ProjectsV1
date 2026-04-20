@@ -1,8 +1,4 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import {
-  ArrowRight, Sparkles, FolderKanban, BarChart3, Users,
-  CheckCircle2, Target, TrendingUp, Star, Zap, ChevronDown, ChevronUp
-} from 'lucide-react';
 
 // ─── HOOKS (PRESERVED) ────────────────────────────────────────────────────────
 
@@ -26,530 +22,699 @@ const useTypewriter = (words, typingSpeed = 90, deletingSpeed = 50, pause = 1800
   return display;
 };
 
-const useCountUp = (target, duration = 1800, active = false) => {
-  const [val, setVal] = useState(0);
-  useEffect(() => {
-    if (!active) return;
-    setVal(0);
-    let start = null;
-    const step = ts => {
-      if (!start) start = ts;
-      const p = Math.min((ts - start) / duration, 1);
-      setVal(Math.floor((1 - Math.pow(1 - p, 3)) * target));
-      if (p < 1) requestAnimationFrame(step);
-    };
-    requestAnimationFrame(step);
-  }, [active, target, duration]);
-  return val;
-};
-
-// ─── DASHBOARD MOCKUP ─────────────────────────────────────────────────────────
-
-const DashboardMockup = () => {
-  const tasks = [
-    { label: 'Diseño UI',   prog: 75  },
-    { label: 'API Backend', prog: 45  },
-    { label: 'QA Testing',  prog: 90  },
-    { label: 'Deploy v2.1', prog: 20  },
-  ];
-  return (
-    <div style={{ background:'#18181b', borderRadius:'14px', border:'1px solid rgba(255,255,255,0.1)', overflow:'hidden', boxShadow:'0 40px 100px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.05)', userSelect:'none' }}>
-      {/* Titlebar */}
-      <div style={{ padding:'10px 14px', borderBottom:'1px solid rgba(255,255,255,0.07)', display:'flex', alignItems:'center', gap:'6px', background:'#111113' }}>
-        {['#ef4444','#eab308','#22c55e'].map((c,i)=><div key={i} style={{width:8,height:8,borderRadius:'50%',background:c,opacity:0.7}}/>)}
-        <div style={{ flex:1, margin:'0 10px', background:'rgba(255,255,255,0.06)', borderRadius:'4px', padding:'2px 10px', fontSize:'10px', color:'rgba(255,255,255,0.25)', textAlign:'center' }}>
-          app.seitra.io/dashboard
-        </div>
-      </div>
-      <div style={{ display:'flex', height:'220px' }}>
-        {/* Sidebar */}
-        <div style={{ width:'44px', borderRight:'1px solid rgba(255,255,255,0.06)', padding:'10px 0', display:'flex', flexDirection:'column', alignItems:'center', gap:'10px' }}>
-          {[FolderKanban,BarChart3,Users,Target].map((Icon,i)=>(
-            <div key={i} style={{ width:'26px', height:'26px', borderRadius:'7px', background: i===0 ? 'rgba(59,130,246,0.2)' : 'transparent', display:'flex', alignItems:'center', justifyContent:'center', color: i===0 ? '#60a5fa' : 'rgba(255,255,255,0.2)' }}>
-              <Icon size={12}/>
-            </div>
-          ))}
-        </div>
-        {/* Main */}
-        <div style={{ flex:1, padding:'14px', overflow:'hidden' }}>
-          <div style={{ fontSize:'11px', fontWeight:600, color:'rgba(255,255,255,0.8)', marginBottom:'12px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-            <span>Sprint Actual</span>
-            <span style={{ fontSize:'9px', padding:'2px 8px', background:'rgba(34,197,94,0.15)', color:'#4ade80', borderRadius:'20px', fontWeight:500 }}>● Activo</span>
-          </div>
-          {tasks.map((t,i)=>(
-            <div key={i} style={{ marginBottom:'9px' }}>
-              <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'4px' }}>
-                <span style={{ fontSize:'10px', color: i===0 ? 'rgba(255,255,255,0.75)' : 'rgba(255,255,255,0.35)', fontWeight: i===0 ? 500 : 400 }}>{t.label}</span>
-                <span style={{ fontSize:'10px', color:'rgba(255,255,255,0.2)' }}>{t.prog}%</span>
-              </div>
-              <div style={{ height:'2px', background:'rgba(255,255,255,0.06)', borderRadius:'2px', overflow:'hidden' }}>
-                <div style={{ height:'100%', width:`${t.prog}%`, borderRadius:'2px', background: i===0 ? '#3b82f6' : 'rgba(255,255,255,0.15)' }}/>
-              </div>
-            </div>
-          ))}
-          {/* Sparkline */}
-          <div style={{ marginTop:'12px', background:'rgba(255,255,255,0.03)', borderRadius:'8px', padding:'8px 10px', border:'1px solid rgba(255,255,255,0.06)' }}>
-            <div style={{ fontSize:'9px', color:'rgba(255,255,255,0.25)', marginBottom:'6px', fontWeight:500, letterSpacing:'0.4px', textTransform:'uppercase' }}>Velocidad</div>
-            <div style={{ display:'flex', gap:'3px', alignItems:'flex-end', height:'24px' }}>
-              {[30,55,40,70,60,85,75].map((h,i)=>(
-                <div key={i} style={{ flex:1, background: i===6 ? '#3b82f6' : 'rgba(255,255,255,0.08)', borderRadius:'2px 2px 0 0', height:`${h}%` }}/>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// ─── KANBAN MOCKUP ─────────────────────────────────────────────────────────────
-
-const KanbanMockup = () => {
-  const cols = [
-    { title:'Por hacer',   dot:'rgba(255,255,255,0.2)', cards:['Investigación UX','Benchmark'] },
-    { title:'En progreso', dot:'#3b82f6',               cards:['Wireframes v2','API usuarios'] },
-    { title:'Revisión',    dot:'#f59e0b',               cards:['Tests integración'] },
-    { title:'Listo',       dot:'#22c55e',               cards:['Auth módulo'] },
-  ];
-  return (
-    <div style={{ background:'#18181b', borderRadius:'14px', overflow:'hidden', border:'1px solid rgba(255,255,255,0.1)', boxShadow:'0 32px 80px rgba(0,0,0,0.5)', userSelect:'none' }}>
-      <div style={{ padding:'10px 14px', borderBottom:'1px solid rgba(255,255,255,0.07)', display:'flex', alignItems:'center', gap:'6px', background:'#111113' }}>
-        {['#ef4444','#eab308','#22c55e'].map((c,i)=><div key={i} style={{width:8,height:8,borderRadius:'50%',background:c,opacity:0.7}}/>)}
-        <div style={{ flex:1, margin:'0 10px', background:'rgba(255,255,255,0.06)', borderRadius:'4px', padding:'2px 10px', fontSize:'10px', color:'rgba(255,255,255,0.25)', textAlign:'center' }}>
-          Kanban · Sprint 12
-        </div>
-      </div>
-      <div style={{ display:'flex', gap:'6px', padding:'12px' }}>
-        {cols.map((col,ci)=>(
-          <div key={ci} style={{ flex:1, minWidth:0 }}>
-            <div style={{ display:'flex', alignItems:'center', gap:'5px', marginBottom:'7px' }}>
-              <div style={{ width:5, height:5, borderRadius:'50%', background:col.dot }}/>
-              <span style={{ fontSize:'9px', fontWeight:500, color:'rgba(255,255,255,0.25)', textTransform:'uppercase', letterSpacing:'0.5px', whiteSpace:'nowrap' }}>{col.title}</span>
-            </div>
-            {col.cards.map((card,ki)=>(
-              <div key={ki} style={{ background:'rgba(255,255,255,0.04)', borderRadius:'7px', padding:'7px 8px', marginBottom:'4px', border:'1px solid rgba(255,255,255,0.07)' }}>
-                <div style={{ fontSize:'10px', color:'rgba(255,255,255,0.55)', lineHeight:1.4 }}>{card}</div>
-              </div>
-            ))}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
-
-// ─── STAT CARD ────────────────────────────────────────────────────────────────
-
-const StatCard = ({ value, suffix, label, active }) => {
-  const count = useCountUp(value, 1800, active);
-  return (
-    <div style={{ textAlign:'center', padding:'clamp(16px,2vw,24px) 12px', background:'rgba(255,255,255,0.04)', borderRadius:'16px', border:'1px solid rgba(255,255,255,0.08)' }}>
-      <div style={{ fontSize:'clamp(24px,3vw,44px)', fontWeight:600, letterSpacing:'-2px', color:'white', lineHeight:1, marginBottom:'6px' }}>
-        {count.toLocaleString()}{suffix}
-      </div>
-      <div style={{ fontSize:'11px', color:'rgba(255,255,255,0.3)', fontWeight:400 }}>{label}</div>
-    </div>
-  );
-};
-
-// ─── SLIDE 1: HERO (DARK) ─────────────────────────────────────────────────────
-
-const SlideHero = ({ onGetStarted, typeword }) => (
-  <section style={{ minHeight:'100vh', background:'#09090b', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'clamp(100px,12vw,130px) clamp(20px,6vw,80px) clamp(60px,8vw,80px)', position:'relative', overflow:'hidden' }}>
-
-    {/* Mesh gradient background */}
-    <div style={{ position:'absolute', inset:0, background:'radial-gradient(ellipse 80% 60% at 50% -10%, rgba(59,130,246,0.15) 0%, transparent 60%)', pointerEvents:'none' }}/>
-    <div style={{ position:'absolute', inset:0, background:'radial-gradient(ellipse 60% 50% at 80% 80%, rgba(139,92,246,0.07) 0%, transparent 55%)', pointerEvents:'none' }}/>
-
-    {/* Dot grid */}
-    <div style={{ position:'absolute', inset:0, backgroundImage:'radial-gradient(rgba(255,255,255,0.07) 1px, transparent 1px)', backgroundSize:'32px 32px', pointerEvents:'none', maskImage:'radial-gradient(ellipse 80% 80% at 50% 50%, black 30%, transparent 100%)', WebkitMaskImage:'radial-gradient(ellipse 80% 80% at 50% 50%, black 30%, transparent 100%)' }}/>
-
-    <div style={{ position:'relative', zIndex:1, textAlign:'center', maxWidth:'800px', width:'100%' }}>
-
-      {/* Badge */}
-      <div style={{ display:'inline-flex', alignItems:'center', gap:'7px', padding:'5px 14px 5px 6px', borderRadius:'50px', marginBottom:'clamp(28px,4vw,44px)', background:'rgba(255,255,255,0.06)', border:'1px solid rgba(255,255,255,0.12)', fontSize:'12px', fontWeight:500, color:'rgba(255,255,255,0.6)', backdropFilter:'blur(8px)', animation:'fadeIn 0.6s ease 0.1s backwards' }}>
-        <div style={{ width:20, height:20, borderRadius:'50%', background:'#3b82f6', display:'flex', alignItems:'center', justifyContent:'center' }}>
-          <Sparkles size={9} color="white"/>
-        </div>
-        Gestión de proyectos reimaginada
-      </div>
-
-      {/* Headline */}
-      <h1 style={{ fontSize:'clamp(40px,7vw,88px)', fontWeight:700, letterSpacing:'-0.04em', lineHeight:1.02, color:'white', margin:'0 0 6px', animation:'fadeUp 0.6s ease 0.2s backwards' }}>
-        Tu equipo entrega
-      </h1>
-      <h1 style={{ fontSize:'clamp(40px,7vw,88px)', fontWeight:700, letterSpacing:'-0.04em', lineHeight:1.02, margin:'0 0 clamp(22px,3vw,34px)', animation:'fadeUp 0.6s ease 0.3s backwards' }}>
-        <span style={{ background:'linear-gradient(90deg, #60a5fa, #a78bfa)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', backgroundClip:'text' }}>
-          {typeword}
-        </span>
-        <span style={{ WebkitTextFillColor:'#60a5fa', animation:'blink 0.9s step-end infinite' }}>|</span>
-      </h1>
-
-      {/* Subtext */}
-      <p style={{ fontSize:'clamp(15px,1.7vw,19px)', color:'rgba(255,255,255,0.4)', lineHeight:1.75, maxWidth:'480px', margin:'0 auto clamp(30px,4vw,46px)', animation:'fadeUp 0.6s ease 0.4s backwards', fontWeight:300 }}>
-        SEITRA une proyectos, tareas, sprints y analítica en un solo lugar. Menos ruido. Más ejecución.
-      </p>
-
-      {/* CTAs */}
-      <div style={{ display:'flex', gap:'10px', justifyContent:'center', flexWrap:'wrap', animation:'fadeUp 0.6s ease 0.5s backwards' }}>
-        <button onClick={onGetStarted}
-          style={{ padding:'clamp(12px,1.5vw,15px) clamp(24px,3vw,36px)', background:'white', border:'none', borderRadius:'10px', color:'#09090b', fontSize:'14px', fontWeight:600, cursor:'pointer', display:'flex', alignItems:'center', gap:'7px', transition:'all 0.2s ease' }}
-          onMouseEnter={e=>{ e.currentTarget.style.background='#f4f4f5'; e.currentTarget.style.transform='translateY(-1px)'; e.currentTarget.style.boxShadow='0 8px 30px rgba(255,255,255,0.15)'; }}
-          onMouseLeave={e=>{ e.currentTarget.style.background='white'; e.currentTarget.style.transform='none'; e.currentTarget.style.boxShadow='none'; }}>
-          Comenzar gratis <ArrowRight size={14}/>
-        </button>
-        <button onClick={onGetStarted}
-          style={{ padding:'clamp(12px,1.5vw,15px) clamp(24px,3vw,36px)', background:'rgba(255,255,255,0.07)', border:'1px solid rgba(255,255,255,0.15)', borderRadius:'10px', color:'rgba(255,255,255,0.75)', fontSize:'14px', fontWeight:500, cursor:'pointer', transition:'all 0.2s ease', backdropFilter:'blur(8px)' }}
-          onMouseEnter={e=>{ e.currentTarget.style.background='rgba(255,255,255,0.12)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.25)'; }}
-          onMouseLeave={e=>{ e.currentTarget.style.background='rgba(255,255,255,0.07)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.15)'; }}>
-          Iniciar sesión
-        </button>
-      </div>
-
-      {/* Social proof */}
-      <div style={{ marginTop:'clamp(28px,4vw,48px)', display:'flex', alignItems:'center', justifyContent:'center', gap:'14px', flexWrap:'wrap', animation:'fadeIn 0.7s ease 0.7s backwards' }}>
-        <div style={{ display:'flex' }}>
-          {['#3b82f6','#8b5cf6','#06b6d4','#10b981','#f59e0b'].map((c,i)=>(
-            <div key={i} style={{ width:'26px', height:'26px', borderRadius:'50%', background:c, border:'2px solid #09090b', marginLeft:i===0?0:'-7px', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'9px', fontWeight:700, color:'white' }}>
-              {['J','M','A','P','R'][i]}
-            </div>
-          ))}
-        </div>
-        <div style={{ width:'1px', height:'16px', background:'rgba(255,255,255,0.1)' }}/>
-        <div style={{ display:'flex', alignItems:'center', gap:'4px' }}>
-          {[...Array(5)].map((_,i)=><Star key={i} size={11} style={{ fill:'#f59e0b', color:'#f59e0b' }}/>)}
-          <span style={{ fontSize:'12px', color:'rgba(255,255,255,0.3)', marginLeft:'5px', fontWeight:400 }}>+500 equipos activos</span>
-        </div>
-      </div>
-    </div>
-
-    {/* Dashboard mockup */}
-    <div style={{ position:'relative', zIndex:1, width:'100%', maxWidth:'clamp(320px,72vw,680px)', marginTop:'clamp(40px,6vw,64px)', animation:'fadeUp 0.9s ease 0.7s backwards' }}>
-      <DashboardMockup/>
-      {/* Glow under mockup */}
-      <div style={{ position:'absolute', bottom:'-30px', left:'20%', right:'20%', height:'60px', background:'radial-gradient(ellipse, rgba(59,130,246,0.3) 0%, transparent 70%)', filter:'blur(20px)', pointerEvents:'none' }}/>
-    </div>
-
-    {/* Bottom fade */}
-    <div style={{ position:'absolute', bottom:0, left:0, right:0, height:'120px', background:'linear-gradient(to bottom, transparent, #09090b)', pointerEvents:'none' }}/>
-  </section>
-);
-
-// ─── SLIDE 2: FEATURES (LIGHT) ────────────────────────────────────────────────
-
-const SlideFeatures = () => {
-  const cards = [
-    {
-      icon: FolderKanban,
-      accent: '#3b82f6',
-      accentBg: '#eff6ff',
-      title: 'Kanban & Sprints',
-      desc: 'Tableros arrastrables, backlog priorizado y sprints con burndown en tiempo real.',
-      items: ['Tableros Kanban multi-columna', 'Sprints con planning automático', 'Backlog y epics organizados'],
-      span: 1,
-    },
-    {
-      icon: BarChart3,
-      accent: '#8b5cf6',
-      accentBg: '#f5f3ff',
-      title: 'Analítica en vivo',
-      desc: 'Visualiza el progreso, detecta cuellos de botella y toma decisiones con datos reales.',
-      items: ['Dashboards personalizables', 'Reportes de velocidad', 'Métricas por miembro'],
-      span: 1,
-    },
-    {
-      icon: Users,
-      accent: '#10b981',
-      accentBg: '#f0fdf4',
-      title: 'Colaboración total',
-      desc: 'Comentarios en contexto, menciones y actividad en tiempo real. Siempre sincronizados.',
-      items: ['Comentarios y menciones', 'Gestión de roles y permisos', 'Historial de actividad'],
-      span: 2,
-    },
-  ];
-
-  return (
-    <section style={{ minHeight:'100vh', background:'#f8f8f8', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'clamp(80px,10vw,120px) clamp(20px,6vw,80px)' }}>
-
-      <div style={{ textAlign:'center', marginBottom:'clamp(40px,6vw,64px)' }}>
-        <p style={{ fontSize:'11px', fontWeight:600, letterSpacing:'2.5px', textTransform:'uppercase', color:'#3b82f6', marginBottom:'14px' }}>
-          Por qué elegir SEITRA
-        </p>
-        <h2 style={{ fontSize:'clamp(26px,4.5vw,54px)', fontWeight:700, letterSpacing:'-0.04em', color:'#09090b', lineHeight:1.08, margin:'0 0 14px' }}>
-          Todo lo que tu equipo necesita
-        </h2>
-        <p style={{ fontSize:'clamp(14px,1.5vw,16px)', color:'#71717a', lineHeight:1.75, fontWeight:300, maxWidth:'440px', margin:'0 auto' }}>
-          Una sola plataforma. Cero cambios de contexto.
-        </p>
-      </div>
-
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:'clamp(10px,1.5vw,14px)', maxWidth:'900px', width:'100%' }}>
-        {cards.map((c,i) => (
-          <div key={i}
-            style={{ gridColumn:`span ${c.span}`, background:'white', borderRadius:'20px', padding:'clamp(24px,3vw,34px)', border:'1px solid #e4e4e7', boxShadow:'0 1px 3px rgba(0,0,0,0.04)', transition:'transform 0.2s ease, box-shadow 0.2s ease', cursor:'default', display: c.span===2 ? 'grid' : 'flex', flexDirection: c.span===2 ? undefined : 'column', gridTemplateColumns: c.span===2 ? 'repeat(auto-fit,minmax(200px,1fr))' : undefined, gap: c.span===2 ? '32px' : 0, alignItems: c.span===2 ? 'start' : undefined }}
-            onMouseEnter={e=>{ e.currentTarget.style.transform='translateY(-3px)'; e.currentTarget.style.boxShadow=`0 12px 40px rgba(0,0,0,0.08)`; }}
-            onMouseLeave={e=>{ e.currentTarget.style.transform='none'; e.currentTarget.style.boxShadow='0 1px 3px rgba(0,0,0,0.04)'; }}>
-            <div>
-              <div style={{ width:'40px', height:'40px', borderRadius:'12px', background:c.accentBg, display:'flex', alignItems:'center', justifyContent:'center', marginBottom:'18px', border:`1px solid ${c.accent}18` }}>
-                <c.icon size={18} color={c.accent}/>
-              </div>
-              <h3 style={{ fontSize:'clamp(15px,1.6vw,18px)', fontWeight:600, color:'#09090b', marginBottom:'8px', letterSpacing:'-0.3px' }}>{c.title}</h3>
-              <p style={{ fontSize:'clamp(12px,1.3vw,14px)', color:'#71717a', lineHeight:1.7, fontWeight:300, marginBottom: c.span===2 ? 0 : '20px' }}>{c.desc}</p>
-            </div>
-            <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
-              {c.items.map((item,j)=>(
-                <div key={j} style={{ display:'flex', alignItems:'center', gap:'10px' }}>
-                  <div style={{ width:'18px', height:'18px', borderRadius:'50%', background:c.accentBg, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                    <CheckCircle2 size={10} color={c.accent}/>
-                  </div>
-                  <span style={{ fontSize:'13px', color:'#52525b', fontWeight:400 }}>{item}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-};
-
-// ─── SLIDE 3: DEMO (DARK) ─────────────────────────────────────────────────────
-
-const SlideDemo = () => {
-  const steps = [
-    { icon:Zap,        color:'#60a5fa', text:'Crea sprints en segundos con el planning automático' },
-    { icon:TrendingUp, color:'#a78bfa', text:'Mide velocidad real del equipo con burndown en vivo' },
-    { icon:Target,     color:'#34d399', text:'Cierra sprints y genera reportes con un solo clic' },
-  ];
-  return (
-    <section style={{ minHeight:'100vh', background:'#09090b', display:'flex', alignItems:'center', justifyContent:'center', padding:'clamp(80px,10vw,120px) clamp(20px,6vw,80px)', overflow:'hidden', position:'relative' }}>
-      <div style={{ position:'absolute', inset:0, background:'radial-gradient(ellipse 70% 50% at 70% 60%, rgba(139,92,246,0.08) 0%, transparent 60%)', pointerEvents:'none' }}/>
-      <div style={{ position:'absolute', inset:0, backgroundImage:'radial-gradient(rgba(255,255,255,0.04) 1px, transparent 1px)', backgroundSize:'32px 32px', pointerEvents:'none', maskImage:'radial-gradient(ellipse 70% 70% at 70% 50%, black 20%, transparent 100%)', WebkitMaskImage:'radial-gradient(ellipse 70% 70% at 70% 50%, black 20%, transparent 100%)' }}/>
-
-      <div style={{ maxWidth:'980px', width:'100%', display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(min(100%,300px),1fr))', gap:'clamp(40px,7vw,80px)', alignItems:'center', position:'relative', zIndex:1 }}>
-        <div>
-          <p style={{ fontSize:'11px', fontWeight:600, letterSpacing:'2.5px', textTransform:'uppercase', color:'#60a5fa', marginBottom:'clamp(12px,1.8vw,18px)' }}>
-            Así se ve en acción
-          </p>
-          <h2 style={{ fontSize:'clamp(26px,4vw,48px)', fontWeight:700, letterSpacing:'-0.04em', color:'white', lineHeight:1.06, marginBottom:'clamp(12px,1.8vw,18px)' }}>
-            Del tablero al sprint, sin fricción
-          </h2>
-          <p style={{ fontSize:'clamp(13px,1.4vw,15px)', color:'rgba(255,255,255,0.35)', lineHeight:1.8, marginBottom:'clamp(28px,4vw,40px)', maxWidth:'360px', fontWeight:300 }}>
-            Arrastra, prioriza y asigna. Tu equipo siempre sabe qué hacer y qué viene después.
-          </p>
-          <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
-            {steps.map(({ icon:Icon, color, text },i)=>(
-              <div key={i} style={{ display:'flex', alignItems:'flex-start', gap:'14px', padding:'14px 16px', borderRadius:'12px', background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.07)', transition:'background 0.2s' }}
-                onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,0.06)'}
-                onMouseLeave={e=>e.currentTarget.style.background='rgba(255,255,255,0.03)'}>
-                <div style={{ width:'32px', height:'32px', borderRadius:'9px', background:`${color}15`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                  <Icon size={14} color={color}/>
-                </div>
-                <span style={{ fontSize:'14px', color:'rgba(255,255,255,0.5)', lineHeight:1.6, paddingTop:'5px', fontWeight:300 }}>{text}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-        <div><KanbanMockup/></div>
-      </div>
-    </section>
-  );
-};
-
-// ─── SLIDE 4: CTA (DARK) ──────────────────────────────────────────────────────
-
-const SlideCTA = ({ onGetStarted, active }) => {
-  const stats = [
-    { value:10000, suffix:'+', label:'Proyectos gestionados' },
-    { value:98,    suffix:'%', label:'Satisfacción'          },
-    { value:500,   suffix:'+', label:'Equipos activos'       },
-    { value:40,    suffix:'%', label:'Más velocidad'         },
-  ];
-  const perks = ['Sin tarjeta de crédito','Gratis para siempre','Setup en 5 minutos'];
-
-  return (
-    <section style={{ minHeight:'100vh', background:'#09090b', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'clamp(80px,10vw,120px) clamp(20px,6vw,80px)', position:'relative', overflow:'hidden' }}>
-      <div style={{ position:'absolute', inset:0, background:'radial-gradient(ellipse 70% 60% at 50% 110%, rgba(59,130,246,0.12) 0%, transparent 60%)', pointerEvents:'none' }}/>
-      <div style={{ position:'absolute', top:0, left:'10%', right:'10%', height:'1px', background:'rgba(255,255,255,0.07)' }}/>
-
-      <div style={{ position:'relative', zIndex:1, textAlign:'center', maxWidth:'720px', width:'100%' }}>
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'clamp(8px,1.5vw,12px)', marginBottom:'clamp(56px,8vw,80px)' }}>
-          {stats.map((s,i)=><StatCard key={i} {...s} active={active}/>)}
-        </div>
-
-        <h2 style={{ fontSize:'clamp(30px,5.5vw,70px)', fontWeight:700, letterSpacing:'-0.04em', color:'white', lineHeight:1.04, marginBottom:'clamp(14px,2vw,20px)' }}>
-          Empieza a entregar
-          <br/>
-          <span style={{ background:'linear-gradient(90deg, #60a5fa, #a78bfa)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', backgroundClip:'text' }}>
-            resultados hoy
-          </span>
-        </h2>
-
-        <p style={{ fontSize:'clamp(14px,1.5vw,16px)', color:'rgba(255,255,255,0.35)', lineHeight:1.8, maxWidth:'380px', margin:'0 auto clamp(28px,4vw,40px)', fontWeight:300 }}>
-          Sin configuración compleja. Tu equipo productivo desde el primer día.
-        </p>
-
-        <button onClick={onGetStarted}
-          style={{ padding:'clamp(13px,1.6vw,16px) clamp(30px,4vw,50px)', background:'white', border:'none', borderRadius:'10px', color:'#09090b', fontSize:'15px', fontWeight:600, cursor:'pointer', display:'inline-flex', alignItems:'center', gap:'9px', marginBottom:'clamp(20px,3vw,32px)', transition:'all 0.2s ease' }}
-          onMouseEnter={e=>{ e.currentTarget.style.background='#f4f4f5'; e.currentTarget.style.transform='translateY(-2px)'; e.currentTarget.style.boxShadow='0 16px 48px rgba(255,255,255,0.15)'; }}
-          onMouseLeave={e=>{ e.currentTarget.style.background='white'; e.currentTarget.style.transform='none'; e.currentTarget.style.boxShadow='none'; }}>
-          Crear cuenta gratuita <ArrowRight size={15}/>
-        </button>
-
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:'clamp(14px,2.5vw,28px)', flexWrap:'wrap' }}>
-          {perks.map((t,i)=>(
-            <div key={i} style={{ display:'flex', alignItems:'center', gap:'6px', fontSize:'12px', color:'rgba(255,255,255,0.25)', fontWeight:400 }}>
-              <CheckCircle2 size={12} color='rgba(255,255,255,0.2)'/>
-              {t}
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-};
-
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 
 export default function LandingPage({ onGetStarted }) {
-  const [activeSection, setActiveSection] = useState(0);
   const containerRef = useRef(null);
-  const TOTAL = 4;
-  const typeword = useTypewriter(['más rápido.','sin caos.','con claridad.','en equipo.']);
+  const [scrolled, setScrolled] = useState(false);
+  const typeword = useTypewriter(['más rápido.', 'sin caos.', 'con claridad.', 'en equipo.']);
 
+  // Navbar scroll effect — listens to our own container, not window
   useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    const handleScroll = () => {
-      const idx = Math.round(container.scrollTop / container.clientHeight);
-      setActiveSection(Math.max(0, Math.min(TOTAL - 1, idx)));
-    };
-    container.addEventListener('scroll', handleScroll, { passive:true });
-    return () => container.removeEventListener('scroll', handleScroll);
+    const el = containerRef.current;
+    if (!el) return;
+    const handleScroll = () => setScrolled(el.scrollTop > 20);
+    el.addEventListener('scroll', handleScroll, { passive: true });
+    return () => el.removeEventListener('scroll', handleScroll);
   }, []);
 
-  const goToSection = useCallback((idx) => {
-    const container = containerRef.current;
-    if (!container) return;
-    container.scrollTo({ top: Math.max(0, Math.min(TOTAL-1, idx)) * container.clientHeight, behavior:'smooth' });
+  // IntersectionObserver for reveal animations — uses container as root
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const revealEls = el.querySelectorAll(
+      '.lp-reveal, .lp-reveal-left, .lp-reveal-right, .lp-reveal-scale, .lp-reveal-clip'
+    );
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (e.isIntersecting) {
+          e.target.classList.add('lp-visible');
+          io.unobserve(e.target);
+        }
+      });
+    }, { root: el, threshold: 0.10, rootMargin: '0px 0px -32px 0px' });
+    revealEls.forEach(node => io.observe(node));
+    return () => io.disconnect();
   }, []);
 
-  useEffect(() => {
-    const h = e => {
-      if (e.key==='ArrowDown'||e.key==='PageDown') goToSection(activeSection+1);
-      if (e.key==='ArrowUp'  ||e.key==='PageUp')   goToSection(activeSection-1);
-    };
-    window.addEventListener('keydown', h);
-    return () => window.removeEventListener('keydown', h);
-  }, [activeSection, goToSection]);
-
-  const slideLabels = ['Inicio','Funciones','Demo','Empezar'];
-  const lightSlide = activeSection === 1; // features slide is light
+  // Smooth scroll for anchor clicks — uses our container
+  const scrollTo = useCallback((id) => {
+    const el = containerRef.current;
+    const target = el?.querySelector(id);
+    if (el && target) {
+      const top = target.offsetTop - 72;
+      el.scrollTo({ top, behavior: 'smooth' });
+    }
+  }, []);
 
   return (
-    <div style={{ height:'100%', position:'relative' }}>
+    // Posición fija que ocupa toda la pantalla con scroll propio
+    // (evita que overflow:hidden de index.css bloquee el scroll)
+    <div ref={containerRef} style={{ position: 'fixed', inset: 0, overflowY: 'auto', overflowX: 'hidden', fontFamily: "'Geist', system-ui, sans-serif", background: '#ffffff', color: '#0a0a0f', WebkitFontSmoothing: 'antialiased' }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital,wght@0,400;1,400&family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500&display=swap');
 
-        *, *::before, *::after {
-          font-family: 'Geist', 'SF Pro Text', -apple-system, BlinkMacSystemFont, sans-serif;
-          box-sizing: border-box;
-          margin: 0;
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+          --lp-bg: #ffffff;
+          --lp-fg: #0a0a0f;
+          --lp-fg-muted: #5a5a72;
+          --lp-fg-subtle: #9494a8;
+          --lp-border: #e8e8f0;
+          --lp-blue: #3b82f6;
+          --lp-purple: #a78bfa;
+          --lp-teal: #2dd4bf;
+          --lp-card-bg: #f8f8fc;
+          --lp-radius: 12px;
+          --lp-radius-lg: 20px;
+          --lp-shadow-sm: 0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
+          --lp-shadow-md: 0 4px 20px rgba(0,0,0,.08), 0 2px 6px rgba(0,0,0,.04);
+          --lp-shadow-lg: 0 20px 60px rgba(0,0,0,.10), 0 8px 24px rgba(0,0,0,.06);
+        }
+
+        html { scroll-behavior: smooth; }
+
+        /* ── Scroll Animations ── */
+        .lp-reveal {
+          opacity: 0;
+          transform: translateY(32px);
+          transition: opacity 0.7s cubic-bezier(.22,1,.36,1), transform 0.7s cubic-bezier(.22,1,.36,1);
+        }
+        .lp-reveal.lp-visible { opacity: 1; transform: translateY(0); }
+
+        .lp-reveal-left {
+          opacity: 0;
+          transform: translateX(-40px);
+          transition: opacity 0.7s cubic-bezier(.22,1,.36,1), transform 0.7s cubic-bezier(.22,1,.36,1);
+        }
+        .lp-reveal-left.lp-visible { opacity: 1; transform: translateX(0); }
+
+        .lp-reveal-right {
+          opacity: 0;
+          transform: translateX(40px);
+          transition: opacity 0.7s cubic-bezier(.22,1,.36,1), transform 0.7s cubic-bezier(.22,1,.36,1);
+        }
+        .lp-reveal-right.lp-visible { opacity: 1; transform: translateX(0); }
+
+        .lp-reveal-scale {
+          opacity: 0;
+          transform: scale(0.92) translateY(16px);
+          transition: opacity 0.6s cubic-bezier(.22,1,.36,1), transform 0.6s cubic-bezier(.22,1,.36,1);
+        }
+        .lp-reveal-scale.lp-visible { opacity: 1; transform: scale(1) translateY(0); }
+
+        .lp-reveal-clip {
+          opacity: 0;
+          clip-path: inset(12% 4% 0% 4% round 20px);
+          transform: translateY(20px);
+          transition: opacity 0.9s cubic-bezier(.22,1,.36,1), clip-path 0.9s cubic-bezier(.22,1,.36,1), transform 0.9s cubic-bezier(.22,1,.36,1);
+        }
+        .lp-reveal-clip.lp-visible { opacity: 1; clip-path: inset(0% 0% 0% 0% round 20px); transform: translateY(0); }
+
+        .lp-d1 { transition-delay: 0.07s !important; }
+        .lp-d2 { transition-delay: 0.14s !important; }
+        .lp-d3 { transition-delay: 0.21s !important; }
+        .lp-d4 { transition-delay: 0.28s !important; }
+        .lp-d5 { transition-delay: 0.35s !important; }
+        .lp-d6 { transition-delay: 0.42s !important; }
+
+        /* ── Orbs ── */
+        .lp-orb {
+          position: absolute;
+          border-radius: 50%;
+          filter: blur(80px);
+          opacity: 0.22;
+          z-index: 0;
+          animation: lpDrift 12s ease-in-out infinite alternate;
+        }
+        .lp-orb-blue  { width: 600px; height: 600px; background: var(--lp-blue);   top: -100px; left: -100px; animation-duration: 14s; }
+        .lp-orb-purple{ width: 500px; height: 500px; background: var(--lp-purple);  top: 50px;   right: -80px; animation-duration: 18s; animation-delay: -5s; }
+        .lp-orb-teal  { width: 400px; height: 400px; background: var(--lp-teal);    bottom: 0;   left: 40%;   animation-duration: 16s; animation-delay: -8s; }
+
+        @keyframes lpDrift {
+          0%   { transform: translate(0, 0) scale(1); }
+          33%  { transform: translate(40px, -30px) scale(1.05); }
+          66%  { transform: translate(-30px, 40px) scale(0.97); }
+          100% { transform: translate(20px, -10px) scale(1.02); }
+        }
+
+        /* Chip pulse */
+        .lp-chip-dot {
+          width: 8px; height: 8px;
+          background: var(--lp-blue);
+          border-radius: 50%;
+          animation: lpPulseDot 2s ease-in-out infinite;
+        }
+        @keyframes lpPulseDot {
+          0%, 100% { opacity: 1; transform: scale(1); box-shadow: 0 0 0 0 rgba(59,130,246,.4); }
+          50%       { opacity: .8; transform: scale(1.15); box-shadow: 0 0 0 6px rgba(59,130,246,0); }
+        }
+
+        /* Nav links hover underline */
+        .lp-nav-link {
+          font-size: 14px;
+          font-weight: 500;
+          color: var(--lp-fg-muted);
+          text-decoration: none;
+          cursor: pointer;
+          position: relative;
+          transition: color .2s;
+          background: none;
+          border: none;
           padding: 0;
         }
-
-        @keyframes fadeUp { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:none; } }
-        @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
-        @keyframes blink  { 0%,100%{ opacity:1; } 50%{ opacity:0; } }
-
-        .landing-scroll-container {
-          height: 100%;
-          overflow-y: scroll;
-          scroll-snap-type: y mandatory;
-          -webkit-overflow-scrolling: touch;
+        .lp-nav-link::after {
+          content: '';
+          position: absolute;
+          bottom: -4px; left: 0; right: 0;
+          height: 1.5px;
+          background: var(--lp-blue);
+          transform: scaleX(0);
+          transform-origin: left;
+          transition: transform .25s;
         }
-        .landing-scroll-container section {
-          scroll-snap-align: start;
-          scroll-snap-stop: always;
+        .lp-nav-link:hover { color: var(--lp-fg); }
+        .lp-nav-link:hover::after { transform: scaleX(1); }
+
+        /* Feature card top accent */
+        .lp-feature-card {
+          background: #fff;
+          padding: 36px 32px;
+          position: relative;
+          overflow: hidden;
+          transition: background .2s;
+          cursor: default;
+        }
+        .lp-feature-card::before {
+          content: '';
+          position: absolute;
+          top: 0; left: 0; right: 0;
+          height: 2.5px;
+          background: linear-gradient(90deg, var(--lp-blue), var(--lp-purple));
+          transform: scaleX(0);
+          transform-origin: left;
+          transition: transform .4s cubic-bezier(.22,1,.36,1);
+        }
+        .lp-feature-card:hover::before { transform: scaleX(1); }
+        .lp-feature-card:hover { background: var(--lp-card-bg); }
+
+        /* Kanban card hover */
+        .lp-k-card {
+          background: #fff;
+          border: 1px solid var(--lp-border);
+          border-radius: 8px;
+          padding: 10px;
+          margin-bottom: 8px;
+          box-shadow: var(--lp-shadow-sm);
+          transition: box-shadow .2s, transform .15s;
+          cursor: pointer;
+        }
+        .lp-k-card:hover { box-shadow: var(--lp-shadow-md); transform: translateY(-1px); }
+
+        /* Metric card */
+        .lp-metric-card {
+          padding: 40px 24px;
+          background: var(--lp-card-bg);
+          border: 1px solid var(--lp-border);
+          border-radius: var(--lp-radius-lg);
+          transition: transform .25s cubic-bezier(.22,1,.36,1), box-shadow .25s;
+          position: relative;
+          overflow: hidden;
+          text-align: center;
+        }
+        .lp-metric-card::after {
+          content: '';
+          position: absolute;
+          bottom: 0; left: 0; right: 0;
+          height: 3px;
+          background: linear-gradient(90deg, var(--lp-blue), var(--lp-purple));
+          transform: scaleX(0);
+          transform-origin: left;
+          transition: transform .4s cubic-bezier(.22,1,.36,1);
+        }
+        .lp-metric-card:hover { transform: translateY(-6px); box-shadow: var(--lp-shadow-md); }
+        .lp-metric-card:hover::after { transform: scaleX(1); }
+
+        /* Sidebar items */
+        .lp-sidebar-item {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 7px 8px;
+          border-radius: 7px;
+          font-size: 13px;
+          color: var(--lp-fg-muted);
+          cursor: pointer;
+          transition: background .15s;
+          margin-bottom: 2px;
+        }
+        .lp-sidebar-item.active { background: rgba(59,130,246,.09); color: var(--lp-blue); font-weight: 500; }
+        .lp-sidebar-item:hover:not(.active) { background: var(--lp-border); }
+
+        /* Footer links */
+        .lp-footer-link {
+          font-size: 14px;
+          color: var(--lp-fg-muted);
+          text-decoration: none;
+          transition: color .2s;
+          cursor: pointer;
+          background: none;
+          border: none;
+          padding: 0;
+        }
+        .lp-footer-link:hover { color: var(--lp-fg); }
+
+        /* Gantt bar hover */
+        .lp-gantt-bar {
+          height: 22px;
+          border-radius: 4px;
+          position: absolute;
+          display: flex;
+          align-items: center;
+          padding: 0 8px;
+          font-size: 10px;
+          font-weight: 600;
+          color: #fff;
+          font-family: 'Geist Mono', monospace;
+          transition: filter .2s;
+        }
+        .lp-gantt-bar:hover { filter: brightness(1.08); }
+
+        /* Buttons */
+        .lp-btn-primary {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          padding: 14px 28px;
+          background: var(--lp-fg);
+          color: #fff;
+          font-size: 15px;
+          font-weight: 600;
+          border-radius: 10px;
+          border: none;
+          cursor: pointer;
+          transition: transform .2s, box-shadow .2s;
+          box-shadow: 0 4px 14px rgba(0,0,0,.15);
+          text-decoration: none;
+        }
+        .lp-btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,.2); }
+
+        .lp-btn-secondary {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          padding: 14px 24px;
+          background: transparent;
+          color: var(--lp-fg);
+          font-size: 15px;
+          font-weight: 500;
+          border-radius: 10px;
+          border: 1.5px solid var(--lp-border);
+          cursor: pointer;
+          transition: border-color .2s, background .2s;
+          text-decoration: none;
+        }
+        .lp-btn-secondary:hover { border-color: var(--lp-blue); background: rgba(59,130,246,.04); }
+
+        .lp-btn-cta-white {
+          padding: 14px 28px;
+          background: #fff;
+          color: var(--lp-fg);
+          font-size: 15px;
+          font-weight: 600;
+          border-radius: 10px;
+          border: none;
+          cursor: pointer;
+          transition: transform .2s, box-shadow .2s;
+          box-shadow: 0 4px 14px rgba(0,0,0,.2);
+        }
+        .lp-btn-cta-white:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(0,0,0,.3); }
+
+        .lp-btn-cta-ghost {
+          padding: 14px 24px;
+          background: transparent;
+          border: 1.5px solid rgba(255,255,255,.25);
+          color: #fff;
+          font-size: 15px;
+          font-weight: 500;
+          border-radius: 10px;
+          cursor: pointer;
+          transition: border-color .2s, background .2s;
+        }
+        .lp-btn-cta-ghost:hover { border-color: rgba(255,255,255,.5); background: rgba(255,255,255,.06); }
+
+        /* Nav CTA */
+        .lp-nav-cta {
+          margin-left: 24px;
+          padding: 9px 20px;
+          background: var(--lp-fg);
+          color: #fff;
+          font-size: 14px;
+          font-weight: 500;
+          border-radius: 8px;
+          border: none;
+          cursor: pointer;
+          transition: background .2s, transform .15s;
+          text-decoration: none;
+        }
+        .lp-nav-cta:hover { background: #1a1a2e; transform: translateY(-1px); }
+
+        /* Step connector */
+        .lp-step:not(:last-child)::after {
+          content: '';
+          position: absolute;
+          left: 19px; top: 44px;
+          width: 1.5px; bottom: -36px;
+          background: linear-gradient(to bottom, var(--lp-border), transparent);
         }
 
-        @media (max-width: 640px) {
-          .landing-scroll-container { scroll-snap-type: y proximity; }
-          .landing-scroll-container section { min-height: 100svh; }
-          .dot-nav   { display: none !important; }
-          .arrow-nav { display: none !important; }
-          .feat-grid { grid-template-columns: 1fr !important; }
-          .feat-grid > div { grid-column: span 1 !important; }
+        @media (max-width: 768px) {
+          .lp-features-grid { grid-template-columns: 1fr !important; }
+          .lp-how-inner { grid-template-columns: 1fr !important; gap: 40px !important; }
+          .lp-metrics-grid { grid-template-columns: 1fr !important; }
+          .lp-mockup-body { grid-template-columns: 1fr !important; }
+          .lp-mockup-sidebar { display: none !important; }
+          .lp-kanban { grid-template-columns: repeat(2, 1fr) !important; }
+          .lp-nav-links { display: none !important; }
         }
       `}</style>
 
       {/* ── NAVBAR ── */}
       <nav style={{
-        position:'fixed', top:0, left:0, right:0, zIndex:500,
-        padding:'0 clamp(16px,5vw,48px)', height:'52px',
-        display:'flex', justifyContent:'space-between', alignItems:'center',
-        background: lightSlide ? 'rgba(248,248,248,0.9)' : 'rgba(9,9,11,0.85)',
-        backdropFilter:'blur(20px)',
-        WebkitBackdropFilter:'blur(20px)',
-        borderBottom: lightSlide ? '1px solid #e4e4e7' : '1px solid rgba(255,255,255,0.07)',
-        transition:'background 0.4s ease, border-color 0.4s ease',
+        position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100,
+        height: 64, display: 'flex', alignItems: 'center',
+        padding: '0 clamp(24px, 5vw, 80px)',
+        transition: 'background .3s, backdrop-filter .3s, box-shadow .3s, border-color .3s',
+        borderBottom: scrolled ? '1px solid #e8e8f0' : '1px solid transparent',
+        background: scrolled ? 'rgba(255,255,255,.82)' : 'transparent',
+        backdropFilter: scrolled ? 'blur(18px)' : 'none',
+        WebkitBackdropFilter: scrolled ? 'blur(18px)' : 'none',
+        boxShadow: scrolled ? '0 1px 0 #e8e8f0' : 'none',
       }}>
-        <div style={{ display:'flex', alignItems:'center', gap:'8px', fontSize:'15px', fontWeight:600, letterSpacing:'-0.5px', color: lightSlide ? '#09090b' : 'white' }}>
-          <div style={{ width:'22px', height:'22px', borderRadius:'6px', background: lightSlide ? '#09090b' : 'white', display:'flex', alignItems:'center', justifyContent:'center' }}>
-            <Sparkles size={10} color={lightSlide ? 'white' : '#09090b'}/>
-          </div>
-          SEITRA
+        <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 22, letterSpacing: '-.3px', color: '#0a0a0f', marginRight: 'auto' }}>
+          Sei<span style={{ color: '#3b82f6' }}>tra</span>
         </div>
-        <div style={{ display:'flex', gap:'4px', alignItems:'center' }}>
-          <button onClick={onGetStarted}
-            style={{ padding:'6px 16px', background:'transparent', border:'none', color: lightSlide ? '#71717a' : 'rgba(255,255,255,0.45)', fontSize:'13px', fontWeight:500, cursor:'pointer', transition:'color 0.15s' }}
-            onMouseEnter={e=>e.currentTarget.style.color=lightSlide?'#09090b':'white'}
-            onMouseLeave={e=>e.currentTarget.style.color=lightSlide?'#71717a':'rgba(255,255,255,0.45)'}>
-            Iniciar sesión
-          </button>
-          <button onClick={onGetStarted}
-            style={{ padding:'7px 16px', background: lightSlide ? '#09090b' : 'white', border:'none', borderRadius:'8px', color: lightSlide ? 'white' : '#09090b', fontSize:'13px', fontWeight:600, cursor:'pointer', transition:'all 0.15s' }}
-            onMouseEnter={e=>{ e.currentTarget.style.background='#3b82f6'; e.currentTarget.style.color='white'; }}
-            onMouseLeave={e=>{ e.currentTarget.style.background=lightSlide?'#09090b':'white'; e.currentTarget.style.color=lightSlide?'white':'#09090b'; }}>
-            Empezar gratis
-          </button>
-        </div>
+        <ul className="lp-nav-links" style={{ display: 'flex', alignItems: 'center', gap: 32, listStyle: 'none' }}>
+          <li><button className="lp-nav-link" onClick={() => scrollTo('#lp-features')}>Funciones</button></li>
+          <li><button className="lp-nav-link" onClick={() => scrollTo('#lp-how')}>Cómo funciona</button></li>
+          <li><button className="lp-nav-link" onClick={() => scrollTo('#lp-metrics')}>Lo que lograrás</button></li>
+        </ul>
+        <button className="lp-nav-cta" onClick={onGetStarted}>Empezar gratis</button>
       </nav>
 
-      {/* ── DOT NAV ── */}
-      <div className="dot-nav" style={{ position:'fixed', right:'20px', top:'50%', transform:'translateY(-50%)', zIndex:500, display:'flex', flexDirection:'column', gap:'8px' }}>
-        {slideLabels.map((label,i)=>(
-          <button key={i} title={label} onClick={()=>goToSection(i)}
-            style={{ width:i===activeSection?8:5, height:i===activeSection?8:5, borderRadius:'50%', background: i===activeSection ? (lightSlide?'#09090b':'white') : (lightSlide?'rgba(0,0,0,0.15)':'rgba(255,255,255,0.2)'), border:'none', cursor:'pointer', padding:0, transition:'all 0.3s ease', outline:'none' }}
-          />
-        ))}
-      </div>
+      {/* ── HERO ── */}
+      <section style={{ position: 'relative', minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '120px clamp(24px, 5vw, 80px) 80px', overflow: 'hidden' }}>
 
-      {/* ── ARROW NAV ── */}
-      <div className="arrow-nav" style={{ position:'fixed', bottom:'20px', left:'50%', transform:'translateX(-50%)', zIndex:500, display:'flex', flexDirection:'column', alignItems:'center', gap:'5px' }}>
-        <span style={{ fontSize:'10px', color: lightSlide?'rgba(0,0,0,0.2)':'rgba(255,255,255,0.2)', letterSpacing:'1px', fontWeight:500 }}>
-          {activeSection+1} / {TOTAL}
-        </span>
-        <div style={{ display:'flex', gap:'5px' }}>
-          {[
-            { fn:()=>goToSection(activeSection-1), dis:activeSection===0,       Icon:ChevronUp   },
-            { fn:()=>goToSection(activeSection+1), dis:activeSection===TOTAL-1, Icon:ChevronDown },
-          ].map(({ fn, dis, Icon },i)=>(
-            <button key={i} onClick={fn} disabled={dis}
-              style={{ width:'26px', height:'26px', borderRadius:'50%', background: lightSlide?'rgba(0,0,0,0.05)':'rgba(255,255,255,0.06)', border: lightSlide?'1px solid #e4e4e7':'1px solid rgba(255,255,255,0.1)', color: dis ? (lightSlide?'rgba(0,0,0,0.15)':'rgba(255,255,255,0.1)') : (lightSlide?'#71717a':'rgba(255,255,255,0.45)'), cursor:dis?'default':'pointer', display:'flex', alignItems:'center', justifyContent:'center', outline:'none', transition:'all 0.2s ease' }}>
-              <Icon size={11}/>
+        {/* Dot grid */}
+        <div style={{ position: 'absolute', inset: 0, backgroundImage: 'radial-gradient(circle, #c7c7d8 1px, transparent 1px)', backgroundSize: '28px 28px', opacity: 0.45, zIndex: 0, maskImage: 'radial-gradient(ellipse 80% 70% at 50% 50%, black 30%, transparent 100%)', WebkitMaskImage: 'radial-gradient(ellipse 80% 70% at 50% 50%, black 30%, transparent 100%)' }} />
+
+        {/* Orbs */}
+        <div className="lp-orb lp-orb-blue" />
+        <div className="lp-orb lp-orb-purple" />
+        <div className="lp-orb lp-orb-teal" />
+
+        {/* Hero content */}
+        <div style={{ position: 'relative', zIndex: 2, maxWidth: 860, width: '100%' }}>
+
+          {/* Chip */}
+          <div className="lp-reveal" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 14px 6px 8px', background: 'rgba(59,130,246,.08)', border: '1px solid rgba(59,130,246,.2)', borderRadius: 100, fontSize: 13, fontFamily: "'Geist Mono', monospace", color: '#3b82f6', marginBottom: 32 }}>
+            <span className="lp-chip-dot" />
+            <span>Acceso anticipado — ya disponible</span>
+          </div>
+
+          {/* Headline */}
+          <h1 className="lp-reveal lp-d1" style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontStyle: 'italic', fontSize: 'clamp(44px, 7vw, 88px)', lineHeight: 1.05, letterSpacing: '-.02em', marginBottom: 24, background: 'linear-gradient(135deg, #0a0a0f 0%, #3b3b6e 40%, #3b82f6 70%, #a78bfa 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
+            Todo tu equipo.<br />Un solo lugar.
+          </h1>
+
+          {/* Sub */}
+          <p className="lp-reveal lp-d2" style={{ fontSize: 'clamp(16px, 2vw, 20px)', color: '#5a5a72', maxWidth: 540, margin: '0 auto 40px', fontWeight: 400, lineHeight: 1.65 }}>
+            Seitra elimina la fricción entre la idea y la entrega. Gestiona tareas, timelines y equipos sin saltar entre diez herramientas distintas.
+          </p>
+
+          {/* CTAs */}
+          <div className="lp-reveal lp-d3" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 48 }}>
+            <button className="lp-btn-primary" onClick={onGetStarted}>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 1.5L14 8L8 14.5M2 8h12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              Comenzar gratis
             </button>
+            <button className="lp-btn-secondary" onClick={() => scrollTo('#lp-how')}>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13z" stroke="currentColor" strokeWidth="1.5"/><path d="M6.5 6.25C6.5 5.56 7.17 5 8 5s1.5.56 1.5 1.25c0 .6-.4 1.1-.96 1.32C8.21 7.72 8 8.08 8 8.5V9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="8" cy="11" r=".75" fill="currentColor"/></svg>
+              Ver demostración
+            </button>
+          </div>
+
+          {/* Social proof */}
+          <div className="lp-reveal lp-d4" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+            <div style={{ display: 'flex' }}>
+              {[
+                { initials: 'MR', bg: 'linear-gradient(135deg,#fbbf24,#f59e0b)' },
+                { initials: 'SC', bg: 'linear-gradient(135deg,#34d399,#10b981)' },
+                { initials: 'JP', bg: 'linear-gradient(135deg,#60a5fa,#3b82f6)' },
+                { initials: 'AL', bg: 'linear-gradient(135deg,#f472b6,#ec4899)' },
+              ].map((av, i) => (
+                <div key={i} style={{ width: 34, height: 34, borderRadius: '50%', border: '2.5px solid #fff', marginLeft: i === 0 ? 0 : -10, background: av.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: '#fff', flexShrink: 0 }}>{av.initials}</div>
+              ))}
+            </div>
+            <div style={{ fontSize: 14, color: '#5a5a72', textAlign: 'left', lineHeight: 1.4 }}>
+              <div>Únete a los primeros equipos en probar Seitra</div>
+              <div style={{ fontSize: 12, color: '#9494a8', marginTop: 2 }}>Acceso gratuito durante el lanzamiento</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Dashboard Mockup */}
+        <div className="lp-reveal-clip lp-d5" style={{ position: 'relative', zIndex: 2, marginTop: 64, maxWidth: 1000, width: '100%', marginLeft: 'auto', marginRight: 'auto' }}>
+          <div style={{ background: '#fff', borderRadius: 20, border: '1px solid #e8e8f0', boxShadow: '0 20px 60px rgba(0,0,0,.10), 0 8px 24px rgba(0,0,0,.06), 0 0 0 1px rgba(0,0,0,.03)', overflow: 'hidden' }}>
+            {/* Browser bar */}
+            <div style={{ background: '#f4f4f8', borderBottom: '1px solid #e8e8f0', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <div style={{ width: 11, height: 11, borderRadius: '50%', background: '#f87171' }} />
+                <div style={{ width: 11, height: 11, borderRadius: '50%', background: '#fbbf24' }} />
+                <div style={{ width: 11, height: 11, borderRadius: '50%', background: '#34d399' }} />
+              </div>
+              <div style={{ marginLeft: 16, fontSize: 12, fontFamily: "'Geist Mono', monospace", color: '#9494a8', background: '#fff', border: '1px solid #e8e8f0', borderRadius: 6, padding: '3px 10px' }}>seitra.app / sprint-q2</div>
+            </div>
+            {/* Body */}
+            <div className="lp-mockup-body" style={{ display: 'grid', gridTemplateColumns: '200px 1fr', minHeight: 340 }}>
+              {/* Sidebar */}
+              <div className="lp-mockup-sidebar" style={{ background: '#fafafd', borderRight: '1px solid #e8e8f0', padding: 16 }}>
+                <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 16, color: '#0a0a0f', marginBottom: 20, paddingLeft: 4 }}>Sei<span style={{ color: '#3b82f6' }}>tra</span></div>
+                <div style={{ fontSize: 10, fontFamily: "'Geist Mono', monospace", letterSpacing: '.08em', color: '#9494a8', textTransform: 'uppercase', margin: '14px 0 6px 8px' }}>Proyectos</div>
+                <div className="lp-sidebar-item active">
+                  <svg style={{ width: 16, height: 16, opacity: .7, flexShrink: 0 }} viewBox="0 0 16 16" fill="none"><rect x="1.5" y="3.5" width="5" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.4"/><rect x="9.5" y="1.5" width="5" height="5" rx="1.5" stroke="currentColor" strokeWidth="1.4"/><rect x="9.5" y="9.5" width="5" height="5" rx="1.5" stroke="currentColor" strokeWidth="1.4"/></svg>
+                  Sprint Q2
+                </div>
+                <div className="lp-sidebar-item">
+                  <svg style={{ width: 16, height: 16, opacity: .7, flexShrink: 0 }} viewBox="0 0 16 16" fill="none"><path d="M2 4h12M2 8h8M2 12h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+                  Roadmap
+                </div>
+                <div className="lp-sidebar-item">
+                  <svg style={{ width: 16, height: 16, opacity: .7, flexShrink: 0 }} viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.4"/><path d="M8 5v3l2 2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+                  Timelines
+                </div>
+                <div style={{ fontSize: 10, fontFamily: "'Geist Mono', monospace", letterSpacing: '.08em', color: '#9494a8', textTransform: 'uppercase', margin: '14px 0 6px 8px' }}>Equipo</div>
+                <div className="lp-sidebar-item">
+                  <svg style={{ width: 16, height: 16, opacity: .7, flexShrink: 0 }} viewBox="0 0 16 16" fill="none"><circle cx="6" cy="5.5" r="2.5" stroke="currentColor" strokeWidth="1.4"/><path d="M1.5 13c0-2.485 2.015-4.5 4.5-4.5S10.5 10.515 10.5 13" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/><path d="M11 4c1.105 0 2 .895 2 2s-.895 2-2 2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/><path d="M14.5 13c0-2-1.5-3.5-3.5-3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+                  Miembros
+                </div>
+              </div>
+              {/* Main */}
+              <div style={{ padding: 20, overflow: 'hidden' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+                  <div style={{ fontSize: 16, fontWeight: 600, color: '#0a0a0f' }}>Sprint Q2 — Kanban</div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    {['14 tareas', '6 miembros'].map((b, i) => (
+                      <span key={i} style={{ fontSize: 11, fontFamily: "'Geist Mono', monospace", padding: '3px 8px', borderRadius: 4, background: '#f8f8fc', border: '1px solid #e8e8f0', color: '#5a5a72' }}>{b}</span>
+                    ))}
+                  </div>
+                </div>
+                {/* Kanban */}
+                <div className="lp-kanban" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, alignItems: 'start' }}>
+                  {[
+                    { col: 'Por hacer',   dot: '#94a3b8', cards: [{ label: 'Diseño', lc: 'rgba(167,139,250,.12)', lt: '#7c3aed', title: 'Rediseño pantalla de onboarding', av: { i: 'MR', bg: 'linear-gradient(135deg,#fbbf24,#f59e0b)' }, date: '24 abr' }, { label: 'UX', lc: 'rgba(251,191,36,.12)', lt: '#d97706', title: 'Auditoría de accesibilidad', av: { i: 'AL', bg: 'linear-gradient(135deg,#f472b6,#ec4899)' }, date: '30 abr' }] },
+                    { col: 'En progreso', dot: '#3b82f6', cards: [{ label: 'Dev', lc: 'rgba(59,130,246,.12)', lt: '#1d4ed8', title: 'API de notificaciones en tiempo real', av: { i: 'JP', bg: 'linear-gradient(135deg,#60a5fa,#3b82f6)' }, date: '22 abr' }, { label: 'Dev', lc: 'rgba(59,130,246,.12)', lt: '#1d4ed8', title: 'Integración con Slack y Teams', av: { i: 'SC', bg: 'linear-gradient(135deg,#34d399,#10b981)' }, date: '25 abr' }] },
+                    { col: 'Revisión',    dot: '#a78bfa', cards: [{ label: 'QA', lc: 'rgba(45,212,191,.12)', lt: '#0d9488', title: 'Tests E2E módulo de reportes', av: { i: 'DV', bg: 'linear-gradient(135deg,#a78bfa,#8b5cf6)' }, date: '20 abr' }] },
+                    { col: 'Listo',       dot: '#2dd4bf', cards: [{ label: 'Diseño', lc: 'rgba(167,139,250,.12)', lt: '#7c3aed', title: 'Sistema de tokens de color v3', av: { i: 'MR', bg: 'linear-gradient(135deg,#fbbf24,#f59e0b)' }, date: '18 abr' }] },
+                  ].map((column, ci) => (
+                    <div key={ci}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.06em', color: '#5a5a72' }}>
+                        <div style={{ width: 7, height: 7, borderRadius: '50%', background: column.dot }} />
+                        {column.col}
+                      </div>
+                      {column.cards.map((card, ki) => (
+                        <div key={ki} className="lp-k-card">
+                          <span style={{ fontSize: 10, fontFamily: "'Geist Mono', monospace", padding: '2px 6px', borderRadius: 3, marginBottom: 6, display: 'inline-block', background: card.lc, color: card.lt }}>{card.label}</span>
+                          <div style={{ fontSize: 12, fontWeight: 500, color: '#0a0a0f', marginBottom: 8, lineHeight: 1.4 }}>{card.title}</div>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <div style={{ width: 20, height: 20, borderRadius: '50%', background: card.av.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: '#fff' }}>{card.av.i}</div>
+                            <span style={{ fontSize: 10, color: '#9494a8', fontFamily: "'Geist Mono', monospace" }}>{card.date}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── FEATURES ── */}
+      <section id="lp-features" style={{ background: '#fff', padding: 'clamp(80px, 10vw, 120px) clamp(24px, 5vw, 80px)', maxWidth: 1200, margin: '0 auto' }}>
+        <div style={{ marginBottom: 60 }}>
+          <p className="lp-reveal" style={{ fontFamily: "'Geist Mono', monospace", fontSize: 12, letterSpacing: '.1em', textTransform: 'uppercase', color: '#3b82f6', marginBottom: 14 }}>Funcionalidades</p>
+          <h2 className="lp-reveal lp-d1" style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 'clamp(32px, 4vw, 52px)', lineHeight: 1.1, letterSpacing: '-.02em', color: '#0a0a0f', marginBottom: 16 }}>
+            Todo lo que necesitas.<br />Nada que no.
+          </h2>
+          <p className="lp-reveal lp-d2" style={{ fontSize: 18, color: '#5a5a72', maxWidth: 520, lineHeight: 1.65 }}>
+            Construido para equipos que necesitan moverse rápido sin perder visibilidad.
+          </p>
+        </div>
+
+        <div className="lp-features-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1, background: '#e8e8f0', border: '1px solid #e8e8f0', borderRadius: 20, overflow: 'hidden' }}>
+          {[
+            { icon: <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="#3b82f6" strokeWidth="1.6"><rect x="2" y="4" width="7" height="14" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="13" y="14" width="7" height="4" rx="2"/></svg>, title: 'Tablero Kanban visual', desc: 'Arrastra tareas entre columnas, asigna responsables y monitorea el progreso de cada sprint en tiempo real.', delay: '' },
+            { icon: <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="#a78bfa" strokeWidth="1.6"><path d="M2 6h18M2 11h14M2 16h10"/><rect x="15" y="9" width="5" height="8" rx="1.5" fill="rgba(167,139,250,.15)" stroke="#a78bfa"/></svg>, title: 'Gantt inteligente', desc: 'Visualiza dependencias, detecta cuellos de botella y reajusta fechas con un simple arrastre.', delay: 'lp-d2' },
+            { icon: <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="#2dd4bf" strokeWidth="1.6"><circle cx="11" cy="11" r="9"/><path d="M11 7v4l3 3"/></svg>, title: 'Sprints y ciclos', desc: 'Define ciclos de trabajo, mide velocidad de equipo y exporta reportes de retrospectiva con un clic.', delay: 'lp-d4' },
+            { icon: <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="#3b82f6" strokeWidth="1.6"><rect x="4" y="4" width="14" height="10" rx="2"/><path d="M8 18h6M11 14v4"/><path d="M8 8h2M12 8h2M8 11h6"/></svg>, title: 'Documentación integrada', desc: 'Escribe specs, meeting notes y wikis directamente dentro de cada proyecto. Sin Notion aparte.', delay: 'lp-d1' },
+            { icon: <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="#a78bfa" strokeWidth="1.6"><circle cx="7" cy="8" r="3"/><circle cx="15" cy="8" r="3"/><path d="M2 18c0-2.761 2.239-5 5-5h8c2.761 0 5 2.239 5 5"/></svg>, title: 'Gestión de equipo', desc: 'Roles, permisos granulares, carga de trabajo por miembro y visibilidad total del equipo distribuido.', delay: 'lp-d3' },
+            { icon: <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="#2dd4bf" strokeWidth="1.6"><path d="M4 16l4-4 3 3 3-4 4 3"/><rect x="2" y="4" width="18" height="14" rx="2"/></svg>, title: 'Reportes en tiempo real', desc: 'Dashboards automáticos con burn-down charts, métricas de entrega y KPIs del equipo sin configuración.', delay: 'lp-d5' },
+          ].map((f, i) => (
+            <div key={i} className={`lp-feature-card lp-reveal-scale ${f.delay}`}>
+              <div style={{ width: 44, height: 44, background: 'linear-gradient(135deg, rgba(59,130,246,.1), rgba(167,139,250,.1))', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
+                {f.icon}
+              </div>
+              <div style={{ fontSize: 17, fontWeight: 600, color: '#0a0a0f', marginBottom: 10 }}>{f.title}</div>
+              <div style={{ fontSize: 14.5, color: '#5a5a72', lineHeight: 1.65 }}>{f.desc}</div>
+            </div>
           ))}
+        </div>
+      </section>
+
+      {/* ── HOW IT WORKS ── */}
+      <div id="lp-how" style={{ background: '#f8f8fc', padding: 'clamp(80px, 10vw, 120px) 0' }}>
+        <div className="lp-how-inner" style={{ maxWidth: 1200, margin: '0 auto', padding: '0 clamp(24px, 5vw, 80px)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 80, alignItems: 'start' }}>
+
+          {/* Steps */}
+          <div>
+            <div style={{ marginBottom: 48 }}>
+              <p className="lp-reveal" style={{ fontFamily: "'Geist Mono', monospace", fontSize: 12, letterSpacing: '.1em', textTransform: 'uppercase', color: '#3b82f6', marginBottom: 14 }}>Proceso</p>
+              <h2 className="lp-reveal lp-d1" style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 'clamp(32px, 4vw, 52px)', lineHeight: 1.1, letterSpacing: '-.02em', color: '#0a0a0f', marginBottom: 16 }}>
+                De la idea<br />a la entrega
+              </h2>
+              <p className="lp-reveal lp-d2" style={{ fontSize: 18, color: '#5a5a72', lineHeight: 1.65, maxWidth: 520 }}>
+                Seitra convierte el caos de un proyecto en un flujo predecible y sin fricciones.
+              </p>
+            </div>
+            {[
+              { num: '01', title: 'Crea tu espacio de trabajo', desc: 'Invita a tu equipo, define áreas de proyecto y configura el flujo de trabajo en menos de 5 minutos.', delay: '' },
+              { num: '02', title: 'Planifica con contexto', desc: 'Desglosa objetivos en tareas accionables. Asigna responsables, fechas y prioridades desde el primer día.', delay: 'lp-d2' },
+              { num: '03', title: 'Ejecuta y monitorea', desc: 'Cada miembro sabe qué hacer hoy. Tú ves el progreso global sin tener que preguntar.', delay: 'lp-d3' },
+              { num: '04', title: 'Itera y mejora', desc: 'Retrospectivas automáticas, datos de velocidad y sugerencias para el siguiente sprint.', delay: 'lp-d4' },
+            ].map((step, i) => (
+              <div key={i} className={`lp-step lp-reveal-left ${step.delay}`} style={{ display: 'flex', gap: 20, marginBottom: 36, position: 'relative' }}>
+                <div style={{ width: 40, height: 40, borderRadius: 10, background: 'linear-gradient(135deg, #3b82f6, #a78bfa)', color: '#fff', fontSize: 14, fontWeight: 700, fontFamily: "'Geist Mono', monospace", display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 4px 12px rgba(59,130,246,.3)' }}>{step.num}</div>
+                <div>
+                  <div style={{ fontSize: 17, fontWeight: 600, color: '#0a0a0f', marginBottom: 6 }}>{step.title}</div>
+                  <div style={{ fontSize: 14.5, color: '#5a5a72', lineHeight: 1.6 }}>{step.desc}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Gantt */}
+          <div className="lp-reveal-right lp-d1" style={{ marginTop: 40 }}>
+            <div style={{ background: '#fff', border: '1px solid #e8e8f0', borderRadius: 20, overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,.08), 0 2px 6px rgba(0,0,0,.04)' }}>
+              <div style={{ background: '#f4f4f8', borderBottom: '1px solid #e8e8f0', padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#0a0a0f' }}>Proyecto Plataforma Core — Q2 2025</div>
+                <div style={{ fontSize: 11, fontFamily: "'Geist Mono', monospace", color: '#5a5a72' }}>Abr — Sep</div>
+              </div>
+              {/* Month headers */}
+              <div style={{ display: 'grid', gridTemplateColumns: '120px repeat(6, 1fr)', borderBottom: '1px solid #e8e8f0', background: '#fafafd' }}>
+                {['Tarea', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep'].map((m, i) => (
+                  <div key={i} style={{ padding: '8px 10px', fontSize: 11, fontFamily: "'Geist Mono', monospace", color: '#9494a8', textAlign: i === 0 ? 'left' : 'center', borderLeft: i === 0 ? 'none' : '1px solid #e8e8f0' }}>{m}</div>
+                ))}
+              </div>
+              {[
+                { task: 'Investigación', bar: { left: '2%', width: '28%', bg: 'linear-gradient(90deg,#3b82f6,#60a5fa)', label: 'Inv.' } },
+                { task: 'Diseño UX',     bar: { left: '20%', width: '36%', bg: 'linear-gradient(90deg,#a78bfa,#c4b5fd)', label: 'UX' } },
+                { task: 'Desarrollo',    bar: { left: '36%', width: '48%', bg: 'linear-gradient(90deg,#2dd4bf,#5eead4)', label: 'Dev' } },
+                { task: 'QA & Testing',  bar: { left: '68%', width: '24%', bg: 'linear-gradient(90deg,#f59e0b,#fbbf24)', label: 'QA' } },
+                { task: 'Lanzamiento',   bar: { left: '86%', width: '12%', bg: 'linear-gradient(90deg,#ec4899,#f472b6)', label: '🚀' } },
+              ].map((row, i) => (
+                <div key={i} style={{ display: 'grid', gridTemplateColumns: '120px 1fr', borderBottom: i < 4 ? '1px solid #e8e8f0' : 'none', alignItems: 'center', minHeight: 40 }}>
+                  <div style={{ padding: '0 10px', fontSize: 12, color: '#5a5a72', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.task}</div>
+                  <div style={{ position: 'relative', padding: '8px 0', gridColumn: '2 / -1' }}>
+                    <div className="lp-gantt-bar" style={{ left: row.bar.left, width: row.bar.width, background: row.bar.bg }}>{row.bar.label}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* ── SCROLL CONTAINER ── */}
-      <div ref={containerRef} className="landing-scroll-container">
-        <SlideHero     onGetStarted={onGetStarted} typeword={typeword}/>
-        <SlideFeatures/>
-        <SlideDemo/>
-        <SlideCTA      onGetStarted={onGetStarted} active={activeSection===3}/>
-      </div>
+      {/* ── METRICS ── */}
+      <section id="lp-metrics" style={{ padding: 'clamp(80px, 10vw, 120px) clamp(24px, 5vw, 80px)', maxWidth: 1200, margin: '0 auto', textAlign: 'center' }}>
+        <p className="lp-reveal" style={{ fontFamily: "'Geist Mono', monospace", fontSize: 12, letterSpacing: '.1em', textTransform: 'uppercase', color: '#3b82f6', marginBottom: 14 }}>Lo que vas a lograr</p>
+        <h2 className="lp-reveal lp-d1" style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 'clamp(32px, 4vw, 52px)', lineHeight: 1.1, letterSpacing: '-.02em', color: '#0a0a0f', marginBottom: 16 }}>
+          Diseñado para que<br />tu equipo entregue más
+        </h2>
+        <p className="lp-reveal lp-d2" style={{ fontSize: 18, color: '#5a5a72', maxWidth: 520, lineHeight: 1.65, margin: '0 auto' }}>
+          Seitra está construido con un principio claro: menos fricción entre la decisión y la ejecución.
+        </p>
+        <div className="lp-metrics-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 40, marginTop: 60 }}>
+          {[
+            { num: '5 min', label: 'Para tener tu primer proyecto activo', sub: 'Sin onboarding interminable. Sin configuraciones innecesarias. Solo empieza.', delay: '' },
+            { num: '1 lugar', label: 'Para tareas, docs, timelines y equipo', sub: 'Deja de saltar entre Notion, Jira, Slack y hojas de cálculo. Todo vive aquí.', delay: 'lp-d2' },
+            { num: '0 dudas', label: 'Sobre quién hace qué y para cuándo', sub: 'Visibilidad total del equipo sin tener que preguntar. El avance es siempre visible.', delay: 'lp-d4' },
+          ].map((m, i) => (
+            <div key={i} className={`lp-metric-card lp-reveal-scale ${m.delay}`}>
+              <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 'clamp(48px, 6vw, 72px)', lineHeight: 1, marginBottom: 8, background: 'linear-gradient(135deg, #3b82f6, #a78bfa)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>{m.num}</div>
+              <div style={{ fontSize: 16, color: '#0a0a0f', fontWeight: 600, marginBottom: 6 }}>{m.label}</div>
+              <div style={{ fontSize: 13.5, color: '#5a5a72', marginTop: 4, lineHeight: 1.55 }}>{m.sub}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── CTA FINAL ── */}
+      <section style={{ padding: 'clamp(60px, 8vw, 100px) 0', maxWidth: '100%' }}>
+        <div className="lp-reveal" style={{ background: '#0a0a0f', position: 'relative', overflow: 'hidden', margin: '0 clamp(24px, 4vw, 60px)', borderRadius: 20, padding: 'clamp(60px, 8vw, 100px) clamp(24px, 5vw, 80px)', textAlign: 'center' }}>
+          {/* Radial gradient overlay */}
+          <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse 60% 80% at 50% 50%, rgba(59,130,246,.25) 0%, rgba(167,139,250,.15) 40%, transparent 75%)', pointerEvents: 'none' }} />
+          <p style={{ fontFamily: "'Geist Mono', monospace", fontSize: 12, letterSpacing: '.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,.5)', marginBottom: 16, position: 'relative' }}>Empieza hoy</p>
+          <h2 style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontStyle: 'italic', fontSize: 'clamp(32px, 5vw, 60px)', color: '#fff', lineHeight: 1.1, marginBottom: 20, position: 'relative' }}>
+            El momento de ordenar<br />tu equipo es ahora
+          </h2>
+          <p style={{ fontSize: 17, color: 'rgba(255,255,255,.6)', marginBottom: 40, maxWidth: 440, marginLeft: 'auto', marginRight: 'auto', lineHeight: 1.65, position: 'relative' }}>
+            Configura tu primer proyecto en menos de 5 minutos. Sin tarjeta de crédito. Sin contratos.
+          </p>
+          <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap', position: 'relative' }}>
+            <button className="lp-btn-cta-white" onClick={onGetStarted}>Crear cuenta gratis</button>
+            <button className="lp-btn-cta-ghost" onClick={() => scrollTo('#lp-how')}>Ver cómo funciona</button>
+          </div>
+        </div>
+      </section>
+
+      {/* ── FOOTER ── */}
+      <footer style={{ padding: '48px clamp(24px, 5vw, 80px)', borderTop: '1px solid #e8e8f0', maxWidth: 1200, margin: '60px auto 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
+        <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 20 }}>
+          Sei<span style={{ color: '#3b82f6' }}>tra</span>
+        </div>
+        <ul style={{ display: 'flex', gap: 28, listStyle: 'none' }}>
+          {[
+            { label: 'Funciones', action: () => scrollTo('#lp-features') },
+            { label: 'Cómo funciona', action: () => scrollTo('#lp-how') },
+          ].map((link, i) => (
+            <li key={i}><button className="lp-footer-link" onClick={link.action}>{link.label}</button></li>
+          ))}
+        </ul>
+        <div style={{ fontSize: 13, color: '#9494a8', fontFamily: "'Geist Mono', monospace" }}>© 2025 Seitra. Hecho en Latam.</div>
+      </footer>
     </div>
   );
 }

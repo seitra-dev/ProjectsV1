@@ -33,6 +33,9 @@ export const AppProvider = ({ children }) => {
   const [currentWorkspace, setCurrentWorkspace] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  // authChecked: true cuando el perfil completo (system_role desde la BD)
+  // ya fue cargado. Permite al Sidebar filtrar el menú con el rol correcto.
+  const [authChecked, setAuthChecked] = useState(false);
   const [lists, setLists] = useState([]);
 
   // membershipMap: { [envId]: { role: 'owner'|'admin'|'member'|'viewer', ... } }
@@ -41,6 +44,18 @@ export const AppProvider = ({ children }) => {
   // ==========================================================================
   // HELPERS (compatibilidad con AppContext-OLD)
   // ==========================================================================
+
+  /**
+   * Filtra workspaces para que los privados solo sean visibles para su creador.
+   * super_admin ve todos (para administración).
+   */
+  const filterWorkspacesForUser = (workspaces, userId, systemRole) => {
+    if (!workspaces) return [];
+    if (systemRole === 'super_admin') return workspaces;
+    return workspaces.filter(ws =>
+      ws.visibility !== 'specific_members' || ws.created_by === userId
+    );
+  };
 
   const setCurrentEnvironmentById = async (envId) => {
     if (!envId) {
@@ -52,7 +67,8 @@ export const AppProvider = ({ children }) => {
     const env = environments.find((e) => e.id === envId);
     if (!env) return;
 
-    const workspaces = env.workspaces ?? (await dbWorkspaces.getByEnvironment(envId));
+    const rawWorkspaces = env.workspaces ?? (await dbWorkspaces.getByEnvironment(envId));
+    const workspaces = filterWorkspacesForUser(rawWorkspaces, currentUser?.id, currentUser?.system_role);
     const envWithWorkspaces = { ...env, workspaces };
 
     setCurrentEnvironment(envWithWorkspaces);
@@ -87,6 +103,20 @@ export const AppProvider = ({ children }) => {
     return role === 'owner' || role === 'admin';
   };
 
+  /**
+   * Puede editar las fechas de una tarea si:
+   * - Es super_admin, admin o project_manager (roles de jefe de sistema)
+   * - Es owner del entorno
+   * - Es el líder/dueño del proyecto al que pertenece la tarea
+   */
+  const canEditTaskDates = (envId, projectLeaderId) => {
+    const sysRole = currentUser?.system_role;
+    if (sysRole === 'super_admin' || sysRole === 'admin' || sysRole === 'project_manager') return true;
+    if (getUserRoleInEnv(envId) === 'owner') return true;
+    if (projectLeaderId && projectLeaderId === currentUser?.id) return true;
+    return false;
+  };
+
   const canDeleteEnvironment = (envId) => {
     if (isSuperAdmin(currentUser)) return true;
     return getUserRoleInEnv(envId) === 'owner';
@@ -117,13 +147,17 @@ export const AppProvider = ({ children }) => {
     try {
       const profile = await dbUsers.getById(baseUser.id);
       if (profile) {
-        return {
+        const enriched = {
           ...baseUser,
           system_role: profile.system_role || profile.role || 'user',
           role: profile.role || 'user',
           name: profile.name || baseUser.name,
           avatar: profile.avatar || baseUser.avatar || '👤',
         };
+        // Cachear el rol en localStorage para que el Sidebar filtre correctamente
+        // desde el primer render en la próxima carga de página.
+        try { localStorage.setItem('seitra_system_role', enriched.system_role); } catch {}
+        return enriched;
       }
     } catch (e) {
       console.warn('[AppContext] No se pudo cargar perfil completo:', e);
@@ -136,20 +170,21 @@ export const AppProvider = ({ children }) => {
       console.log('[AppContext] cargando entornos para userId:', userId, '| systemRole:', systemRole);
       let envs = [];
       const newMembershipMap = {};
+      let myMemberships = [];
 
       if (systemRole === 'super_admin') {
         // Super admin ve TODOS los entornos
         envs = await dbEnvironments.getAll();
-        // Carga sus propias membresías (informativo, no filtra)
+        // Carga sus propias membresías para determinar su entorno propio
         try {
-          const memberships = await dbEnvironmentMembers.getMyMemberships(userId);
-          memberships.forEach(m => { newMembershipMap[m.environment_id] = m; });
+          myMemberships = await dbEnvironmentMembers.getMyMemberships(userId);
+          myMemberships.forEach(m => { newMembershipMap[m.environment_id] = m; });
         } catch {}
       } else {
         // Otros roles: solo entornos donde son miembros
-        const memberships = await dbEnvironmentMembers.getMyMemberships(userId);
-        memberships.forEach(m => { newMembershipMap[m.environment_id] = m; });
-        const memberEnvIds = memberships.map(m => m.environment_id);
+        myMemberships = await dbEnvironmentMembers.getMyMemberships(userId);
+        myMemberships.forEach(m => { newMembershipMap[m.environment_id] = m; });
+        const memberEnvIds = myMemberships.map(m => m.environment_id);
 
         if (memberEnvIds.length > 0) {
           const allEnvs = await dbEnvironments.getAll();
@@ -161,11 +196,25 @@ export const AppProvider = ({ children }) => {
       setEnvironments(envs);
 
       if (envs.length > 0) {
-        setCurrentEnvironment(envs[0]);
-        const workspaces = await dbWorkspaces.getByEnvironment(envs[0].id);
-        const loadedLists = await dbLists.getByEnvironment(envs[0].id);
+        // Siempre cargar el entorno PROPIO del usuario:
+        // 1. Donde es 'owner' (lo creó)
+        // 2. Primer entorno donde es miembro (orden devuelto por la BD)
+        // 3. Fallback: primer entorno disponible
+        const ownerMembership = myMemberships.find(m => m.role === 'owner');
+        const primaryEnvId =
+          (ownerMembership && envs.find(e => e.id === ownerMembership.environment_id)?.id) ||
+          (myMemberships[0] && envs.find(e => e.id === myMemberships[0].environment_id)?.id) ||
+          envs[0]?.id;
+        const targetEnv = envs.find(e => e.id === primaryEnvId) || envs[0];
+
+        console.log('[AppContext] entorno propio seleccionado:', targetEnv?.name, '| role:', newMembershipMap[targetEnv?.id]?.role);
+
+        setCurrentEnvironment(targetEnv);
+        const rawWorkspaces = await dbWorkspaces.getByEnvironment(targetEnv.id);
+        const workspaces = filterWorkspacesForUser(rawWorkspaces, userId, systemRole);
+        const loadedLists = await dbLists.getByEnvironment(targetEnv.id);
         setEnvironments(prev =>
-          prev.map(env => env.id === envs[0].id ? { ...env, workspaces } : env)
+          prev.map(env => env.id === targetEnv.id ? { ...env, workspaces } : env)
         );
         setCurrentEnvironment(prev => ({ ...prev, workspaces }));
         setLists(loadedLists);
@@ -187,48 +236,84 @@ export const AppProvider = ({ children }) => {
       };
       setCurrentUser(baseUser);
 
-      // Enriquecer con perfil completo y luego cargar entornos
+      // Enriquecer con perfil completo (BD) y luego cargar entornos.
+      // authChecked se activa cuando TODO está listo, incluyendo el system_role real.
       enrichUserProfile(baseUser).then(enriched => {
         setCurrentUser(enriched);
-        loadEnvironments(enriched.id, enriched.system_role).finally(() => setIsLoading(false));
+        loadEnvironments(enriched.id, enriched.system_role).finally(() => {
+          setIsLoading(false);
+          setAuthChecked(true);
+        });
       });
     } else {
       setIsLoading(false);
+      setAuthChecked(true);
     }
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         console.log('[AppContext] onAuthStateChange:', event, '| user:', session?.user?.email);
-        if (session?.user) {
-          const baseUser = {
-            id: session.user.id,
-            email: session.user.email,
-            name: session.user.user_metadata?.name || session.user.email,
-            role: session.user.user_metadata?.role || 'user',
-            system_role: session.user.user_metadata?.system_role || session.user.user_metadata?.role || 'user',
-          };
-          setCurrentUser(baseUser);
-          setEnvironments(prev => {
-            if (prev.length === 0) {
-              enrichUserProfile(baseUser).then(enriched => {
-                setCurrentUser(enriched);
-                loadEnvironments(enriched.id, enriched.system_role);
-              });
-            }
-            return prev;
-          });
-        } else if (event === 'SIGNED_OUT') {
+
+        if (event === 'SIGNED_OUT') {
           setCurrentUser(null);
           setEnvironments([]);
           setCurrentEnvironment(null);
           setCurrentWorkspace(null);
           setMembershipMap({});
+          setIsLoading(false);
+          setAuthChecked(false);
+          // Limpiar caché del rol al cerrar sesión
+          try { localStorage.removeItem('seitra_system_role'); } catch {}
+          return;
         }
-        setIsLoading(false);
+
+        if (
+          session?.user &&
+          (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED')
+        ) {
+          // Solo recargar entornos si aún no los tenemos (evitar re-fetch en TOKEN_REFRESHED)
+          setEnvironments(prev => {
+            if (prev.length === 0) {
+              const baseUser = {
+                id: session.user.id,
+                email: session.user.email,
+                name: session.user.user_metadata?.name || session.user.email,
+                role: session.user.user_metadata?.role || 'user',
+                system_role: session.user.user_metadata?.system_role || session.user.user_metadata?.role || 'user',
+              };
+              enrichUserProfile(baseUser).then(enriched => {
+                setCurrentUser(enriched);
+                loadEnvironments(enriched.id, enriched.system_role).finally(() => {
+                  setIsLoading(false);
+                  setAuthChecked(true);
+                });
+              });
+            } else {
+              setIsLoading(false);
+              setAuthChecked(true);
+            }
+            return prev;
+          });
+        } else {
+          setIsLoading(false);
+          setAuthChecked(true);
+        }
       }
     );
 
     return () => subscription.unsubscribe();
+  }, []);
+
+  // Refrescar el token de Supabase cada 50 min para evitar que expire en sesiones largas
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        const { error } = await supabase.auth.refreshSession();
+        if (error) console.warn('[AppContext] Token refresh falló:', error.message);
+        else console.log('[AppContext] Token de sesión refrescado');
+      } catch {}
+    }, 50 * 60 * 1000); // 50 minutos
+    return () => clearInterval(interval);
   }, []);
 
   // ============================================================================
@@ -237,7 +322,7 @@ export const AppProvider = ({ children }) => {
 
   const createEnvironment = async (data) => {
     if (!currentUser?.id) {
-      throw new Error('Debes iniciar sesión para crear entornos.');
+      throw new Error('Debes iniciar sesión para crear equipos.');
     }
 
     try {
@@ -301,8 +386,15 @@ export const AppProvider = ({ children }) => {
   const setCurrentEnvironmentState = async (env) => {
     try {
       setCurrentEnvironment(env);
+      // Persistir la selección para restaurarla al refrescar
+      if (env?.id) {
+        localStorage.setItem('seitra_last_env_id', env.id);
+      } else {
+        localStorage.removeItem('seitra_last_env_id');
+      }
       if (env && !env.workspaces) {
-        const workspaces = await dbWorkspaces.getByEnvironment(env.id);
+        const rawWorkspaces = await dbWorkspaces.getByEnvironment(env.id);
+        const workspaces = filterWorkspacesForUser(rawWorkspaces, currentUser?.id, currentUser?.system_role);
         const envWithWorkspaces = { ...env, workspaces };
         setCurrentEnvironment(envWithWorkspaces);
         setEnvironments(prev =>
@@ -329,7 +421,8 @@ export const AppProvider = ({ children }) => {
         permission: data.settings?.permission || 'full',
         created_by: currentUser?.id
       });
-      const freshWorkspaces = await dbWorkspaces.getByEnvironment(envId);
+      const rawFreshWorkspaces = await dbWorkspaces.getByEnvironment(envId);
+      const freshWorkspaces = filterWorkspacesForUser(rawFreshWorkspaces, currentUser?.id, currentUser?.system_role);
       setEnvironments(prev =>
         prev.map(env => env.id === envId ? { ...env, workspaces: freshWorkspaces } : env)
       );
@@ -432,6 +525,7 @@ export const AppProvider = ({ children }) => {
     currentWorkspace,
     currentUser,
     isLoading,
+    authChecked,
     lists,
     membershipMap,
 
@@ -447,8 +541,12 @@ export const AppProvider = ({ children }) => {
     isSuperAdmin: () => isSuperAdmin(currentUser),
     getUserRoleInEnv,
     canManageMembers,
+    canEditTaskDates,
     canDeleteEnvironment,
     canViewEnvironment,
+    // Usuarios que pueden operar sin entorno seleccionado (vista Gestión)
+    canWorkWithoutEnvironment: () =>
+      ['super_admin', 'admin', 'project_manager'].includes(currentUser?.system_role),
 
     // Environments
     createEnvironment,
