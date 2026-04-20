@@ -119,7 +119,7 @@ const EnvironmentSelector = ({ onCreateEnvironment, onOpenSettings, onManageMemb
             </>
           ) : (
             <span style={{ color: DESIGN_TOKENS.neutral[400] }}>
-              Seleccionar entorno
+              Seleccionar equipo
             </span>
           )}
         </div>
@@ -253,10 +253,10 @@ const EnvironmentSelector = ({ onCreateEnvironment, onOpenSettings, onManageMemb
             }}>
               <div style={{ fontSize: '32px', marginBottom: '8px', opacity: 0.3 }}>📁</div>
               <div style={{ fontWeight: DESIGN_TOKENS.typography.weight.medium }}>
-                No hay entornos
+                No hay equipos
               </div>
               <div style={{ fontSize: DESIGN_TOKENS.typography.size.xs, marginTop: '4px' }}>
-                Crea tu primer entorno
+                Crea tu primer equipo
               </div>
             </div>
           )}
@@ -294,7 +294,7 @@ const EnvironmentSelector = ({ onCreateEnvironment, onOpenSettings, onManageMemb
             }}
           >
             <Plus size={18} />
-            Crear entorno de trabajo
+            Crear equipo de trabajo
           </button>
 
           {currentEnvironment && (
@@ -330,7 +330,7 @@ const EnvironmentSelector = ({ onCreateEnvironment, onOpenSettings, onManageMemb
                 }}
               >
                 <Settings size={18} />
-                Administrar entorno
+                Administrar equipo
               </button>
 
               {canManageMembers(currentEnvironment?.id) && (

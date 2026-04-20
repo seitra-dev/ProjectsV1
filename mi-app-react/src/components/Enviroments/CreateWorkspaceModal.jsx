@@ -527,60 +527,79 @@ const CreateWorkspaceModal = ({ isOpen, onClose }) => {
             )}
           </div>
 
-          {/* PRIVACY TOGGLE */}
-          <div style={{
-            marginBottom: '20px',
-            padding: '16px',
-            background: '#FAFBFC',
-            borderRadius: '8px'
-          }}>
-            <div style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'flex-start'
-            }}>
-              <div>
-                <div style={{ fontSize: '14px', fontWeight: 600, color: '#1D1D1F', marginBottom: '4px' }}>
-                  Hacer privada
-                </div>
-                <div style={{ fontSize: '13px', color: '#86868B' }}>
-                  Solo tú y los miembros invitados tienen acceso
-                </div>
-              </div>
-              <label style={{
-                position: 'relative',
-                display: 'inline-block',
-                width: '44px',
-                height: '24px',
-                flexShrink: 0
-              }}>
-                <input
-                  type="checkbox"
-                  checked={formData.isPrivate}
-                  onChange={(e) => setFormData({ ...formData, isPrivate: e.target.checked })}
-                  style={{ opacity: 0, width: 0, height: 0 }}
-                />
-                <span style={{
-                  position: 'absolute',
+          {/* PRIVACY SELECTOR */}
+          <div style={{ marginBottom: '20px' }}>
+            <div style={{ fontSize: '13px', fontWeight: 600, color: '#6B7280', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              Visibilidad
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              {/* Opción: Todo el equipo */}
+              <button
+                type="button"
+                onClick={() => setFormData({ ...formData, isPrivate: false })}
+                style={{
+                  padding: '14px 12px',
+                  borderRadius: '10px',
+                  border: !formData.isPrivate
+                    ? `2px solid ${DESIGN_TOKENS.primary.base}`
+                    : '2px solid #E8E8ED',
+                  background: !formData.isPrivate ? `${DESIGN_TOKENS.primary.base}0D` : 'white',
                   cursor: 'pointer',
-                  inset: 0,
-                  background: formData.isPrivate ? DESIGN_TOKENS.primary.base : '#CBD2D9',
-                  borderRadius: '24px',
-                  transition: '0.3s'
-                }}>
+                  textAlign: 'left',
+                  transition: 'all 0.2s'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
                   <span style={{
-                    position: 'absolute',
-                    content: '',
-                    height: '18px',
-                    width: '18px',
-                    left: formData.isPrivate ? '23px' : '3px',
-                    bottom: '3px',
-                    background: 'white',
-                    borderRadius: '50%',
-                    transition: '0.3s'
-                  }} />
-                </span>
-              </label>
+                    width: '28px', height: '28px', borderRadius: '8px',
+                    background: !formData.isPrivate ? `${DESIGN_TOKENS.primary.base}1A` : '#F3F4F6',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '15px'
+                  }}>👥</span>
+                  <span style={{ fontSize: '13px', fontWeight: 600, color: '#1D1D1F' }}>Todo el equipo</span>
+                  {!formData.isPrivate && (
+                    <span style={{ marginLeft: 'auto', width: '16px', height: '16px', borderRadius: '50%', background: DESIGN_TOKENS.primary.base, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <span style={{ color: 'white', fontSize: '10px', fontWeight: 700 }}>✓</span>
+                    </span>
+                  )}
+                </div>
+                <div style={{ fontSize: '12px', color: '#6B7280', lineHeight: '1.4' }}>
+                  Todos los miembros del entorno pueden ver este espacio
+                </div>
+              </button>
+
+              {/* Opción: Privado */}
+              <button
+                type="button"
+                onClick={() => setFormData({ ...formData, isPrivate: true })}
+                style={{
+                  padding: '14px 12px',
+                  borderRadius: '10px',
+                  border: formData.isPrivate
+                    ? '2px solid #EF4444'
+                    : '2px solid #E8E8ED',
+                  background: formData.isPrivate ? '#FEF2F2' : 'white',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  transition: 'all 0.2s'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                  <span style={{
+                    width: '28px', height: '28px', borderRadius: '8px',
+                    background: formData.isPrivate ? '#FEE2E2' : '#F3F4F6',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '15px'
+                  }}>🔒</span>
+                  <span style={{ fontSize: '13px', fontWeight: 600, color: '#1D1D1F' }}>Privado</span>
+                  {formData.isPrivate && (
+                    <span style={{ marginLeft: 'auto', width: '16px', height: '16px', borderRadius: '50%', background: '#EF4444', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <span style={{ color: 'white', fontSize: '10px', fontWeight: 700 }}>✓</span>
+                    </span>
+                  )}
+                </div>
+                <div style={{ fontSize: '12px', color: '#6B7280', lineHeight: '1.4' }}>
+                  Solo tú (el creador) puedes ver este espacio de trabajo
+                </div>
+              </button>
             </div>
           </div>
 

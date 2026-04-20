@@ -48,19 +48,32 @@ const sidebarFooterStyle = {
 };
 
 function Sidebar({ isOpen, activeView, onViewChange, projects, onProjectSelect, user, toggleFavorite, isMobile, onClose, onSelectList, onOpenUserSettings }) {
-  const { setCurrentWorkspaceState } = useApp();
+  const { setCurrentWorkspaceState, currentEnvironment } = useApp();
   const [showCreateWorkspace, setShowCreateWorkspace] = useState(false);
   const [showCreateList, setShowCreateList] = useState(false);
   const [createListWorkspace, setCreateListWorkspace] = useState(null);
 
-  const menuItems = [
+  const allMenuItems = [
     { id: 'dashboard', icon: <Home size={19} />, label: 'Dashboard' },
     { id: 'projects', icon: <Briefcase size={19} />, label: 'Proyectos' },
     { id: 'tasks', icon: <Check size={19} />, label: 'Mis Tareas' },
     { id: 'calendar', icon: <Calendar size={19} />, label: 'Calendario' },
     { id: 'chat', icon: <MessageSquare size={19} />, label: 'Chat del Equipo' },
     { id: 'analytics', icon: <PieChart size={19} />, label: 'Analítica' },
+    { id: 'management', icon: <BarChart2 size={19} />, label: 'Gestión', roles: ['super_admin', 'admin', 'project_manager'] },
   ];
+
+  // Resolver el rol con prioridad:
+  // 1. user.system_role (ya enriquecido desde la BD)
+  // 2. caché en localStorage (guardado en la sesión anterior, disponible de inmediato)
+  // 3. Sin rol (no mostrar ítems restringidos)
+  // Esto evita que "Gestión" desaparezca mientras authChecked es false.
+  const effectiveRole = user?.system_role
+    || (() => { try { return localStorage.getItem('seitra_system_role'); } catch { return null; } })();
+
+  const menuItems = allMenuItems.filter(item =>
+    !item.roles || item.roles.includes(effectiveRole)
+  );
 
   const favoriteProjects = projects.filter(p => p.favorite);
   const collapsed = !isOpen && !isMobile;
@@ -147,6 +160,59 @@ function Sidebar({ isOpen, activeView, onViewChange, projects, onProjectSelect, 
                 Menú
               </div>
             )}
+
+            {/* INDICADOR DE ENTORNO ACTIVO */}
+            {(!collapsed || isMobile) && (() => {
+              if (activeView === 'management') {
+                return (
+                  <div style={{
+                    margin: '0 4px 12px',
+                    padding: '7px 12px',
+                    borderRadius: 8,
+                    background: '#eef2ff',
+                    border: '1px solid #c7d2fe',
+                    display: 'flex', alignItems: 'center', gap: 7,
+                    fontSize: 12, fontWeight: 600, color: '#4338ca',
+                  }}>
+                    <span style={{ fontSize: 14 }}>📊</span>
+                    Todos los equipos
+                  </div>
+                );
+              }
+              if (currentEnvironment) {
+                return (
+                  <div style={{
+                    margin: '0 4px 12px',
+                    padding: '7px 12px',
+                    borderRadius: 8,
+                    background: '#ecfdf5',
+                    border: '1px solid #a7f3d0',
+                    display: 'flex', alignItems: 'center', gap: 7,
+                    fontSize: 12, fontWeight: 600, color: '#065f46',
+                    overflow: 'hidden',
+                  }}>
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#10b981', flexShrink: 0 }} />
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {currentEnvironment.name}
+                    </span>
+                  </div>
+                );
+              }
+              return (
+                <div style={{
+                  margin: '0 4px 12px',
+                  padding: '7px 12px',
+                  borderRadius: 8,
+                  background: '#fffbeb',
+                  border: '1px solid #fde68a',
+                  display: 'flex', alignItems: 'center', gap: 7,
+                  fontSize: 12, fontWeight: 600, color: '#92400e',
+                }}>
+                  <span style={{ fontSize: 14 }}>⚠️</span>
+                  Sin equipo
+                </div>
+              );
+            })()}
 
             {menuItems.map(item => {
               const isActive = activeView === item.id;

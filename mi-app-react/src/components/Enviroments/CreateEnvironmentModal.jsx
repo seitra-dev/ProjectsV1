@@ -72,7 +72,7 @@ const CreateEnvironmentModal = ({ isOpen, onClose }) => {
       onClose();
     } catch (error) {
       console.error('Error creating environment:', error);
-      setErrors({ submit: 'Error al crear el entorno' });
+      setErrors({ submit: 'Error al crear el equipo' });
     } finally {
       setIsSubmitting(false);
     }
@@ -226,7 +226,7 @@ const CreateEnvironmentModal = ({ isOpen, onClose }) => {
                 fontWeight: DESIGN_TOKENS.typography.weight.semibold,
                 color: errors.name ? DESIGN_TOKENS.danger.base : DESIGN_TOKENS.neutral[800]
               }}>
-                Nombre del entorno *
+                Nombre del equipo *
               </label>
               <input
                 type="text"
@@ -280,7 +280,7 @@ const CreateEnvironmentModal = ({ isOpen, onClose }) => {
               <textarea
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                placeholder="Describe el propósito de este entorno..."
+                placeholder="Describe el propósito de este equipo..."
                 rows={3}
                 style={{
                   width: '100%',

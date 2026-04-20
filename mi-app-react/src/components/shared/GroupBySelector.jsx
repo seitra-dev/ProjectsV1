@@ -22,7 +22,8 @@ export const GROUP_OPTIONS = [
 
 export const STATUS_GROUP = {
   pending:     { label: 'Pendiente',   color: '#94a3b8' },
-  in_progress: { label: 'En Progreso', color: '#60a5fa' },
+  in_progress: { label: 'En Curso',    color: '#60a5fa' },
+  waiting:     { label: 'En Espera',   color: '#0369a1' },
   review:      { label: 'En Revisión', color: '#f59e0b' },
   completed:   { label: 'Completado',  color: '#34d399' },
 };

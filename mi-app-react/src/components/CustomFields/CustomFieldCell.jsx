@@ -1,684 +1,498 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { DESIGN_TOKENS } from '../../styles/tokens';
+import React, { useRef, useState } from 'react';
+import { ChevronDown, Lock } from 'lucide-react';
 
-function userInitials(user) {
-  if (!user) return '?';
-  if (user.name) {
-    return user.name.split(' ').slice(0, 2).map((w) => w[0]).join('').toUpperCase();
-  }
-  return user.email?.[0]?.toUpperCase() || '?';
-}
-
-/** Miembros vinculados al proyecto (JSON `members` + líder). Equivale al uso típico de project_members. */
-function getProjectMemberUsers(project, allUsers = []) {
-  if (!project) return allUsers;
-  const ids = new Set();
-  (project.members || []).forEach((id) => ids.add(id));
-  if (project.leaderId) ids.add(project.leaderId);
-  const list = allUsers.filter((u) => ids.has(u.id));
-  return list.length ? list : allUsers;
-}
-
-function resolvePhase(phases, raw) {
-  if (raw == null || raw === '') return null;
-  return (phases || []).find((p) => String(p.id) === String(raw)) || null;
-}
-
-function MemberSelectFieldCell({ value, onChange, disabled, project, users = [] }) {
-  const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState({ top: 0, left: 0, width: 0 });
-  const ref = useRef(null);
-  const btnRef = useRef(null);
-  const memberUsers = useMemo(() => getProjectMemberUsers(project, users), [project, users]);
-  const selected = memberUsers.find((u) => u.id === value || String(u.id) === String(value));
-
-  useEffect(() => {
-    const handler = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
-
-  const toggle = (e) => {
-    e.stopPropagation();
-    if (disabled) return;
-    if (!open && btnRef.current) {
-      const rect = btnRef.current.getBoundingClientRect();
-      setPos({ top: rect.bottom + 4, left: rect.left, width: Math.max(rect.width, 200) });
-    }
-    setOpen((o) => !o);
-  };
-
-  return (
-    <div ref={ref} style={{ position: 'relative', width: '100%' }}>
-      <button
-        ref={btnRef}
-        type="button"
-        disabled={disabled}
-        onClick={toggle}
-        style={{
-          width: '100%',
-          boxSizing: 'border-box',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          padding: '5px 10px',
-          fontFamily: DESIGN_TOKENS.typography.fontFamily,
-          fontSize: DESIGN_TOKENS.typography.size.xs,
-          fontWeight: DESIGN_TOKENS.typography.weight.medium,
-          color: DESIGN_TOKENS.neutral[800],
-          background: DESIGN_TOKENS.neutral[50],
-          border: `1px solid ${DESIGN_TOKENS.border.color.normal}`,
-          borderRadius: DESIGN_TOKENS.border.radius.xs,
-          cursor: disabled ? 'not-allowed' : 'pointer',
-          opacity: disabled ? 0.7 : 1,
-          textAlign: 'left',
-        }}
-      >
-        {selected ? (
-          <>
-            <div
-              style={{
-                width: 22,
-                height: 22,
-                borderRadius: '50%',
-                background: DESIGN_TOKENS.primary.base,
-                color: 'white',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: 9,
-                fontWeight: 700,
-                flexShrink: 0,
-              }}
-            >
-              {userInitials(selected)}
-            </div>
-            <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {selected.name || selected.email}
-            </span>
-          </>
-        ) : (
-          <span style={{ flex: 1, color: DESIGN_TOKENS.neutral[500] }}>—</span>
-        )}
-        <span style={{ fontSize: 9, opacity: 0.45, flexShrink: 0 }}>▾</span>
-      </button>
-      {open && !disabled && (
-        <div
-          style={{
-            position: 'fixed',
-            top: pos.top,
-            left: pos.left,
-            zIndex: 10001,
-            minWidth: pos.width,
-            maxHeight: 240,
-            overflowY: 'auto',
-            background: 'white',
-            border: `1px solid ${DESIGN_TOKENS.border.color.subtle}`,
-            borderRadius: DESIGN_TOKENS.border.radius.sm,
-            boxShadow: DESIGN_TOKENS.shadows.lg,
-            padding: 4,
-          }}
-        >
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onChange(null);
-              setOpen(false);
-            }}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              width: '100%',
-              padding: '8px 10px',
-              border: 'none',
-              borderRadius: 4,
-              background: !value ? DESIGN_TOKENS.primary.lightest : 'transparent',
-              cursor: 'pointer',
-              fontSize: DESIGN_TOKENS.typography.size.xs,
-              color: DESIGN_TOKENS.neutral[500],
-              fontFamily: DESIGN_TOKENS.typography.fontFamily,
-            }}
-          >
-            —
-          </button>
-          {memberUsers.map((u) => {
-            const active = value === u.id || String(value) === String(u.id);
-            return (
-              <button
-                key={u.id}
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onChange(u.id);
-                  setOpen(false);
-                }}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 10,
-                  width: '100%',
-                  padding: '8px 10px',
-                  border: 'none',
-                  borderRadius: 4,
-                  background: active ? DESIGN_TOKENS.primary.lightest : 'transparent',
-                  cursor: 'pointer',
-                  fontFamily: DESIGN_TOKENS.typography.fontFamily,
-                }}
-              >
-                <div
-                  style={{
-                    width: 26,
-                    height: 26,
-                    borderRadius: '50%',
-                    background: DESIGN_TOKENS.primary.base,
-                    color: 'white',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: 10,
-                    fontWeight: 700,
-                    flexShrink: 0,
-                  }}
-                >
-                  {userInitials(u)}
-                </div>
-                <span
-                  style={{
-                    fontSize: DESIGN_TOKENS.typography.size.xs,
-                    color: DESIGN_TOKENS.neutral[800],
-                    fontWeight: active ? DESIGN_TOKENS.typography.weight.semibold : DESIGN_TOKENS.typography.weight.normal,
-                    textAlign: 'left',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {u.name || u.email}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** Mismos estilos de chip que PhaseCard en ProjectRoadmap (color + icono). */
-function RoadmapSyncFieldCell({ value, onChange, disabled, taskProject }) {
-  const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState({ top: 0, left: 0, width: 0 });
-  const ref = useRef(null);
-  const btnRef = useRef(null);
-  const phases = taskProject?.roadmap?.phases || [];
-  const selected = resolvePhase(phases, value);
-  const color = selected?.color || DESIGN_TOKENS.primary.base;
-
-  useEffect(() => {
-    const handler = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
-
-  const toggle = (e) => {
-    e.stopPropagation();
-    if (disabled) return;
-    if (!open && btnRef.current) {
-      const rect = btnRef.current.getBoundingClientRect();
-      setPos({ top: rect.bottom + 4, left: rect.left, width: Math.max(rect.width, 200) });
-    }
-    setOpen((o) => !o);
-  };
-
-  const chipIcon = (phase, size = 22) => (
-    <div
-      style={{
-        width: size,
-        height: size,
-        borderRadius: 6,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontSize: size > 22 ? 14 : 12,
-        flexShrink: 0,
-        background: `${(phase?.color || color)}18`,
-        border: `1.5px solid ${(phase?.color || color)}44`,
-      }}
-    >
-      {phase?.icon || '📋'}
-    </div>
-  );
-
-  return (
-    <div ref={ref} style={{ position: 'relative', width: '100%' }}>
-      <button
-        ref={btnRef}
-        type="button"
-        disabled={disabled}
-        onClick={toggle}
-        style={{
-          width: '100%',
-          boxSizing: 'border-box',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          padding: '5px 10px',
-          fontFamily: DESIGN_TOKENS.typography.fontFamily,
-          fontSize: DESIGN_TOKENS.typography.size.xs,
-          fontWeight: DESIGN_TOKENS.typography.weight.medium,
-          color: DESIGN_TOKENS.neutral[800],
-          background: selected ? `${color}14` : DESIGN_TOKENS.neutral[50],
-          border: `1px solid ${selected ? `${color}55` : DESIGN_TOKENS.border.color.normal}`,
-          borderRadius: DESIGN_TOKENS.border.radius.xs,
-          cursor: disabled ? 'not-allowed' : 'pointer',
-          opacity: disabled ? 0.7 : 1,
-          textAlign: 'left',
-        }}
-      >
-        {selected ? (
-          <>
-            {chipIcon(selected, 22)}
-            <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {selected.name || 'Sin nombre'}
-            </span>
-          </>
-        ) : (
-          <span style={{ flex: 1, color: DESIGN_TOKENS.neutral[500] }}>—</span>
-        )}
-        <span style={{ fontSize: 9, opacity: 0.45, flexShrink: 0 }}>▾</span>
-      </button>
-      {open && !disabled && (
-        <div
-          style={{
-            position: 'fixed',
-            top: pos.top,
-            left: pos.left,
-            zIndex: 10001,
-            minWidth: pos.width,
-            maxHeight: 260,
-            overflowY: 'auto',
-            background: 'white',
-            border: `1px solid ${DESIGN_TOKENS.border.color.subtle}`,
-            borderRadius: DESIGN_TOKENS.border.radius.sm,
-            boxShadow: DESIGN_TOKENS.shadows.lg,
-            padding: 4,
-          }}
-        >
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onChange(null);
-              setOpen(false);
-            }}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              width: '100%',
-              padding: '8px 10px',
-              border: 'none',
-              borderRadius: 4,
-              background: value == null || value === '' ? DESIGN_TOKENS.primary.lightest : 'transparent',
-              cursor: 'pointer',
-              fontSize: DESIGN_TOKENS.typography.size.xs,
-              color: DESIGN_TOKENS.neutral[500],
-              fontFamily: DESIGN_TOKENS.typography.fontFamily,
-            }}
-          >
-            —
-          </button>
-          {phases.map((phase) => {
-            const active = String(value) === String(phase.id);
-            const c = phase.color || DESIGN_TOKENS.primary.base;
-            return (
-              <button
-                key={phase.id}
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onChange(phase.id);
-                  setOpen(false);
-                }}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 10,
-                  width: '100%',
-                  padding: '8px 10px',
-                  border: 'none',
-                  borderRadius: 4,
-                  background: active ? `${c}18` : 'transparent',
-                  cursor: 'pointer',
-                  fontFamily: DESIGN_TOKENS.typography.fontFamily,
-                }}
-              >
-                {chipIcon(phase, 26)}
-                <span
-                  style={{
-                    fontSize: DESIGN_TOKENS.typography.size.xs,
-                    color: DESIGN_TOKENS.neutral[800],
-                    fontWeight: active ? DESIGN_TOKENS.typography.weight.semibold : DESIGN_TOKENS.typography.weight.normal,
-                    textAlign: 'left',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {phase.name || 'Sin nombre'}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function resolveSelectOption(definition, raw) {
-  const opts = definition.options || [];
-  if (raw == null || raw === '') return null;
-  let o = opts.find((x) => x.id === raw);
-  if (!o) o = opts.find((x) => x.label === raw);
-  return o || null;
-}
-
-function SelectFieldCell({ definition, value, onChange, disabled }) {
-  const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState({ top: 0, left: 0, width: 0 });
-  const ref = useRef(null);
-  const btnRef = useRef(null);
-  const options = definition.options || [];
-  const selected = resolveSelectOption(definition, value);
-
-  useEffect(() => {
-    const handler = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
-
-  const toggle = (e) => {
-    e.stopPropagation();
-    if (disabled) return;
-    if (!open && btnRef.current) {
-      const rect = btnRef.current.getBoundingClientRect();
-      setPos({ top: rect.bottom + 4, left: rect.left, width: Math.max(rect.width, 160) });
-    }
-    setOpen((o) => !o);
-  };
-
-  const bg = selected?.color ? `${selected.color}22` : DESIGN_TOKENS.neutral[50];
-  const borderCol = selected?.color ? `${selected.color}66` : DESIGN_TOKENS.border.color.normal;
-  const textCol = selected?.color ? DESIGN_TOKENS.neutral[800] : DESIGN_TOKENS.neutral[600];
-
-  return (
-    <div ref={ref} style={{ position: 'relative', width: '100%' }}>
-      <button
-        ref={btnRef}
-        type="button"
-        disabled={disabled}
-        onClick={toggle}
-        style={{
-          width: '100%',
-          boxSizing: 'border-box',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          padding: '5px 10px',
-          fontFamily: DESIGN_TOKENS.typography.fontFamily,
-          fontSize: DESIGN_TOKENS.typography.size.xs,
-          fontWeight: DESIGN_TOKENS.typography.weight.medium,
-          color: textCol,
-          background: bg,
-          border: `1px solid ${borderCol}`,
-          borderRadius: DESIGN_TOKENS.border.radius.xs,
-          cursor: disabled ? 'not-allowed' : 'pointer',
-          opacity: disabled ? 0.7 : 1,
-          textAlign: 'left',
-        }}
-      >
-        {selected?.color && (
-          <span
-            style={{
-              width: 8,
-              height: 8,
-              borderRadius: '50%',
-              background: selected.color,
-              flexShrink: 0,
-              boxShadow: `0 0 0 1px ${DESIGN_TOKENS.border.color.subtle}`,
-            }}
-          />
-        )}
-        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {selected?.label || '—'}
-        </span>
-        <span style={{ fontSize: 9, opacity: 0.45, flexShrink: 0 }}>▾</span>
-      </button>
-      {open && !disabled && (
-        <div
-          style={{
-            position: 'fixed',
-            top: pos.top,
-            left: pos.left,
-            zIndex: 10001,
-            minWidth: pos.width,
-            maxHeight: 220,
-            overflowY: 'auto',
-            background: 'white',
-            border: `1px solid ${DESIGN_TOKENS.border.color.subtle}`,
-            borderRadius: DESIGN_TOKENS.border.radius.sm,
-            boxShadow: DESIGN_TOKENS.shadows.lg,
-            padding: 4,
-          }}
-        >
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onChange(null);
-              setOpen(false);
-            }}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              width: '100%',
-              padding: '8px 10px',
-              border: 'none',
-              borderRadius: 4,
-              background: value == null || value === '' ? DESIGN_TOKENS.primary.lightest : 'transparent',
-              cursor: 'pointer',
-              fontSize: DESIGN_TOKENS.typography.size.xs,
-              color: DESIGN_TOKENS.neutral[500],
-              fontFamily: DESIGN_TOKENS.typography.fontFamily,
-            }}
-          >
-            —
-          </button>
-          {options.map((opt) => {
-            const active = value === opt.id || value === opt.label;
-            return (
-              <button
-                key={opt.id}
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onChange(opt.id);
-                  setOpen(false);
-                }}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  width: '100%',
-                  padding: '8px 10px',
-                  border: 'none',
-                  borderRadius: 4,
-                  background: active ? `${opt.color || DESIGN_TOKENS.primary.base}18` : 'transparent',
-                  cursor: 'pointer',
-                  fontSize: DESIGN_TOKENS.typography.size.xs,
-                  color: DESIGN_TOKENS.neutral[800],
-                  fontFamily: DESIGN_TOKENS.typography.fontFamily,
-                  fontWeight: active ? DESIGN_TOKENS.typography.weight.semibold : DESIGN_TOKENS.typography.weight.normal,
-                }}
-              >
-                {opt.color && (
-                  <span
-                    style={{
-                      width: 8,
-                      height: 8,
-                      borderRadius: '50%',
-                      background: opt.color,
-                      flexShrink: 0,
-                    }}
-                  />
-                )}
-                <span style={{ textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis' }}>{opt.label}</span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/**
- * Celda editable para custom_fields (JSONB por tarea).
- * `definition`: { id, name, type | field_type, options?, is_preset?, preset_type? }
- * `taskProject`: proyecto de la tarea (miembros + roadmap.phases para presets).
- */
-export default function CustomFieldCell({
-  definition,
+function CustomFieldCell({
+  field,
   value,
   onChange,
-  disabled = false,
+  onSave,
   users = [],
-  taskProject = null,
+  project = null,
+  roadmapPhases = [],
+  currentUser = null,
+  environmentId = null,
+  canEditDates = false,
 }) {
-  const type = definition?.type || definition?.field_type || 'text';
+  const originalValueRef = useRef(value);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
 
-  const baseStyle = {
-    width: '100%',
-    boxSizing: 'border-box',
-    fontFamily: DESIGN_TOKENS.typography.fontFamily,
-    fontSize: DESIGN_TOKENS.typography.size.xs,
-    color: DESIGN_TOKENS.neutral[800],
-    border: `1px solid ${DESIGN_TOKENS.border.color.normal}`,
-    borderRadius: DESIGN_TOKENS.border.radius.xs,
-    padding: '5px 8px',
-    background: disabled ? DESIGN_TOKENS.neutral[50] : 'white',
-    outline: 'none',
+  const handleBlur = (e) => {
+    if (onSave && originalValueRef.current !== e.target.value) {
+      onSave(e.target.value);
+      originalValueRef.current = e.target.value;
+    }
   };
 
-  if (type === 'member_select') {
+  const inputStyle = {
+    width: '100%',
+    padding: '6px 10px',
+    border: '1px solid #e5e7eb',
+    borderRadius: '6px',
+    fontSize: '13px',
+    outline: 'none',
+    transition: 'all 0.2s',
+    boxSizing: 'border-box',
+  };
+
+  const safeValue = value ?? '';
+
+  // ========================================================================
+  // TIPO: select (con colores)
+  // ========================================================================
+  if (field.type === 'select' && field.options && Array.isArray(field.options)) {
+    const selectedOption = field.options.find(
+      (opt) => opt.id === safeValue || opt.label === safeValue
+    );
+
     return (
-      <MemberSelectFieldCell
-        value={value}
-        onChange={onChange}
-        disabled={disabled}
-        project={taskProject}
-        users={users}
+      <div style={{ position: 'relative' }}>
+        <button
+          onClick={() => setDropdownOpen(!dropdownOpen)}
+          style={{
+            ...inputStyle,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            cursor: 'pointer',
+            background: selectedOption
+              ? selectedOption.color + '15'
+              : '#fff',
+            border: `1px solid ${selectedOption ? selectedOption.color : '#e5e7eb'}`,
+            color: selectedOption ? selectedOption.color : '#6b7280',
+            fontWeight: selectedOption ? 500 : 400,
+          }}
+        >
+          {selectedOption && (
+            <span
+              style={{
+                width: '10px',
+                height: '10px',
+                borderRadius: '50%',
+                background: selectedOption.color,
+                flexShrink: 0,
+              }}
+            />
+          )}
+          <span style={{ flex: 1, textAlign: 'left' }}>
+            {selectedOption?.label || 'Seleccionar...'}
+          </span>
+          <ChevronDown size={14} />
+        </button>
+
+        {dropdownOpen && (
+          <div
+            style={{
+              position: 'absolute',
+              top: '100%',
+              left: 0,
+              right: 0,
+              marginTop: '4px',
+              background: 'white',
+              border: '1px solid #e5e7eb',
+              borderRadius: '6px',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+              zIndex: 1000,
+              minWidth: '160px',
+            }}
+          >
+            {field.options.map((option) => (
+              <button
+                key={option.id}
+                onClick={() => {
+                  onChange(option.id || option.label);
+                  onSave?.(option.id || option.label);
+                  setDropdownOpen(false);
+                }}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  border: 'none',
+                  background:
+                    option.id === safeValue || option.label === safeValue
+                      ? option.color + '20'
+                      : 'transparent',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  fontSize: '13px',
+                  color: option.color,
+                  fontWeight:
+                    option.id === safeValue || option.label === safeValue
+                      ? 600
+                      : 400,
+                }}
+                onMouseEnter={(e) => {
+                  if (option.id !== safeValue && option.label !== safeValue) {
+                    e.currentTarget.style.background = '#f3f4f6';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background =
+                    option.id === safeValue || option.label === safeValue
+                      ? option.color + '20'
+                      : 'transparent';
+                }}
+              >
+                <span
+                  style={{
+                    width: '8px',
+                    height: '8px',
+                    borderRadius: '50%',
+                    background: option.color,
+                  }}
+                />
+                {option.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ========================================================================
+  // TIPO: member_select (selector de miembros del equipo, SOLO DEL PROYECTO)
+  // ========================================================================
+  if (field.type === 'member_select') {
+    // project.members almacena UUIDs → resolver contra el array users (objetos completos).
+    // Si no hay members configurados en el proyecto, mostramos todos los del entorno.
+    const memberIds = project?.members ?? [];
+    const projectMembers = memberIds.length > 0
+      ? memberIds.map(id => users.find(u => u.id === id)).filter(Boolean)
+      : users;
+
+    const selectedMember = projectMembers.find((m) => m.id === safeValue);
+
+    return (
+      <div style={{ position: 'relative' }}>
+        <button
+          onClick={() => setDropdownOpen(!dropdownOpen)}
+          style={{
+            ...inputStyle,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            cursor: 'pointer',
+            background: '#fff',
+          }}
+        >
+          {selectedMember && (
+            <>
+              {typeof selectedMember.avatar === 'string' && (selectedMember.avatar.startsWith('http') || selectedMember.avatar.startsWith('data:')) ? (
+                <img src={selectedMember.avatar} alt="" style={{ width: 20, height: 20, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+              ) : (
+                <span style={{ fontSize: '14px' }}>{selectedMember.avatar || '👤'}</span>
+              )}
+              <span style={{ flex: 1, textAlign: 'left', fontSize: '12px' }}>
+                {selectedMember.name || selectedMember.email}
+              </span>
+            </>
+          )}
+          {!selectedMember && (
+            <span style={{ color: '#9ca3af' }}>Asignar...</span>
+          )}
+          <ChevronDown size={14} />
+        </button>
+
+        {dropdownOpen && (
+          <div
+            style={{
+              position: 'absolute',
+              top: '100%',
+              left: 0,
+              right: 0,
+              marginTop: '4px',
+              background: 'white',
+              border: '1px solid #e5e7eb',
+              borderRadius: '6px',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+              zIndex: 1000,
+              maxHeight: '200px',
+              overflowY: 'auto',
+            }}
+          >
+            <button
+              onClick={() => {
+                onChange(null);
+                onSave?.(null);
+                setDropdownOpen(false);
+              }}
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                border: 'none',
+                background: !safeValue ? '#e3f2fd' : 'transparent',
+                cursor: 'pointer',
+                textAlign: 'left',
+                fontSize: '12px',
+                color: '#6b7280',
+              }}
+            >
+              — Sin asignar
+            </button>
+
+            {projectMembers.map((member) => (
+              <button
+                key={member.id}
+                onClick={() => {
+                  onChange(member.id);
+                  onSave?.(member.id);
+                  setDropdownOpen(false);
+                }}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  border: 'none',
+                  background:
+                    member.id === safeValue ? '#e3f2fd' : 'transparent',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  fontSize: '12px',
+                }}
+              >
+                {typeof member.avatar === 'string' && (member.avatar.startsWith('http') || member.avatar.startsWith('data:')) ? (
+                  <img src={member.avatar} alt="" style={{ width: 20, height: 20, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+                ) : (
+                  <span style={{ fontSize: '14px' }}>{member.avatar || '👤'}</span>
+                )}
+                {member.name || member.email}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ========================================================================
+  // TIPO: roadmap_sync (sincronizado con roadmap)
+  // ========================================================================
+  if (field.type === 'roadmap_sync' && roadmapPhases) {
+    const selectedPhase = roadmapPhases.find((p) => p.id === safeValue);
+
+    return (
+      <div style={{ position: 'relative' }}>
+        <button
+          onClick={() => setDropdownOpen(!dropdownOpen)}
+          style={{
+            ...inputStyle,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            cursor: 'pointer',
+            background: selectedPhase
+              ? selectedPhase.color + '15'
+              : '#fff',
+            border: `1px solid ${selectedPhase ? selectedPhase.color : '#e5e7eb'}`,
+            color: selectedPhase ? selectedPhase.color : '#6b7280',
+            fontWeight: selectedPhase ? 500 : 400,
+          }}
+        >
+          {selectedPhase && (
+            <span
+              style={{
+                width: '8px',
+                height: '8px',
+                borderRadius: '50%',
+                background: selectedPhase.color,
+              }}
+            />
+          )}
+          <span style={{ flex: 1, textAlign: 'left' }}>
+            {selectedPhase?.name || 'Seleccionar fase...'}
+          </span>
+          <ChevronDown size={14} />
+        </button>
+
+        {dropdownOpen && (
+          <div
+            style={{
+              position: 'absolute',
+              top: '100%',
+              left: 0,
+              right: 0,
+              marginTop: '4px',
+              background: 'white',
+              border: '1px solid #e5e7eb',
+              borderRadius: '6px',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+              zIndex: 1000,
+            }}
+          >
+            {roadmapPhases.map((phase) => (
+              <button
+                key={phase.id}
+                onClick={() => {
+                  onChange(phase.id);
+                  onSave?.(phase.id);
+                  setDropdownOpen(false);
+                }}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  border: 'none',
+                  background:
+                    phase.id === safeValue ? phase.color + '20' : 'transparent',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  fontSize: '12px',
+                  color: phase.color,
+                }}
+              >
+                <span
+                  style={{
+                    width: '8px',
+                    height: '8px',
+                    borderRadius: '50%',
+                    background: phase.color,
+                  }}
+                />
+                {phase.name}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ========================================================================
+  // TIPO: text
+  // ========================================================================
+  if (field.type === 'text') {
+    return (
+      <input
+        type="text"
+        value={safeValue}
+        onChange={(e) => onChange(e.target.value)}
+        onFocus={() => {
+          originalValueRef.current = safeValue;
+        }}
+        onBlur={handleBlur}
+        placeholder={`Escribir ${field.name?.toLowerCase() || 'texto'}...`}
+        style={inputStyle}
+        className="custom-field-input"
       />
     );
   }
 
-  if (type === 'roadmap_sync') {
+  // ========================================================================
+  // TIPO: number
+  // ========================================================================
+  if (field.type === 'number') {
     return (
-      <RoadmapSyncFieldCell
-        value={value}
-        onChange={onChange}
-        disabled={disabled}
-        taskProject={taskProject}
+      <input
+        type="number"
+        value={safeValue}
+        onChange={(e) => {
+          const val = e.target.value;
+          onChange(val === '' ? null : Number(val));
+        }}
+        onFocus={() => {
+          originalValueRef.current = safeValue;
+        }}
+        onBlur={handleBlur}
+        placeholder="0"
+        style={inputStyle}
       />
     );
   }
 
-  if (type === 'select') {
+  // ========================================================================
+  // TIPO: date (BLOQUEADO si no es admin/owner del entorno)
+  // ========================================================================
+  if (field.type === 'date') {
+    if (!canEditDates) {
+      // Mostrar como read-only con candado
+      return (
+        <div
+          style={{
+            ...inputStyle,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            background: '#f9fafb',
+            cursor: 'not-allowed',
+            color: '#9ca3af',
+          }}
+        >
+          <span style={{ flex: 1 }}>{safeValue || '—'}</span>
+          <Lock size={14} color="#d1d5db" />
+        </div>
+      );
+    }
+
     return (
-      <SelectFieldCell
-        definition={definition}
-        value={value}
-        onChange={onChange}
-        disabled={disabled}
+      <input
+        type="date"
+        value={safeValue}
+        onChange={(e) => {
+          onChange(e.target.value);
+          onSave?.(e.target.value);
+        }}
+        style={inputStyle}
+        title="Solo Admin/Owner del entorno puede editar fechas"
       />
     );
   }
 
-  if (type === 'checkbox') {
+  // ========================================================================
+  // TIPO: checkbox
+  // ========================================================================
+  if (field.type === 'checkbox') {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start' }}>
+      <div style={{ textAlign: 'center' }}>
         <input
           type="checkbox"
-          disabled={disabled}
-          checked={!!value}
-          onChange={(e) => onChange(e.target.checked)}
-          style={{
-            width: 18,
-            height: 18,
-            cursor: disabled ? 'not-allowed' : 'pointer',
-            accentColor: DESIGN_TOKENS.primary.base,
+          checked={Boolean(value)}
+          onChange={(e) => {
+            onChange(e.target.checked);
+            onSave?.(e.target.checked);
           }}
+          style={{ width: '18px', height: '18px', cursor: 'pointer' }}
         />
       </div>
     );
   }
 
-  if (type === 'url') {
+  // ========================================================================
+  // TIPO: url
+  // ========================================================================
+  if (field.type === 'url') {
     return (
       <input
         type="url"
-        disabled={disabled}
-        value={value ?? ''}
-        onChange={(e) => onChange(e.target.value || null)}
-        style={baseStyle}
-        placeholder="https://"
-      />
-    );
-  }
-
-  if (type === 'number') {
-    return (
-      <input
-        type="number"
-        disabled={disabled}
-        value={value === null || value === undefined ? '' : value}
-        onChange={(e) => {
-          const v = e.target.value;
-          onChange(v === '' ? null : Number(v));
+        value={safeValue}
+        onChange={(e) => onChange(e.target.value)}
+        onFocus={() => {
+          originalValueRef.current = safeValue;
         }}
-        style={baseStyle}
+        onBlur={handleBlur}
+        placeholder="https://..."
+        style={{
+          ...inputStyle,
+          color: safeValue ? '#2563eb' : '#6b7280',
+        }}
       />
     );
   }
 
-  if (type === 'date') {
-    return (
-      <input
-        type="date"
-        disabled={disabled}
-        value={value ?? ''}
-        onChange={(e) => onChange(e.target.value || null)}
-        style={baseStyle}
-      />
-    );
-  }
-
+  // ========================================================================
+  // DEFAULT: tipo no soportado
+  // ========================================================================
   return (
-    <input
-      type="text"
-      disabled={disabled}
-      value={value ?? ''}
-      onChange={(e) => onChange(e.target.value)}
-      style={baseStyle}
-      placeholder="—"
-    />
+    <span style={{ color: '#9ca3af', fontSize: '12px' }}>
+      Tipo no soportado: {field.type}
+    </span>
   );
 }
+
+export default CustomFieldCell;

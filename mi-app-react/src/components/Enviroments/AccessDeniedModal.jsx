@@ -44,8 +44,8 @@ const AccessDeniedModal = ({ isOpen, onClose, environmentName }) => {
 
         <p style={{ margin: '0 0 1.5rem', fontSize: '0.875rem', color: '#64748b', lineHeight: 1.6 }}>
           {environmentName
-            ? <>El entorno <strong>"{environmentName}"</strong> es privado.</>
-            : 'Este entorno es privado.'
+            ? <>El equipo <strong>"{environmentName}"</strong> es privado.</>
+            : 'Este equipo es privado.'
           }{' '}
           Contacta al administrador para solicitar acceso.
         </p>

@@ -14,6 +14,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
 // Anulamos el lock con una función no-op para evitar el bloqueo.
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
+    flowType: 'pkce',
     lock: async (_name, _acquireTimeout, fn) => fn(),
   }
 })

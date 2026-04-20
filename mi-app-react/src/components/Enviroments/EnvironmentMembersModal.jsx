@@ -48,7 +48,7 @@ function Avatar({ user, size = 36 }) {
 // ============================================================================
 
 const EnvironmentMembersModal = ({ isOpen, onClose }) => {
-  const { currentEnvironment, currentUser, getUserRoleInEnv } = useApp();
+  const { currentEnvironment, currentUser, getUserRoleInEnv, canManageMembers } = useApp();
   const [activeTab, setActiveTab] = useState('members');
 
   // — Tab Miembros —
@@ -67,6 +67,8 @@ const EnvironmentMembersModal = ({ isOpen, onClose }) => {
   const envId = currentEnvironment?.id;
   const myRole = getUserRoleInEnv(envId);
   const isOwner = myRole === 'owner';
+  // canManage: owner, admin (env) o super_admin del sistema
+  const canManage = canManageMembers(envId);
 
   // Cargar miembros al abrir
   useEffect(() => {
@@ -100,6 +102,7 @@ const EnvironmentMembersModal = ({ isOpen, onClose }) => {
   };
 
   const handleRemoveMember = async (userId, userName) => {
+    if (!canManage) { alert('No tienes permisos para eliminar miembros de este entorno.'); return; }
     if (!window.confirm(`¿Eliminar a "${userName}" del entorno?`)) return;
     try {
       await dbEnvironmentMembers.remove(envId, userId);
@@ -110,6 +113,7 @@ const EnvironmentMembersModal = ({ isOpen, onClose }) => {
   };
 
   const handleChangeRole = async (userId, newRole) => {
+    if (!canManage) { alert('No tienes permisos para cambiar roles en este entorno.'); return; }
     try {
       await dbEnvironmentMembers.updateRole(envId, userId, newRole);
       setMembers(prev => prev.map(m =>
@@ -124,6 +128,10 @@ const EnvironmentMembersModal = ({ isOpen, onClose }) => {
     e.preventDefault();
     setInviteError('');
     setInviteSuccess('');
+    if (!canManage) {
+      setInviteError('No tienes permisos para invitar miembros a este equipo. Solo el propietario o administrador del equipo pueden hacerlo.');
+      return;
+    }
     if (!selectedUserId) { setInviteError('Selecciona un usuario.'); return; }
     setInviting(true);
     try {
@@ -132,9 +140,12 @@ const EnvironmentMembersModal = ({ isOpen, onClose }) => {
       setSelectedUserId('');
       loadMembers();
     } catch (e) {
-      setInviteError(e.message.includes('duplicate') || e.message.includes('unique')
-        ? 'Este usuario ya es miembro del entorno.'
-        : 'Error al invitar: ' + e.message
+      setInviteError(
+        e.message.includes('duplicate') || e.message.includes('unique')
+          ? 'Este usuario ya es miembro del entorno.'
+          : e.message.includes('row-level security') || e.message.includes('policy')
+          ? 'No tienes permiso para invitar miembros. Solo el propietario o administrador del equipo pueden hacerlo.'
+          : 'Ocurrió un error al invitar al usuario. Intenta de nuevo.'
       );
     } finally {
       setInviting(false);
@@ -205,7 +216,7 @@ const EnvironmentMembersModal = ({ isOpen, onClose }) => {
         <div style={{ display: 'flex', borderBottom: '1px solid #e8ecf0', padding: '0 1.5rem' }}>
           {[
             { id: 'members', icon: <Users size={15} />, label: `Miembros (${members.length})` },
-            { id: 'invite',  icon: <UserPlus size={15} />, label: 'Invitar' },
+            ...(canManage ? [{ id: 'invite', icon: <UserPlus size={15} />, label: 'Invitar' }] : []),
           ].map(tab => (
             <button
               key={tab.id}
@@ -238,7 +249,7 @@ const EnvironmentMembersModal = ({ isOpen, onClose }) => {
                 </div>
               ) : members.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8', fontSize: '0.875rem' }}>
-                  No hay miembros en este entorno.
+                  No hay miembros en este equipo.
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -268,7 +279,7 @@ const EnvironmentMembersModal = ({ isOpen, onClose }) => {
                         </div>
 
                         {/* Role selector / badge */}
-                        {isOwner && !isThisOwner && !isMe ? (
+                        {canManage && !isThisOwner && !isMe ? (
                           <select
                             value={member.role}
                             onChange={e => handleChangeRole(member.user_id, e.target.value)}
@@ -288,7 +299,7 @@ const EnvironmentMembersModal = ({ isOpen, onClose }) => {
                         )}
 
                         {/* Botón eliminar */}
-                        {isOwner && !isThisOwner && !isMe && (
+                        {canManage && !isThisOwner && !isMe && (
                           <button
                             onClick={() => handleRemoveMember(member.user_id, user.name || user.email)}
                             style={{

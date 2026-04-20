@@ -1,13 +1,16 @@
 import React, { useState, useRef, useEffect } from 'react';
 import ConfirmModal from './ConfirmModal';
+import HistoryModal from './HistoryModal';
 import { ColumnMenu } from './shared/ColumnMenu';
+import CustomFieldsManager from './CustomFields/CustomFieldsManager';
+import CustomFieldCell from './CustomFields/CustomFieldCell';
 import {
   ChevronRight, Flag, X, GripVertical,
-  MoreVertical, Pencil, Trash2
+  MoreVertical, Pencil, Trash2, Plus, Clock
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { DESIGN_TOKENS } from '../styles/tokens';
-import { dbTasks } from '../lib/database';
+import { dbTasks, hasExpediteActive } from '../lib/database';
 import {
   buildGroups, GroupBySelector, SortSelector, GenericGroup
 } from './shared/GroupBySelector';
@@ -49,9 +52,12 @@ const PRIORITY_OPTIONS = {
 
 const STATUS_OPTIONS = {
   pending:     { label: 'Pendiente',   color: '#FF9800', bg: '#FFF4E5' },
-  in_progress: { label: 'En Progreso', color: '#2196F3', bg: '#E3F2FD' },
+  in_progress: { label: 'En Curso',    color: '#2196F3', bg: '#E3F2FD' },
+  waiting:     { label: 'En Espera',   color: '#0369a1', bg: '#e0f2fe' },
+  paused:      { label: 'En Pausa',    color: '#78909C', bg: '#ECEFF1' },
+  expedite:    { label: 'Expedite',    color: '#FF1744', bg: '#FFEBEE' },
   completed:   { label: 'Completado',  color: '#00D68F', bg: '#E8F5E9' },
-  blocked:     { label: 'Bloqueado',   color: '#DC2626', bg: '#FFEBEE' },
+  blocked:     { label: 'Bloqueado',   color: '#DC2626', bg: '#FFF0F0' },
 };
 
 
@@ -204,7 +210,35 @@ const ArrayPillSelect = ({ value, items, idKey = 'id', labelKey = 'name', colorK
 // ============================================================================
 // SORTABLE TASK ROW
 // ============================================================================
-const SortableTaskRow = ({ task, projects = [], users = [], weeks = [], onUpdate, onDelete, columns = [], visibleColumns = [] }) => {
+
+// CSS global para la animación Expedite (inyectado una sola vez)
+const EXPEDITE_STYLES = `
+  @keyframes expeditePulse {
+    0%   { box-shadow: 0 0 0 0 rgba(255,23,68,0.35), inset 3px 0 0 #FF1744; }
+    50%  { box-shadow: 0 0 0 6px rgba(255,23,68,0.08), inset 3px 0 0 #FF1744; }
+    100% { box-shadow: 0 0 0 0 rgba(255,23,68,0.0),  inset 3px 0 0 #FF1744; }
+  }
+  @keyframes expediteGlow {
+    0%, 100% { background: #fff8f8; }
+    50%       { background: #fff0f0; }
+  }
+`;
+
+const SortableTaskRow = ({
+  task,
+  projects = [],
+  users = [],
+  weeks = [],
+  onUpdate,
+  onDelete,
+  columns = [],
+  visibleColumns = [],
+  currentUser = null,
+  environmentId = null,
+  canEditDates = false,
+  isBlocked = false,
+  isExpedite = false,
+}) => {
   const {
     attributes,
     listeners,
@@ -216,6 +250,7 @@ const SortableTaskRow = ({ task, projects = [], users = [], weeks = [], onUpdate
 
   const [isEditing, setIsEditing] = useState(false);
   const [editedTask, setEditedTask] = useState(task);
+  const [showHistory, setShowHistory] = useState(false);
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -226,6 +261,19 @@ const SortableTaskRow = ({ task, projects = [], users = [], weeks = [], onUpdate
   const priority = PRIORITY_OPTIONS[task.priority] || PRIORITY_OPTIONS.medium;
   const status = STATUS_OPTIONS[task.status] || STATUS_OPTIONS.pending;
   const week = weeks.find(w => w.id === task.weekId);
+
+  // Miembros del proyecto como objetos usuario.
+  // project.members almacena un array de IDs (UUIDs). Lo resolvemos contra
+  // el array `users` (ya filtrado por entorno) que llega como prop.
+  // Si no hay members configurados, mostramos todos los usuarios del entorno.
+  const projectMemberUsers = React.useMemo(() => {
+    const memberIds = project?.members;
+    if (!memberIds?.length) return users;
+    const resolved = memberIds
+      .map(id => users.find(u => u.id === id))
+      .filter(Boolean);
+    return resolved.length > 0 ? resolved : users;
+  }, [project?.members, users]);
 
   const handleSave = () => {
     onUpdate(editedTask);
@@ -245,7 +293,20 @@ const SortableTaskRow = ({ task, projects = [], users = [], weeks = [], onUpdate
   };
 
   return (
-    <div ref={setNodeRef} style={{ ...style, opacity: isDragging ? 0.5 : 1 }}>
+    <div
+      ref={setNodeRef}
+      style={{
+        ...style,
+        opacity: isDragging ? 0.5 : (isBlocked ? 0.38 : 1),
+        pointerEvents: isBlocked ? 'none' : undefined,
+        filter: isBlocked ? 'grayscale(0.5) saturate(0.6)' : undefined,
+        transition: 'opacity 0.25s, filter 0.25s',
+        borderRadius: isExpedite ? '6px' : undefined,
+        animation: isExpedite ? 'expeditePulse 2.4s ease-in-out infinite, expediteGlow 2.4s ease-in-out infinite' : undefined,
+        position: 'relative',
+      }}
+    >
+      <style>{EXPEDITE_STYLES}</style>
       {(() => {
         const visibleCols = columns.filter(c => visibleColumns.includes(c.key));
         const dynGrid = `24px ${visibleCols.map(c => c.width).join(' ')} auto`;
@@ -290,13 +351,33 @@ const SortableTaskRow = ({ task, projects = [], users = [], weeks = [], onUpdate
                 </div>
               );
             case 'estado':
-              return isEditing ? (
-                <PillSelect
-                  value={editedTask.status}
-                  options={STATUS_OPTIONS}
-                  onChange={(v) => setEditedTask({ ...editedTask, status: v })}
-                />
-              ) : (
+              if (isEditing) {
+                return (
+                  <PillSelect
+                    value={editedTask.status}
+                    options={STATUS_OPTIONS}
+                    onChange={(v) => setEditedTask({ ...editedTask, status: v })}
+                  />
+                );
+              }
+              if (isExpedite) {
+                // La tarea Expedite siempre muestra el selector directamente
+                // (sin necesidad de doble-clic) para que el usuario pueda
+                // resolverla y levantar el bloqueo en un solo paso.
+                return (
+                  <PillSelect
+                    value={editedTask.status}
+                    options={STATUS_OPTIONS}
+                    onChange={(v) => {
+                      const next = { ...editedTask, status: v };
+                      setEditedTask(next);
+                      // Auto-guardar inmediatamente: no se requiere "Guardar"
+                      onUpdate(next);
+                    }}
+                  />
+                );
+              }
+              return (
                 <div style={{
                   padding: '4px 10px', background: status.bg, color: status.color,
                   borderRadius: '4px', fontSize: '11px', fontWeight: 600,
@@ -320,17 +401,49 @@ const SortableTaskRow = ({ task, projects = [], users = [], weeks = [], onUpdate
               );
             case 'fecha_inicio':
               return isEditing ? (
-                <input type="date" value={editedTask.startDate || ''}
-                  onChange={(e) => setEditedTask({ ...editedTask, startDate: e.target.value })}
-                  style={dateInputStyle} />
+                canEditDates ? (
+                  <input type="date" value={editedTask.startDate || ''}
+                    onChange={(e) => setEditedTask({ ...editedTask, startDate: e.target.value })}
+                    style={dateInputStyle} />
+                ) : (
+                  <div style={{
+                    ...dateInputStyle,
+                    background: '#f9fafb',
+                    cursor: 'not-allowed',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    color: '#9ca3af',
+                    border: '1px solid #e5e7eb',
+                  }}>
+                    <span>{editedTask.startDate || '—'}</span>
+                    <span style={{ fontSize: '12px', opacity: 0.5 }}>🔒</span>
+                  </div>
+                )
               ) : (
                 <div style={{ color: DESIGN_TOKENS.neutral[600], fontSize: '12px' }}>{task.startDate || '—'}</div>
               );
             case 'fecha_limite':
               return isEditing ? (
-                <input type="date" value={editedTask.endDate || ''}
-                  onChange={(e) => setEditedTask({ ...editedTask, endDate: e.target.value })}
-                  style={dateInputStyle} />
+                canEditDates ? (
+                  <input type="date" value={editedTask.endDate || ''}
+                    onChange={(e) => setEditedTask({ ...editedTask, endDate: e.target.value })}
+                    style={dateInputStyle} />
+                ) : (
+                  <div style={{
+                    ...dateInputStyle,
+                    background: '#f9fafb',
+                    cursor: 'not-allowed',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    color: '#9ca3af',
+                    border: '1px solid #e5e7eb',
+                  }}>
+                    <span>{editedTask.endDate || '—'}</span>
+                    <span style={{ fontSize: '12px', opacity: 0.5 }}>🔒</span>
+                  </div>
+                )
               ) : (
                 <div style={{ color: DESIGN_TOKENS.neutral[600], fontSize: '12px' }}>{task.endDate || '—'}</div>
               );
@@ -348,14 +461,16 @@ const SortableTaskRow = ({ task, projects = [], users = [], weeks = [], onUpdate
             case 'asignado':
               return isEditing ? (
                 <ArrayPillSelect
-                  value={editedTask.assigneeId}
-                  items={users}
+                  value={typeof editedTask.assigneeId === 'object' ? editedTask.assigneeId?.id : editedTask.assigneeId}
+                  items={projectMemberUsers}
+                  idKey="id"
                   labelKey="name"
                   onChange={(id) => setEditedTask({ ...editedTask, assigneeId: id })}
                   placeholder="Asignado"
                 />
               ) : (() => {
-                const assignee = users.find(u => u.id === task.assigneeId);
+                const assigneeId = typeof task.assigneeId === 'object' ? task.assigneeId?.id : task.assigneeId;
+                const assignee = projectMemberUsers.find(u => u.id === assigneeId);
                 if (!assignee) return <div style={{ color: DESIGN_TOKENS.neutral[400], fontSize: '12px' }}>—</div>;
                 const initials = assignee.name
                   ? assignee.name.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase()
@@ -374,8 +489,110 @@ const SortableTaskRow = ({ task, projects = [], users = [], weeks = [], onUpdate
                   </div>
                 );
               })();
-            default:
-              return null;
+            default: {
+              // CAMPOS PERSONALIZADOS — usar customFieldDefinitions (camelCase del mapper JS)
+              const customField = project?.customFieldDefinitions?.find(f => f.id === colKey);
+              if (!customField) return null;
+
+              const fieldValue = editedTask.custom_fields?.[colKey] ?? null;
+              const roadmapPhases = project?.roadmap?.phases?.filter(ph => ph.name) || [];
+
+              // member_select y roadmap_sync son siempre interactivos → CustomFieldCell
+              if (customField.type === 'member_select' || customField.type === 'roadmap_sync') {
+                return (
+                  <CustomFieldCell
+                    field={customField}
+                    value={fieldValue}
+                    onChange={(v) => setEditedTask({
+                      ...editedTask,
+                      custom_fields: { ...editedTask.custom_fields, [colKey]: v },
+                    })}
+                    onSave={(v) => {
+                      const next = { ...editedTask, custom_fields: { ...editedTask.custom_fields, [colKey]: v } };
+                      setEditedTask(next);
+                      onUpdate(next);
+                    }}
+                    users={users}
+                    project={project}
+                    roadmapPhases={roadmapPhases}
+                    canEditDates={canEditDates}
+                  />
+                );
+              }
+
+              const displayValue = fieldValue !== null ? String(fieldValue) : '—';
+              // Opciones disponibles (si es select)
+              const options = customField.options || [];
+              const selectedOption = options.find(o => o.id === fieldValue || o.label === fieldValue);
+
+              if (customField.type === 'select' && isEditing) {
+                return (
+                  <select
+                    value={fieldValue || ''}
+                    onChange={(e) => setEditedTask({
+                      ...editedTask,
+                      custom_fields: { ...editedTask.custom_fields, [colKey]: e.target.value || null }
+                    })}
+                    style={{
+                      ...dateInputStyle,
+                      background: selectedOption ? selectedOption.color + '15' : 'white',
+                      color: selectedOption ? selectedOption.color : '#6b7280',
+                      borderColor: selectedOption ? selectedOption.color : '#e5e7eb',
+                    }}
+                  >
+                    <option value="">—</option>
+                    {options.map(opt => (
+                      <option key={opt.id} value={opt.id}>{opt.label}</option>
+                    ))}
+                  </select>
+                );
+              } else if (customField.type === 'select') {
+                return (
+                  <div style={{
+                    padding: '4px 10px',
+                    background: selectedOption ? selectedOption.color + '20' : DESIGN_TOKENS.neutral[100],
+                    color: selectedOption ? selectedOption.color : DESIGN_TOKENS.neutral[600],
+                    borderRadius: '4px', fontSize: '12px',
+                    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                  }}>
+                    {selectedOption?.label || '—'}
+                  </div>
+                );
+              } else if (customField.type === 'date' && isEditing) {
+                return canEditDates ? (
+                  <input type="date" value={fieldValue || ''}
+                    onChange={(e) => setEditedTask({
+                      ...editedTask,
+                      custom_fields: { ...editedTask.custom_fields, [colKey]: e.target.value || null }
+                    })}
+                    style={dateInputStyle} />
+                ) : (
+                  <div style={{
+                    ...dateInputStyle,
+                    background: '#f9fafb',
+                    cursor: 'not-allowed',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    color: '#9ca3af',
+                  }}>
+                    <span>{displayValue}</span>
+                    <span style={{ fontSize: '12px', opacity: 0.5 }}>🔒</span>
+                  </div>
+                );
+              } else if (isEditing) {
+                return (
+                  <input type="text" value={fieldValue || ''}
+                    onChange={(e) => setEditedTask({
+                      ...editedTask,
+                      custom_fields: { ...editedTask.custom_fields, [colKey]: e.target.value || null }
+                    })}
+                    style={dateInputStyle} />
+                );
+              }
+
+              return <div style={{ color: DESIGN_TOKENS.neutral[600], fontSize: '12px' }}>{displayValue}</div>;
+            }
           }
         };
 
@@ -454,25 +671,58 @@ const SortableTaskRow = ({ task, projects = [], users = [], weeks = [], onUpdate
                 </button>
               </div>
             ) : (
-              <button
-                onClick={() => onDelete(task.id)}
-                style={{
-                  padding: '6px', background: 'transparent', border: 'none',
-                  color: DESIGN_TOKENS.neutral[400], cursor: 'pointer',
-                  borderRadius: '4px', display: 'flex',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = DESIGN_TOKENS.danger.light;
-                  e.currentTarget.style.color = DESIGN_TOKENS.danger.base;
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'transparent';
-                  e.currentTarget.style.color = DESIGN_TOKENS.neutral[400];
-                }}
-              >
-                <Trash2 size={14} />
-              </button>
+              <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                {/* Botón historial */}
+                <button
+                  onClick={(e) => { e.stopPropagation(); setShowHistory(true); }}
+                  title="Ver historial de cambios"
+                  style={{
+                    padding: '6px', background: 'transparent', border: 'none',
+                    color: DESIGN_TOKENS.neutral[400], cursor: 'pointer',
+                    borderRadius: '4px', display: 'flex',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = '#eef2ff';
+                    e.currentTarget.style.color = '#6366f1';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'transparent';
+                    e.currentTarget.style.color = DESIGN_TOKENS.neutral[400];
+                  }}
+                >
+                  <Clock size={14} />
+                </button>
+                {/* Botón eliminar */}
+                <button
+                  onClick={() => onDelete(task.id)}
+                  title="Eliminar tarea"
+                  style={{
+                    padding: '6px', background: 'transparent', border: 'none',
+                    color: DESIGN_TOKENS.neutral[400], cursor: 'pointer',
+                    borderRadius: '4px', display: 'flex',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = DESIGN_TOKENS.danger.light;
+                    e.currentTarget.style.color = DESIGN_TOKENS.danger.base;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'transparent';
+                    e.currentTarget.style.color = DESIGN_TOKENS.neutral[400];
+                  }}
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
             )}
+
+            {/* Modal de historial */}
+            <HistoryModal
+              isOpen={showHistory}
+              onClose={() => setShowHistory(false)}
+              entityType="tasks"
+              entityId={task.id}
+              entityName={task.title}
+            />
           </div>
         );
       })()}
@@ -494,15 +744,14 @@ function ListView({
   onListDelete = () => {},
   onError = () => {},
   hideTitle = false,
+  globalExpediteCheck = null,   // { active, task, tasks } — viene de MainApp (todos los tasks del usuario)
+  onProjectUpdate = () => {},
 }) {
-  const { currentEnvironment, currentWorkspace } = useApp();
+  const { currentEnvironment, currentWorkspace, currentUser, canEditTaskDates, membershipMap } = useApp();
   const [listName, setListName] = useState(initialListName);
   const [isEditingName, setIsEditingName] = useState(false);
   const [showListMenu, setShowListMenu] = useState(false);
   const [weeks, setWeeks] = useState([
-    { id: 1, name: 'SEMANA 9',  weekNumber: 9  },
-    { id: 2, name: 'Semana 10', weekNumber: 10 },
-    { id: 3, name: 'Semana 11', weekNumber: 11 },
   ]);
   const [activeId, setActiveId] = useState(null);
   const [showNewTaskRow, setShowNewTaskRow] = useState(false);
@@ -528,6 +777,8 @@ function ListView({
   const [draggedCol, setDraggedCol] = useState(null);
   const [dragOverCol, setDragOverCol] = useState(null);
   const [colMenu, setColMenu] = useState(null);
+  const [showCreateFieldFlow, setShowCreateFieldFlow] = useState(false);
+  const addFieldBtnRef = useRef(null);
 
   const reorderColumns = (fromKey, toKey) => {
     if (!fromKey || !toKey || fromKey === toKey) return;
@@ -552,6 +803,7 @@ function ListView({
     : projects;
 
   const listTasks = listId != null ? tasks.filter(t => t.listId === listId) : tasks;
+  const currentProject = workspaceProjects.length === 1 ? workspaceProjects[0] : workspaceProjects[0] || {};
 
   const handleDragStart = (event) => setActiveId(event.active.id);
 
@@ -587,12 +839,14 @@ function ListView({
     setNewTaskProjectError(false);
     savingTaskRef.current = true;
     try {
+      // Asegurar que assigneeId sea solo el ID, no el objeto completo
+      const assigneeIdValue = typeof taskData.assigneeId === 'object' ? taskData.assigneeId?.id : taskData.assigneeId;
       const created = await dbTasks.create({
         title: taskData.title,
         status: taskData.status || 'pending',
         priority: taskData.priority || 'medium',
         projectId: taskData.projectId,
-        assigneeId: taskData.assigneeId || null,
+        assigneeId: assigneeIdValue || null,
         startDate: taskData.startDate || null,
         dueDate: taskData.endDate || null,
         listId,
@@ -610,7 +864,7 @@ function ListView({
 
   const handleDeleteTask = async (taskId) => {
     try {
-      await dbTasks.delete(taskId);
+      await dbTasks.delete(taskId, currentUser);
       onTasksChange(tasks.filter(t => t.id !== taskId));
     } catch (err) {
       console.error('[ListView] Error eliminando tarea:', err);
@@ -628,6 +882,16 @@ function ListView({
   };
 
   const activeTask = listTasks.find(t => t.id === activeId);
+
+  // ── EXPEDITE: prioriza el check global (todos los tasks del usuario) sobre
+  //    el check local (solo tareas de esta lista). Si no llega globalExpediteCheck
+  //    desde MainApp, cae al check local como fallback.
+  const expediteCheck = globalExpediteCheck ?? hasExpediteActive(listTasks, currentUser?.id);
+  const hasActiveExpedite = expediteCheck.active;
+  const activeExpediteTask = expediteCheck.task;
+  // ¿La tarea Expedite está en otra lista/proyecto (no en la actual)?
+  const expediteIsExternal = hasActiveExpedite &&
+    !listTasks.some(t => t.id === activeExpediteTask?.id);
 
   return (
     <>
@@ -652,7 +916,7 @@ function ListView({
                 marginBottom: '8px', color: DESIGN_TOKENS.neutral[500],
                 fontSize: DESIGN_TOKENS.typography.size.sm,
               }}>
-                <span>{currentEnvironment?.icon || '📁'} {currentEnvironment?.name || 'Sin entorno'}</span>
+                <span>{currentEnvironment?.icon || '📁'} {currentEnvironment?.name || 'Sin equipo'}</span>
                 {currentWorkspace?.name && (
                   <>
                     <ChevronRight size={14} />
@@ -752,6 +1016,43 @@ function ListView({
           </div>
         </div>
 
+        {/* ── BANNER EXPEDITE ── */}
+        {hasActiveExpedite && (
+          <div style={{
+            margin: '0 32px',
+            marginTop: '16px',
+            padding: '12px 18px',
+            background: 'linear-gradient(90deg, #fff0f0 0%, #fff8f8 100%)',
+            border: '1.5px solid #FF1744',
+            borderLeft: '5px solid #FF1744',
+            borderRadius: '8px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            color: '#B71C1C',
+            fontSize: '13px',
+            fontWeight: 600,
+            boxShadow: '0 2px 8px rgba(255,23,68,0.10)',
+          }}>
+            <span style={{ fontSize: '16px', flexShrink: 0 }}>⚠️</span>
+            <span>
+              {expediteIsExternal ? (
+                <>
+                  <strong>Bloqueado por Expedite en otro proyecto:</strong>{' '}
+                  &ldquo;{activeExpediteTask?.title}&rdquo;.
+                  {' '}Cierra esa urgencia primero para poder operar aquí.
+                </>
+              ) : (
+                <>
+                  <strong>Tarea Expedite en curso:</strong>{' '}
+                  &ldquo;{activeExpediteTask?.title}&rdquo;.
+                  {' '}Las demás tareas están bloqueadas hasta cerrar la urgencia.
+                </>
+              )}
+            </span>
+          </div>
+        )}
+
         {/* CONTENT */}
         <div style={{
           flex: 1,
@@ -811,7 +1112,34 @@ function ListView({
                     <ChevronRight size={9} style={{ transform: 'rotate(90deg)', opacity: 0.5, flexShrink: 0 }} />
                   </div>
                 ))}
-                <div />
+                {/* Botón AGREGAR COLUMNA */}
+                <button
+                  ref={addFieldBtnRef}
+                  onClick={() => setShowCreateFieldFlow(true)}
+                  style={{
+                    padding: '4px 8px',
+                    background: 'transparent',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: DESIGN_TOKENS.neutral[400],
+                    transition: 'all 0.2s',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.color = DESIGN_TOKENS.primary.base;
+                    e.currentTarget.style.background = DESIGN_TOKENS.neutral[100];
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.color = DESIGN_TOKENS.neutral[400];
+                    e.currentTarget.style.background = 'transparent';
+                  }}
+                  title="Agregar columna personalizada"
+                >
+                  <Plus size={16} />
+                </button>
               </div>
             );
           })()}
@@ -855,14 +1183,24 @@ function ListView({
                         weeks={weeks}
                         columns={columns}
                         visibleColumns={visibleColumns}
+                        currentUser={currentUser}
+                        environmentId={currentEnvironment?.id}
+                        canEditDates={canEditTaskDates(
+                          currentEnvironment?.id,
+                          workspaceProjects.find(p => p.id === task.projectId)?.leaderId
+                        )}
+                        isExpedite={task.status === 'expedite'}
+                        isBlocked={hasActiveExpedite && task.status !== 'expedite'}
                         onUpdate={async (updated) => {
                           console.log('[updateTask] campo: assigneeId, valor:', updated.assigneeId);
+                          // Asegurar que assigneeId sea solo el ID, no el objeto completo
+                          const assigneeIdValue = typeof updated.assigneeId === 'object' ? updated.assigneeId?.id : updated.assigneeId;
                           const dbPayload = {
                             title: updated.title,
                             status: updated.status,
                             priority: updated.priority,
                             projectId: updated.projectId || null,
-                            assigneeId: updated.assigneeId || null,
+                            assigneeId: assigneeIdValue || null,
                             startDate: updated.startDate || null,
                             dueDate: updated.endDate || null,
                           };
@@ -871,7 +1209,7 @@ function ListView({
                           const prevTasks = tasks;
                           onTasksChange(tasks.map(t => t.id === updated.id ? updated : t));
                           try {
-                            const result = await dbTasks.update(updated.id, dbPayload);
+                            const result = await dbTasks.update(updated.id, dbPayload, currentUser);
                             console.log('[updateTask] respuesta Supabase:', result);
                           } catch (err) {
                             console.log('[updateTask] error si hay:', err);
@@ -957,33 +1295,67 @@ function ListView({
       </DragOverlay>
     </DndContext>
 
-    {colMenu && (
-      <ColumnMenu
-        col={colMenu.col}
-        x={colMenu.x}
-        y={colMenu.y}
-        columns={columns}
-        setColumns={setColumns}
-        visibleColumns={visibleColumns}
-        setVisibleColumns={setVisibleColumns}
-        onSort={(colKey, dir) => {
-          const sorted = [...listTasks].sort((a, b) => {
-            const va = String(a[colKey] ?? '');
-            const vb = String(b[colKey] ?? '');
-            return dir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
-          });
-          onTasksChange(sorted);
-        }}
-        setGroupBy={setGroupBy}
-        onClose={() => setColMenu(null)}
-      />
-    )}
+    {colMenu && (() => {
+      const STANDARD_COLUMNS = ['nombre', 'proyecto', 'estado', 'prioridad', 'fecha_inicio', 'fecha_limite', 'semana', 'asignado'];
+      const isCustomField = !STANDARD_COLUMNS.includes(colMenu.col.key);
+      const customFieldDef = isCustomField ? currentProject?.customFieldDefinitions?.find(f => f.id === colMenu.col.key) : null;
+
+      return (
+        <ColumnMenu
+          col={colMenu.col}
+          customField={customFieldDef}
+          x={colMenu.x}
+          y={colMenu.y}
+          columns={columns}
+          setColumns={setColumns}
+          visibleColumns={visibleColumns}
+          setVisibleColumns={setVisibleColumns}
+          onSort={(colKey, dir) => {
+            const sorted = [...listTasks].sort((a, b) => {
+              const va = String(a[colKey] ?? '');
+              const vb = String(b[colKey] ?? '');
+              return dir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
+            });
+            onTasksChange(sorted);
+          }}
+          setGroupBy={setGroupBy}
+          onClose={() => setColMenu(null)}
+          onCustomFieldDelete={(field) => {
+            // Eliminar la columna personalizada
+            setColumns(prev => prev.filter(c => c.key !== field.id));
+            setVisibleColumns(prev => prev.filter(k => k !== field.id));
+            setColMenu(null);
+          }}
+        />
+      );
+    })()}
     <ConfirmModal
       isOpen={!!confirmData}
       title={confirmData?.title}
       message={confirmData?.message}
       onConfirm={() => { confirmData?.onConfirm(); setConfirmData(null); }}
       onCancel={() => setConfirmData(null)}
+    />
+
+    {/* Gestor de columnas personalizadas — arrastrable, con sugeridos conectados */}
+    <CustomFieldsManager
+      open={showCreateFieldFlow}
+      onClose={() => setShowCreateFieldFlow(false)}
+      project={currentProject}
+      onSuccess={(updatedProject) => {
+        // updatedProject es el proyecto completo actualizado.
+        // La nueva definición es la última del array.
+        const newDef = updatedProject?.customFieldDefinitions?.slice(-1)[0];
+        if (newDef?.id) {
+          setColumns(prev => [...prev, { key: newDef.id, label: newDef.name, width: '140px' }]);
+          setVisibleColumns(prev => [...prev, newDef.id]);
+        }
+        // Propagar el proyecto actualizado hacia arriba para que MainApp
+        // tenga las definiciones más recientes (necesario para roadmap_sync y member_select)
+        onProjectUpdate(updatedProject);
+        setShowCreateFieldFlow(false);
+      }}
+      anchorRect={addFieldBtnRef.current?.getBoundingClientRect()}
     />
     </>
   );
@@ -1003,6 +1375,17 @@ const NewTaskRow = ({ projects = [], users = [], weeks = [], defaultData = {}, p
     weekId: defaultData.weekId || null,
     assigneeId: null,
   });
+
+  // Miembros disponibles según el proyecto seleccionado.
+  // Si project.members tiene IDs, los resuelve contra `users` (ya filtrados por entorno).
+  // Si no hay proyecto seleccionado o no tiene miembros, muestra todos los del entorno.
+  const availableAssignees = React.useMemo(() => {
+    const project = projects.find(p => p.id === taskData.projectId);
+    const memberIds = project?.members;
+    if (!memberIds?.length) return users;
+    const resolved = memberIds.map(id => users.find(u => u.id === id)).filter(Boolean);
+    return resolved.length > 0 ? resolved : users;
+  }, [taskData.projectId, projects, users]);
 
   const handleSave = () => {
     if (taskData.title.trim()) onSave(taskData);
@@ -1060,7 +1443,8 @@ const NewTaskRow = ({ projects = [], users = [], weeks = [], defaultData = {}, p
           value={taskData.projectId}
           items={projects}
           onChange={(id) => {
-            setTaskData({ ...taskData, projectId: id });
+            // Al cambiar proyecto, limpiar el asignado (puede no ser miembro del nuevo)
+            setTaskData({ ...taskData, projectId: id, assigneeId: null });
             onProjectChange?.();
           }}
           placeholder="Proyecto *"
@@ -1110,10 +1494,11 @@ const NewTaskRow = ({ projects = [], users = [], weeks = [], defaultData = {}, p
         placeholder="Semana"
       />
 
-      {/* ASIGNADO */}
+      {/* ASIGNADO — solo miembros del proyecto seleccionado */}
       <ArrayPillSelect
-        value={taskData.assigneeId}
-        items={users}
+        value={typeof taskData.assigneeId === 'object' ? taskData.assigneeId?.id : taskData.assigneeId}
+        items={availableAssignees}
+        idKey="id"
         labelKey="name"
         onChange={(id) => setTaskData({ ...taskData, assigneeId: id })}
         placeholder="Asignado"

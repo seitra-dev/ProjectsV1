@@ -95,7 +95,7 @@ const EnvironmentSettings = ({ isOpen, onClose }) => {
             margin: 0,
             color: '#1D1D1F'
           }}>
-            Ajustes del entorno de trabajo
+            Ajustes del equipo de trabajo
           </h2>
           <button
             onClick={onClose}
@@ -252,7 +252,7 @@ const EnvironmentSettings = ({ isOpen, onClose }) => {
             {/* Logos */}
             <LogoUpload 
               label="Logotipo redondo"
-              description="Recomendamos un archivo PNG de 72 x 72 px. Este logotipo se utiliza en la aplicación como avatar de tu entorno de trabajo."
+              description="Recomendamos un archivo PNG de 72 x 72 px. Este logotipo se utiliza en la aplicación como avatar de tu equipo de trabajo."
               value={formData.logoRound}
               onChange={(file) => setFormData({ ...formData, logoRound: file })}
             />
