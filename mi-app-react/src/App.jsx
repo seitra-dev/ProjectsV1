@@ -34,6 +34,8 @@ import CreateListModal from './components/Enviroments/CreateListModal';
 import UserSettingsDrawer from './components/UserSettingsDrawer';
 import SelectEnvironmentPrompt from './components/SelectEnvironmentPrompt';
 import EditProjectModal from './components/EditProjectModal';
+import { TASK_STATUSES, TASK_STATUS_DROPDOWN, getTaskStatus, getProjectStatus } from './constants/statuses';
+import StatusBadge from './components/shared/StatusBadge';
 
 
 // ============================================================================
@@ -212,17 +214,9 @@ function useKeyboardShortcuts(shortcuts) {
 // ============================================================================
 
 
-const STATUS_OPTIONS = {
-  todo:        { label: 'Por Hacer',   color: DESIGN_TOKENS.neutral[600],  bg: DESIGN_TOKENS.neutral[100]  },
-  pending:     { label: 'Pendiente',   color: '#FF9800',                   bg: '#FFF4E5'                   },
-  in_progress: { label: 'En Curso',    color: DESIGN_TOKENS.info.dark,     bg: DESIGN_TOKENS.info.light    },
-  waiting:     { label: 'En Espera',   color: '#0369a1',                   bg: '#e0f2fe'                   },
-  in_review:   { label: 'En Revisión', color: DESIGN_TOKENS.warning.dark,  bg: DESIGN_TOKENS.warning.light },
-  paused:      { label: 'En Pausa',    color: '#78909C',                   bg: '#ECEFF1'                   },
-  expedite:    { label: 'Expedite',    color: '#FF1744',                   bg: '#FFEBEE'                   },
-  completed:   { label: 'Completado',  color: DESIGN_TOKENS.success.dark,  bg: DESIGN_TOKENS.success.light },
-  blocked:     { label: 'Bloqueado',   color: DESIGN_TOKENS.danger.dark,   bg: DESIGN_TOKENS.danger.light  },
-};
+const STATUS_OPTIONS = Object.fromEntries(
+  Object.entries(TASK_STATUSES).map(([k, v]) => [k, { label: v.label, color: v.color, bg: v.bg }])
+);
 
 const PRIORITY_OPTIONS = {
   low: { label: 'Baja', color: DESIGN_TOKENS.neutral[500] },
@@ -2078,15 +2072,9 @@ function SearchOverlay({ query, projects, tasks, onSelectProject, onSelectTask, 
 
   if (q.length < 1) return null;
 
-  const TASK_STATUS_DOT = {
-    completed:   '#10b981',
-    in_progress: '#f59e0b',
-    blocked:     '#ef4444',
-    review:      '#8b5cf6',
-    paused:      '#94a3b8',
-    pending:     '#94a3b8',
-    todo:        '#cbd5e1',
-  };
+  const TASK_STATUS_DOT = Object.fromEntries(
+    Object.entries(TASK_STATUSES).map(([k, v]) => [k, v.color])
+  );
 
   return (
     <div ref={panelRef} style={{
@@ -3276,16 +3264,13 @@ function ProjectCardExtended({ project, onClick, onToggleFavorite, onDuplicate, 
 // ============================================================================
 // PROJECT LIST ROW (vista lista-detalle)
 // ============================================================================
-const STATUS_ROW_MAP = {
-  active:      { bg: '#dbeafe', color: '#1e40af', label: 'Activo' },
-  in_progress: { bg: '#fef3c7', color: '#92400e', label: 'En Curso' },
-  waiting:     { bg: '#e0f2fe', color: '#0369a1', label: 'En Espera' },
-  review:      { bg: '#e0e7ff', color: '#3730a3', label: 'En Revisión' },
-  paused:      { bg: '#f3f4f6', color: '#6b7280', label: 'En Pausa' },
-  blocked:     { bg: '#fee2e2', color: '#991b1b', label: 'Bloqueado' },
-  completed:   { bg: '#d1fae5', color: '#065f46', label: 'Completado' },
-  archived:    { bg: '#f9fafb', color: '#9ca3af', label: 'Archivado' },
-};
+const STATUS_ROW_MAP = Object.fromEntries(
+  [...Object.entries(TASK_STATUSES), ...Object.entries(
+    Object.fromEntries(['backlog','active','in_progress','paused','completed','blocked','archived','cancelled'].map(k => {
+      const c = getProjectStatus(k); return [k, c];
+    }))
+  )].map(([k, v]) => [k, { bg: v.bg, color: v.color, label: v.label }])
+);
 const PRIORITY_ROW_MAP = {
   urgent: { bg: '#fee2e2', color: '#991b1b', label: 'Urgente' },
   high:   { bg: '#fed7aa', color: '#9a3412', label: 'Alta' },
@@ -3821,7 +3806,7 @@ function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTask
             value={filterStatus}
             onChange={setFilterStatus}
             placeholder="Todos los estados"
-            options={Object.entries(STATUS_OPTIONS).map(([key, { label, color }]) => ({ key, label, color }))}
+            options={Object.entries(TASK_STATUS_DROPDOWN).map(([key, { label, color }]) => ({ key, label, color }))}
           />
 
           <FilterSelect
@@ -5199,7 +5184,7 @@ function AllTasksView({ tasks, projects, users, currentUser, onTaskClick }) {
       <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem', flexWrap: 'wrap' }}>
         <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} style={selectStyle}>
           <option value="all">Todos los estados</option>
-          {Object.entries(STATUS_OPTIONS).map(([key, { label }]) => (
+          {Object.entries(TASK_STATUS_DROPDOWN).map(([key, { label }]) => (
             <option key={key} value={key}>{label}</option>
           ))}
         </select>
@@ -5427,10 +5412,10 @@ function AnalyticsView({ tasks, projects, users }) {
   const overdueTasks = tasks.filter(t => new Date(t.endDate) < new Date() && t.status !== 'completed');
   const inProgressTasks = tasks.filter(t => t.status === 'in_progress');
 
-  const tasksByStatus = Object.keys(STATUS_OPTIONS).map(status => ({
-    label: STATUS_OPTIONS[status].label,
-    value: tasks.filter(t => t.status === status).length,
-    color: STATUS_OPTIONS[status].color
+  const tasksByStatus = Object.keys(TASK_STATUS_DROPDOWN).map(status => ({
+    label: TASK_STATUS_DROPDOWN[status].label,
+    value: tasks.filter(t => t.status === status || (status === 'pending' && t.status === 'todo')).length,
+    color: TASK_STATUS_DROPDOWN[status].color
   }));
 
   const tasksByPriority = Object.keys(PRIORITY_OPTIONS).map(priority => ({
@@ -5788,7 +5773,7 @@ function TaskDetailModal({ task, project, projects = [], users, comments, onClos
                 textTransform: 'uppercase', letterSpacing: '0.06em',
               }}
             >
-              {Object.entries(STATUS_OPTIONS).map(([k, { label }]) => (
+              {Object.entries(TASK_STATUS_DROPDOWN).map(([k, { label }]) => (
                 <option key={k} value={k}>{label}</option>
               ))}
             </select>
@@ -6522,7 +6507,7 @@ function TaskFormModal({ initialTask, users, tasks, projects = [], currentProjec
               onChange={(e) => setFormData(p => ({ ...p, status: e.target.value }))}
               style={selectStyle}
             >
-              {Object.entries(STATUS_OPTIONS).map(([key, { label }]) => (
+              {Object.entries(TASK_STATUS_DROPDOWN).map(([key, { label }]) => (
                 <option key={key} value={key}>{label}</option>
               ))}
             </select>

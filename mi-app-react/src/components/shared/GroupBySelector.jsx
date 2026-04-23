@@ -3,6 +3,7 @@ import {
   ChevronDown, Check, Circle, Flag, Folder, User,
   Calendar, Layers, X, ArrowUpAZ, ArrowDownZA
 } from 'lucide-react';
+import { TASK_STATUSES } from '../../constants/statuses';
 
 // ============================================================================
 // CONSTANTS
@@ -20,13 +21,9 @@ export const GROUP_OPTIONS = [
   { value: 'none',      label: 'Sin agrupación',   Icon: X        },
 ];
 
-export const STATUS_GROUP = {
-  pending:     { label: 'Pendiente',   color: '#94a3b8' },
-  in_progress: { label: 'En Curso',    color: '#60a5fa' },
-  waiting:     { label: 'En Espera',   color: '#0369a1' },
-  review:      { label: 'En Revisión', color: '#f59e0b' },
-  completed:   { label: 'Completado',  color: '#34d399' },
-};
+export const STATUS_GROUP = Object.fromEntries(
+  Object.entries(TASK_STATUSES).map(([k, v]) => [k, { label: v.label, color: v.color }])
+);
 
 export const PRIORITY_GROUP = {
   urgent: { label: 'Urgente', color: '#ef4444' },

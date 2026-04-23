@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ChevronDown, ChevronRight, Plus, Flag, X, GripVertical, Check, ArrowUpDown } from 'lucide-react';
+import { TASK_STATUS_DROPDOWN } from '../constants/statuses';
 import { useApp } from '../context/AppContext';
 import { DESIGN_TOKENS } from '../styles/tokens';
 import { dbTasks, dbProjects, dbUsers } from '../lib/database';
@@ -36,12 +37,7 @@ const PRIORITY_OPTIONS = {
   low:    { label: 'Baja',    color: '#94a3b8' },
 };
 
-const STATUS_PILL = {
-  pending:     { label: 'Pendiente',   color: '#64748b', bg: '#f1f5f9' },
-  in_progress: { label: 'En curso',    color: '#3b82f6', bg: '#eff6ff' },
-  review:      { label: 'En revisión', color: '#f59e0b', bg: '#fffbeb' },
-  completed:   { label: 'Completado',  color: '#22c55e', bg: '#f0fdf4' },
-};
+const STATUS_PILL = TASK_STATUS_DROPDOWN;
 
 // ============================================================================
 // TASK CHECKBOX

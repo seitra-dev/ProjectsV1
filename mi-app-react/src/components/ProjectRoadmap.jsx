@@ -1,11 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import ConfirmModal from './ConfirmModal';
-import { 
+import {
   Plus, ChevronDown, ChevronRight, ChevronLeft, Edit, Trash2, Check, X,
   Home, Clipboard, FileText, AlertTriangle, Calendar, Target, CheckCircle2, AlertCircle, Users, TrendingUp, Map
 } from 'lucide-react';
 import { DESIGN_TOKENS } from '../styles/tokens';
+import { TASK_STATUSES, getTaskStatus, getProjectStatus } from '../constants/statuses';
 
 // ============================================================================
 // PROJECT ROADMAP - Dynamic Component
@@ -557,33 +558,22 @@ const OverviewTab = ({ project, roadmapData, tasks = [], users = [], onTabChange
 };
 
 // ============================================================================
-// PHASE TIMELINE  — compact scrollable
+// PHASE TIMELINE
 // ============================================================================
 
-const TL_SLOT   = 64;   // px per phase slot
-const TL_ICON   = 36;   // icon diameter
-const TL_LINE_Y = 18;   // line Y = icon center (TL_ICON / 2)
-const TL_HEIGHT = 110;  // inner container height (enough for expanded active label)
+const TL_SLOT = 100;  // px per phase slot — enough for icon + name
+const TL_ICON = 44;   // icon square size
+const TL_LINE = TL_ICON / 2; // line Y = icon vertical center
 
-const TL_NODE_STYLE = (status) => {
-  if (status === 'completed') return { bg: '#d1fae5', border: '#10b981', accent: '#10b981' };
-  if (status === 'in_progress') return { bg: '#eef2ff', border: '#6366f1', accent: '#6366f1' };
-  if (status === 'blocked')    return { bg: '#fee2e2', border: '#ef4444', accent: '#ef4444' };
-  return { bg: '#f3f4f6', border: '#d1d5db', accent: '#9ca3af' };
-};
-
-const TL_STATUS_LABEL = (status) => {
-  if (status === 'completed')  return '✅ Completada';
-  if (status === 'in_progress') return '🟣 Activa';
-  if (status === 'blocked')    return '🔴 Bloqueada';
-  return '⚪ Pendiente';
+const tlStyle = (status) => {
+  const c = getTaskStatus(status);
+  return { bg: c.bg, border: c.border, icon: c.color };
 };
 
 const PhaseTimeline = ({ phases, tasks = [], users = [] }) => {
-  const [selectedId,   setSelectedId]   = useState(null);
-  const [tooltipData,  setTooltipData]  = useState(null); // { phase, rect }
-  const [canScrollL,   setCanScrollL]   = useState(false);
-  const [canScrollR,   setCanScrollR]   = useState(false);
+  const [selectedId, setSelectedId] = useState(null);
+  const [canScrollL, setCanScrollL] = useState(false);
+  const [canScrollR, setCanScrollR] = useState(false);
   const scrollRef = useRef(null);
 
   const activeIndex   = phases.findIndex(p => p.status === 'in_progress');
@@ -606,21 +596,21 @@ const PhaseTimeline = ({ phases, tasks = [], users = [] }) => {
       el.removeEventListener('scroll', checkScroll);
       window.removeEventListener('resize', checkScroll);
     };
-  }, [phases.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [phases.length]); // eslint-disable-line
 
-  // Auto-scroll to active phase on mount
   useEffect(() => {
     const el = scrollRef.current;
     if (!el || activeIndex < 0) return;
     const target = activeIndex * TL_SLOT + TL_SLOT / 2 - el.clientWidth / 2;
     setTimeout(() => el.scrollTo({ left: Math.max(0, target), behavior: 'smooth' }), 120);
-  }, [activeIndex]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeIndex]); // eslint-disable-line
 
   const doScroll = (dir) => {
     scrollRef.current?.scrollBy({ left: dir * TL_SLOT * 4, behavior: 'smooth' });
   };
 
-  // Progress line colored width: up to center of active (or last completed)
+  // Colored line: from first icon center up to active (or last completed)
+  // Using % of total phases so the line adapts when slots grow via flex
   let coloredEnd = -1;
   if (activeIndex >= 0) {
     coloredEnd = activeIndex;
@@ -629,48 +619,47 @@ const PhaseTimeline = ({ phases, tasks = [], users = [] }) => {
       if (phases[i].status === 'completed') { coloredEnd = i; break; }
     }
   }
-  const totalLineW  = phases.length > 1 ? (phases.length - 1) * TL_SLOT : 0;
-  const coloredLineW = coloredEnd > 0 ? coloredEnd * TL_SLOT : 0;
-
-  const arrowBtn = (dir) => ({
-    position: 'absolute',
-    [dir > 0 ? 'right' : 'left']: 4,
-    top: TL_LINE_Y,
-    transform: 'translateY(-50%)',
-    zIndex: 10,
-    width: 28, height: 28, borderRadius: '50%',
-    background: 'white', border: '1px solid #e5e7eb',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
-    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-    padding: 0,
-  });
+  // halfSlot% = the % of container width that equals half a slot
+  // line runs from halfSlot% to (100 - halfSlot)%
+  const halfSlotPct  = phases.length > 0 ? 50 / phases.length : 0;
+  const coloredPct   = coloredEnd > 0 ? (coloredEnd / phases.length) * 100 : 0;
 
   return (
     <div>
-      {/* Scroll area + arrows */}
       <div style={{ position: 'relative' }}>
-        {/* Edge fades */}
+        {/* Edge fades — only when scrolling */}
         <div style={{
-          position: 'absolute', left: 0, top: 0, bottom: 0, width: 48,
+          position: 'absolute', left: 0, top: 0, bottom: 0, width: 40, zIndex: 5, pointerEvents: 'none',
           background: 'linear-gradient(90deg, white, transparent)',
-          zIndex: 5, pointerEvents: 'none',
           opacity: canScrollL ? 1 : 0, transition: 'opacity 0.2s',
         }} />
         <div style={{
-          position: 'absolute', right: 0, top: 0, bottom: 0, width: 48,
+          position: 'absolute', right: 0, top: 0, bottom: 0, width: 40, zIndex: 5, pointerEvents: 'none',
           background: 'linear-gradient(270deg, white, transparent)',
-          zIndex: 5, pointerEvents: 'none',
           opacity: canScrollR ? 1 : 0, transition: 'opacity 0.2s',
         }} />
 
+        {/* Nav arrows */}
         {canScrollL && (
-          <button onClick={() => doScroll(-1)} style={arrowBtn(-1)}>
-            <ChevronLeft size={16} color="#6b7280" />
+          <button onClick={() => doScroll(-1)} style={{
+            position: 'absolute', left: 2, top: TL_LINE, transform: 'translateY(-50%)',
+            zIndex: 10, width: 26, height: 26, borderRadius: '50%', padding: 0,
+            background: 'white', border: '1px solid #e2e8f0',
+            boxShadow: '0 2px 6px rgba(0,0,0,0.10)',
+            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <ChevronLeft size={15} color="#64748b" />
           </button>
         )}
         {canScrollR && (
-          <button onClick={() => doScroll(1)} style={arrowBtn(1)}>
-            <ChevronRight size={16} color="#6b7280" />
+          <button onClick={() => doScroll(1)} style={{
+            position: 'absolute', right: 2, top: TL_LINE, transform: 'translateY(-50%)',
+            zIndex: 10, width: 26, height: 26, borderRadius: '50%', padding: 0,
+            background: 'white', border: '1px solid #e2e8f0',
+            boxShadow: '0 2px 6px rgba(0,0,0,0.10)',
+            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <ChevronRight size={15} color="#64748b" />
           </button>
         )}
 
@@ -678,106 +667,115 @@ const PhaseTimeline = ({ phases, tasks = [], users = [] }) => {
         <div
           ref={scrollRef}
           className="rmap-tl-scroll"
-          style={{
-            overflowX: 'auto', scrollbarWidth: 'none', msOverflowStyle: 'none',
-            padding: '0 8px',
-          }}
+          style={{ overflowX: 'auto', scrollbarWidth: 'none', msOverflowStyle: 'none', padding: '2px 0 0' }}
         >
-          <div style={{
-            position: 'relative',
-            width: Math.max(phases.length * TL_SLOT, 200),
-            height: TL_HEIGHT,
-          }}>
-            {/* Gray baseline */}
+          {/* flex: 1 distributes phases evenly across the full width.
+              minWidth: TL_SLOT is the floor — when too many phases overflow, scroll kicks in. */}
+          <div style={{ position: 'relative', display: 'flex', minWidth: '100%' }}>
+
+            {/* Gray base line — percentage-based so it adapts to any slot width */}
             {phases.length > 1 && (
               <div style={{
-                position: 'absolute', top: TL_LINE_Y, left: TL_SLOT / 2,
-                width: totalLineW, height: 2,
-                background: '#e5e7eb', borderRadius: 1,
+                position: 'absolute', top: TL_LINE, zIndex: 0, height: 2,
+                left: `${halfSlotPct}%`, right: `${halfSlotPct}%`,
+                background: '#e2e8f0', borderRadius: 2,
               }} />
             )}
-            {/* Colored progress */}
-            {coloredLineW > 0 && (
+            {/* Colored progress line */}
+            {coloredPct > 0 && (
               <div style={{
-                position: 'absolute', top: TL_LINE_Y, left: TL_SLOT / 2,
-                width: coloredLineW, height: 2,
+                position: 'absolute', top: TL_LINE, zIndex: 0, height: 2,
+                left: `${halfSlotPct}%`, width: `${coloredPct}%`,
                 background: 'linear-gradient(90deg, #10b981, #6366f1)',
-                borderRadius: 1, transition: 'width 0.6s ease',
+                borderRadius: 2, transition: 'width 0.6s ease',
               }} />
             )}
 
+            {/* Phase nodes */}
             {phases.map((phase, i) => {
-              const phaseTasks     = tasks.filter(t => String(t.roadmapPhaseId) === String(phase.id));
-              const completedCount = phaseTasks.filter(t => t.status === 'completed' || t.status === 'done').length;
-              const status   = phase.status || 'pending';
-              const isActive = status === 'in_progress';
-              const isDone   = status === 'completed';
+              const phaseTasks = tasks.filter(t => String(t.roadmapPhaseId) === String(phase.id));
+              const status     = phase.status || 'pending';
+              const isActive   = status === 'in_progress';
+              const isDone     = status === 'completed';
               const isSelected = selectedId === phase.id;
-              const ns = TL_NODE_STYLE(status);
+              const ps         = tlStyle(status);
 
               return (
                 <div
                   key={phase.id}
-                  style={{
-                    position: 'absolute', left: i * TL_SLOT, top: 0,
-                    width: TL_SLOT, display: 'flex', flexDirection: 'column',
-                    alignItems: 'center', cursor: 'pointer',
-                  }}
-                  onMouseEnter={(e) => setTooltipData({ phase, phaseTasks, rect: e.currentTarget.getBoundingClientRect() })}
-                  onMouseLeave={() => setTooltipData(null)}
                   onClick={() => setSelectedId(selectedId === phase.id ? null : phase.id)}
+                  style={{
+                    flex: 1, minWidth: TL_SLOT, zIndex: 1, position: 'relative',
+                    display: 'flex', flexDirection: 'column', alignItems: 'center',
+                    gap: '5px', paddingBottom: '12px', cursor: 'pointer',
+                  }}
                 >
-                  {/* Icon */}
+                  {/* Clipboard icon */}
                   <div style={{
-                    width: TL_ICON, height: TL_ICON, borderRadius: '10px',
-                    background: isSelected ? `${ns.accent}28` : ns.bg,
-                    border: `2px solid ${ns.border}`,
+                    width: TL_ICON, height: TL_ICON, borderRadius: '12px',
+                    background: isSelected ? `${ps.icon}1a` : ps.bg,
+                    border: `1.5px solid ${isActive || isSelected ? ps.icon : ps.border}`,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: '16px', position: 'relative', zIndex: 2,
+                    position: 'relative',
                     boxShadow: isActive
-                      ? `0 0 0 4px ${ns.accent}28, 0 2px 8px ${ns.accent}30`
-                      : isSelected ? `0 0 0 3px ${ns.accent}40` : 'none',
-                    transition: 'all 0.2s',
-                    transform: isSelected ? 'scale(1.12)' : 'scale(1)',
+                      ? `0 0 0 4px ${ps.icon}20, 0 4px 10px ${ps.icon}25`
+                      : isSelected
+                        ? `0 0 0 3px ${ps.icon}28`
+                        : '0 1px 3px rgba(0,0,0,0.07)',
+                    transition: 'all 0.18s',
+                    transform: isSelected ? 'scale(1.07)' : 'scale(1)',
                   }}>
-                    {phase.icon || '📋'}
+                    <Clipboard size={20} color={ps.icon} strokeWidth={1.75} />
+                    {/* Completed badge */}
                     {isDone && (
                       <div style={{
-                        position: 'absolute', bottom: -3, right: -3,
-                        width: 13, height: 13, borderRadius: '50%',
+                        position: 'absolute', bottom: -4, right: -4,
+                        width: 15, height: 15, borderRadius: '50%',
                         background: '#10b981', border: '2px solid white',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: '7px', color: 'white', fontWeight: 900, lineHeight: 1,
+                        fontSize: '7px', color: 'white', fontWeight: 900,
                       }}>✓</div>
                     )}
                   </div>
 
                   {/* Phase number */}
                   <span style={{
-                    fontSize: '9px', fontWeight: 700, marginTop: '5px', letterSpacing: '0.3px',
-                    color: isActive ? '#6366f1' : isDone ? '#10b981' : '#9ca3af',
+                    fontSize: '10px', fontWeight: 700,
+                    color: isActive ? ps.icon : isDone ? ps.icon : '#94a3b8',
+                    letterSpacing: '0.2px',
                   }}>
-                    {i + 1}
+                    Fase {i + 1}
                   </span>
 
-                  {/* Active phase: expanded label */}
+                  {/* Phase name */}
+                  <span style={{
+                    fontSize: '11px',
+                    fontWeight: isActive ? 700 : 500,
+                    color: isActive ? '#1e293b' : '#475569',
+                    textAlign: 'center',
+                    maxWidth: TL_SLOT - 8,
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    lineHeight: 1.2,
+                  }}>
+                    {phase.name || '—'}
+                  </span>
+
+                  {/* Activity count */}
+                  <span style={{
+                    fontSize: '10px', color: '#94a3b8', fontWeight: 500,
+                  }}>
+                    {phaseTasks.length} actividades
+                  </span>
+
+                  {/* Active badge */}
                   {isActive && (
-                    <>
-                      <span style={{
-                        fontSize: '10px', fontWeight: 700, color: '#1f2937',
-                        maxWidth: TL_SLOT - 4, marginTop: '2px',
-                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                        textAlign: 'center',
-                      }}>{phase.name}</span>
-                      <span style={{ fontSize: '9px', color: '#6b7280', marginTop: '1px' }}>
-                        {completedCount}/{phaseTasks.length}
-                      </span>
-                      <span style={{
-                        fontSize: '9px', fontWeight: 700, padding: '2px 7px',
-                        background: '#6366f1', color: 'white', borderRadius: '10px',
-                        marginTop: '3px', animation: 'pulse 2s infinite',
-                      }}>Activa</span>
-                    </>
+                    <span style={{
+                      fontSize: '9px', fontWeight: 700, padding: '2px 8px',
+                      background: '#6366f1', color: 'white', borderRadius: '8px',
+                      animation: 'pulse 2s infinite',
+                    }}>
+                      Activa
+                    </span>
                   )}
                 </div>
               );
@@ -786,32 +784,7 @@ const PhaseTimeline = ({ phases, tasks = [], users = [] }) => {
         </div>
       </div>
 
-      {/* Tooltip — position:fixed so it escapes the scroll container */}
-      {tooltipData && tooltipData.phase.status !== 'in_progress' && (
-        <div style={{
-          position: 'fixed',
-          top: tooltipData.rect.bottom + 6,
-          left: tooltipData.rect.left + tooltipData.rect.width / 2,
-          transform: 'translateX(-50%)',
-          zIndex: 9999, pointerEvents: 'none',
-          background: '#1f2937', color: 'white',
-          borderRadius: '10px', padding: '10px 14px',
-          fontSize: '12px', minWidth: '150px',
-          boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
-        }}>
-          <div style={{ fontWeight: 700, fontSize: '13px', marginBottom: '5px' }}>
-            Fase {phases.indexOf(tooltipData.phase) + 1} — {tooltipData.phase.name || 'Sin nombre'}
-          </div>
-          <div style={{ opacity: 0.75, marginBottom: '3px' }}>
-            {tooltipData.phaseTasks.length} actividades
-          </div>
-          <div style={{ opacity: 0.85, fontSize: '11px' }}>
-            {TL_STATUS_LABEL(tooltipData.phase.status || 'pending')}
-          </div>
-        </div>
-      )}
-
-      {/* Detail panel */}
+      {/* Detail panel on click */}
       {selectedPhase && (
         <PhaseDetailPanel
           phase={selectedPhase}
@@ -1076,20 +1049,16 @@ const PlanTab = ({ phases, tasks = [], projectId, users = [], onUpdate, onTaskCr
 // PHASE CARD
 // ============================================================================
 
-const TASK_STATUS_STYLE = {
-  todo:        { label: 'Pendiente',   color: '#94a3b8', bg: '#f1f5f9' },
-  in_progress: { label: 'En Curso',    color: '#3b82f6', bg: '#eff6ff' },
-  waiting:     { label: 'En Espera',   color: '#0369a1', bg: '#e0f2fe' },
-  review:      { label: 'En Revisión', color: '#f59e0b', bg: '#fffbeb' },
-  completed:   { label: 'Completado',  color: '#10b981', bg: '#f0fdf4' },
-};
+const TASK_STATUS_STYLE = Object.fromEntries(
+  Object.entries(TASK_STATUSES).map(([k, v]) => [k, { label: v.label, color: v.color, bg: v.bg }])
+);
 
-const PHASE_STATUS = {
-  pending:     { label: 'Pendiente',  bg: '#f3f4f6', color: '#6b7280', dot: '#9ca3af' },
-  in_progress: { label: 'En Curso',   bg: '#dbeafe', color: '#1e40af', dot: '#3b82f6' },
-  completed:   { label: 'Completado', bg: '#d1fae5', color: '#065f46', dot: '#10b981' },
-  blocked:     { label: 'Bloqueado',  bg: '#fee2e2', color: '#991b1b', dot: '#ef4444' },
-};
+const PHASE_STATUS = Object.fromEntries(
+  ['pending','in_progress','completed','blocked','paused','waiting','expedite','cancelled'].map(k => {
+    const c = getTaskStatus(k);
+    return [k, { label: c.label, bg: c.bg, color: c.color, dot: c.color }];
+  })
+);
 
 const PhaseCard = ({ phase, phaseTasks = [], isOpen, isCreating, projectId, users = [], onToggle, onUpdate, onDelete, onFinishCreating, onTaskCreate, onTaskUpdate, onTaskDelete }) => {
   const [isEditing, setIsEditing] = useState(isCreating);
@@ -1462,15 +1431,9 @@ const PhaseCard = ({ phase, phaseTasks = [], isOpen, isCreating, projectId, user
 // ACTIVITY LIST
 // ============================================================================
 
-const ACTIVITY_STATUS = {
-  pending:     { label: 'Pendiente',   color: '#94a3b8', bg: '#f1f5f9' },
-  todo:        { label: 'Pendiente',   color: '#94a3b8', bg: '#f1f5f9' },
-  in_progress: { label: 'En Curso',    color: '#3b82f6', bg: '#eff6ff' },
-  waiting:     { label: 'En Espera',   color: '#0369a1', bg: '#e0f2fe' },
-  review:      { label: 'En Revisión', color: '#f59e0b', bg: '#fffbeb' },
-  done:        { label: 'Completado',  color: '#10b981', bg: '#f0fdf4' },
-  completed:   { label: 'Completado',  color: '#10b981', bg: '#f0fdf4' },
-};
+const ACTIVITY_STATUS = Object.fromEntries(
+  Object.entries(TASK_STATUSES).map(([k, v]) => [k, { label: v.label, color: v.color, bg: v.bg }])
+);
 
 const ActivityList = ({ phase, phaseTasks = [], projectId, onTaskCreate, onTaskUpdate, onTaskDelete }) => {
   const [isAdding, setIsAdding] = useState(false);
@@ -1756,7 +1719,7 @@ const ActivityRow = ({ activity, isLast, phaseColor, onToggleDone, onUpdate, onD
             border: '1px solid #e5e7eb', padding: '4px',
             minWidth: '150px',
           }}>
-            {Object.entries(ACTIVITY_STATUS).filter(([k]) => !['todo','completed'].includes(k)).map(([key, def]) => (
+            {Object.entries(ACTIVITY_STATUS).filter(([k]) => !['todo','done','review','active'].includes(k)).map(([key, def]) => (
               <button
                 key={key}
                 onClick={e => { e.stopPropagation(); onUpdate({ status: key }); setShowStatusMenu(false); }}
@@ -2149,7 +2112,7 @@ const MeetingsTab = ({ meetings, onUpdate }) => {
 // EMPTY STATE
 // ============================================================================
 
-const EmptyState = ({ icon: Icon, title, description }) => (
+const EmptyState = ({ icon: Icon, title, description, action }) => (
   <div style={{
     background: 'white',
     borderRadius: '16px',
@@ -2157,29 +2120,29 @@ const EmptyState = ({ icon: Icon, title, description }) => (
     textAlign: 'center',
     border: `1px solid ${DESIGN_TOKENS.border.color.subtle}`
   }}>
-    <Icon 
+    <Icon
       size={64}
-      style={{
-        margin: '0 auto 16px',
-        opacity: 0.3,
-        color: DESIGN_TOKENS.neutral[400]
-      }}
+      style={{ margin: '0 auto 16px', opacity: 0.3, color: DESIGN_TOKENS.neutral[400] }}
     />
-    <h3 style={{
-      fontSize: '18px',
-      fontWeight: 700,
-      color: DESIGN_TOKENS.neutral[700],
-      margin: '0 0 8px'
-    }}>
+    <h3 style={{ fontSize: '18px', fontWeight: 700, color: DESIGN_TOKENS.neutral[700], margin: '0 0 8px' }}>
       {title}
     </h3>
-    <p style={{
-      fontSize: '14px',
-      color: DESIGN_TOKENS.neutral[500],
-      margin: 0
-    }}>
+    <p style={{ fontSize: '14px', color: DESIGN_TOKENS.neutral[500], margin: action ? '0 0 20px' : 0 }}>
       {description}
     </p>
+    {action && (
+      <button
+        onClick={action.onClick}
+        style={{
+          padding: '10px 20px', background: DESIGN_TOKENS.primary.base, color: 'white',
+          border: 'none', borderRadius: '10px', cursor: 'pointer',
+          fontSize: '14px', fontWeight: 600, fontFamily: 'inherit',
+          display: 'inline-flex', alignItems: 'center', gap: '8px',
+        }}
+      >
+        <Plus size={15} /> {action.label}
+      </button>
+    )}
   </div>
 );
 

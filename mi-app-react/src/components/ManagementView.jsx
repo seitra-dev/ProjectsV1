@@ -4,6 +4,8 @@ import {
   BarChart2, Calendar, ChevronLeft, ChevronRight, Settings, X,
   Map, Flag, CheckSquare, User,
 } from 'lucide-react';
+import { getTaskStatus, getProjectStatus } from '../constants/statuses';
+import StatusBadge from './shared/StatusBadge';
 import { DESIGN_TOKENS } from '../styles/tokens';
 import { useApp } from '../context/AppContext';
 import {
@@ -37,31 +39,8 @@ const formatWeekLabel = (monday) => {
   return `${startStr} – ${endStr}`;
 };
 
-const STATUS_LABELS = {
-  todo:        'Por Hacer',
-  pending:     'Pendiente',
-  in_progress: 'En Curso',
-  waiting:     'En Espera',
-  paused:      'En Pausa',
-  review:      'En Revisión',
-  completed:   'Completada',
-  blocked:     'Bloqueada',
-  expedite:    'Expedite',
-  done:        'Hecha',
-};
-const getStatusLabel = (s) => STATUS_LABELS[s] || s;
-
-const STATUS_COLOR = {
-  completed:   { bg: '#d1fae5', color: '#065f46' },
-  in_progress: { bg: '#dbeafe', color: '#1e40af' },
-  waiting:     { bg: '#e0f2fe', color: '#0369a1' },
-  blocked:     { bg: '#fee2e2', color: '#991b1b' },
-  expedite:    { bg: '#ffebee', color: '#c62828' },
-  paused:      { bg: '#eceff1', color: '#37474f' },
-  pending:     { bg: '#fff7ed', color: '#9a3412' },
-  todo:        { bg: '#f3f4f6', color: '#374151' },
-};
-const statusStyle = (s) => STATUS_COLOR[s] || { bg: '#f3f4f6', color: '#374151' };
+const getStatusLabel = (s) => getTaskStatus(s).label;
+const statusStyle = (s) => { const c = getTaskStatus(s); return { bg: c.bg, color: c.color }; };
 
 const PRIORITY_MAP = {
   urgent: { label: 'Urgente', bg: '#fee2e2', color: '#991b1b' },
