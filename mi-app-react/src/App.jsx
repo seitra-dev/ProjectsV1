@@ -3,18 +3,16 @@ import { dbUsers, dbProjects, dbTasks, dbComments, dbEnvironmentMembers, hasExpe
 import { supabase } from './lib/supabase';
 import { auth } from './lib/auth'; 
 
-import { 
+import {
   Plus, Search, Filter, Calendar, Users, ChevronDown, ChevronUp, ChevronRight,
-  MoreVertical, Edit, Trash2, Check, X, Eye, EyeOff, LogOut, 
+  MoreVertical, Edit, Trash2, Check, X, Eye, EyeOff, LogOut,
   FolderPlus, ListPlus, Grid, List, BarChart2, Save, Download,
-  Upload, Settings, Clock, Tag, AlertCircle, CheckCircle2,
-  ArrowRight, Menu, Home, Briefcase, ClipboardList, PieChart, Bell, Zap, Layers,
-  MessageSquare, History, Copy, FileText, Star, StarOff, Archive, 
-  ChevronLeft, Paperclip, Send, MoreHorizontal, TrendingUp, Target,
-  Maximize2, Minimize2, Share2, Link as LinkIcon, ExternalLink, RefreshCw,
-  AlertTriangle, Info, CheckCircle, XCircle, Loader, Moon, Sun,
-  Command, HelpCircle, Keyboard, BookOpen, Gift, Sparkles, Zap as ZapIcon,
-  ShieldCheck, Globe, Layout, BarChart, Rocket
+  Settings, Clock, Tag, AlertCircle, CheckCircle2,
+  ArrowRight, Menu, Home, Briefcase, ClipboardList, Zap, Layers,
+  MessageSquare, Copy, FileText, Star, StarOff,
+  ChevronLeft, Send, TrendingUp, Target,
+  AlertTriangle, Info, CheckCircle, Loader, Moon, Sun,
+  Keyboard, Layout, BarChart,
 } from 'lucide-react';
 
 import Sidebar from './components/Sidebar';
@@ -35,6 +33,7 @@ import SeitraAssistant from './components/SeitraAssistant';
 import CreateListModal from './components/Enviroments/CreateListModal';
 import UserSettingsDrawer from './components/UserSettingsDrawer';
 import SelectEnvironmentPrompt from './components/SelectEnvironmentPrompt';
+import EditProjectModal from './components/EditProjectModal';
 
 
 // ============================================================================
@@ -104,7 +103,7 @@ function Toast({ toast, onClose }) {
     const exitTimer = setTimeout(() => setExiting(true), TOAST_DURATION - 250);
     const removeTimer = setTimeout(onClose, TOAST_DURATION);
     return () => { clearTimeout(exitTimer); clearTimeout(removeTimer); };
-  }, []);
+  }, [onClose]);
 
   const handleClose = () => {
     setExiting(true);
@@ -212,45 +211,6 @@ function useKeyboardShortcuts(shortcuts) {
 // DEMO DATA
 // ============================================================================
 
-// const DEMO_PROJECTS = [
-//   { 
-//     id: 1, 
-//     name: 'Rediseño Web Corporativo', 
-//     description: 'Renovación completa del sitio web',
-//     color: '#3B82F6',
-//     startDate: '2026-02-01',
-//     endDate: '2026-03-31',
-//     ownerId: 1,
-//     members: [1, 2, 3],
-//     status: 'active',
-//     favorite: false,
-//     tags: ['web', 'diseño'],
-//     createdAt: new Date().toISOString()
-//   }
-// ];
-
-// const DEMO_TASKS = [
-//   {
-//     id: 1,
-//     projectId: 1,
-//     title: 'Diseño UI/UX',
-//     description: 'Crear mockups de todas las páginas',
-//     startDate: '2026-02-08',
-//     endDate: '2026-02-20',
-//     priority: 'high',
-//     status: 'in_progress',
-//     assigneeId: 3,
-//     progress: 60,
-//     parentId: null,
-//     tags: ['diseño', 'ui'],
-//     attachments: [],
-//     estimatedHours: 40,
-//     actualHours: 24,
-//     dependencies: [],
-//     createdAt: new Date().toISOString(),
-//     updatedAt: new Date().toISOString()
-//   }
-// ];
 
 const STATUS_OPTIONS = {
   todo:        { label: 'Por Hacer',   color: DESIGN_TOKENS.neutral[600],  bg: DESIGN_TOKENS.neutral[100]  },
@@ -805,7 +765,7 @@ function LoginScreen({ onLogin, onShowLanding }) {
   const ACCENT = '#494a97';
 
   return (
-    <div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0d0d2b', fontFamily: 'Inter, system-ui, sans-serif' }}>
+    <div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #eef1fb 0%, #f3f0fd 100%)', fontFamily: 'Inter, system-ui, sans-serif' }}>
 
       <style>{`
         @keyframes loginFadeUp {
@@ -864,7 +824,7 @@ function LoginScreen({ onLogin, onShowLanding }) {
       <div style={{
         width: 'min(980px, 95vw)', height: 'min(620px, 94vh)',
         borderRadius: 28, display: 'flex', overflow: 'hidden',
-        boxShadow: '0 40px 100px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.06)',
+        boxShadow: '0 24px 64px rgba(73,74,151,0.14), 0 4px 20px rgba(0,0,0,0.08)',
         animation: 'loginFadeUp 0.55s cubic-bezier(.22,1,.36,1) both',
       }}>
 
@@ -1356,7 +1316,6 @@ function MainApp({ user, onLogout, darkMode, toggleDarkMode, onUserUpdate }) {
   const [userSettingsOpen, setUserSettingsOpen] = useState(false);
 
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
-  const [isTablet, setIsTablet] = useState(window.innerWidth >= 768 && window.innerWidth < 1024);
 
   // ── GUARDIA DE ENTORNO ────────────────────────────────────────────────────
   const VIEWS_SKIP_ENV = new Set(['management', 'tasks', 'chat', 'analytics', 'backlog']);
@@ -1375,7 +1334,6 @@ function MainApp({ user, onLogout, darkMode, toggleDarkMode, onUserUpdate }) {
 useEffect(() => {
   const handleResize = () => {
     setIsMobile(window.innerWidth < 768);
-    setIsTablet(window.innerWidth >= 768 && window.innerWidth < 1024);
     if (window.innerWidth < 768) {
       setSidebarOpen(false);
     }
@@ -1502,13 +1460,24 @@ useEffect(() => {
   };
 
   const updateTask = async (id, updates) => {
+    // Snapshot para revertir si falla
+    const prev_snapshot = tasks.find(t => t.id === id);
+    // Optimistic: reflect changes in UI immediately
+    setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
+    setSelectedTask(prev => prev?.id === id ? { ...prev, ...updates } : prev);
     try {
       const updated = await dbTasks.update(id, updates);
+      // Sync with actual DB result
       setTasks(prev => prev.map(t => t.id === id ? updated : t));
-      if (selectedTask?.id === id) setSelectedTask(updated);
+      setSelectedTask(prev => prev?.id === id ? updated : prev);
       logActivity('task_updated', `Tarea actualizada: ${updated.title}`);
       return updated;
     } catch (error) {
+      // Revert only this task to its previous state (don't reload everything)
+      if (prev_snapshot) {
+        setTasks(prev => prev.map(t => t.id === id ? prev_snapshot : t));
+        setSelectedTask(prev => prev?.id === id ? prev_snapshot : prev);
+      }
       console.error('Error actualizando tarea:', error);
       addToast('Error al actualizar la tarea', 'error');
       throw error;
@@ -1915,6 +1884,7 @@ useEffect(() => {
                 handleViewChange('dashboard', 'Dashboard');
               }}
               onError={(msg) => addToast(msg, 'error')}
+              onTaskClick={handleTaskClick}
             />
           )}
 
@@ -1928,6 +1898,7 @@ useEffect(() => {
               onSelectProject={handleProjectSelect}
               toggleFavorite={toggleFavorite}
               duplicateProject={duplicateProject}
+              updateProject={updateProject}
               exportData={exportFullReport}
               onOpenProjectManagement={handleOpenProjectManagement}
             />
@@ -2891,8 +2862,9 @@ function WorkspaceView({ workspace, lists = [], onSelectList }) {
 // ============================================================================
 // PROJECTS VIEW
 // ============================================================================
-function ProjectsView({ projects, createProject, deleteProject, users, currentUser, onSelectProject, toggleFavorite, duplicateProject, exportData, onOpenProjectManagement }) {
+function ProjectsView({ projects, createProject, deleteProject, updateProject, users, currentUser, onSelectProject, toggleFavorite, duplicateProject, exportData, onOpenProjectManagement }) {
   const [showNewProject, setShowNewProject] = useState(false);
+  const [editingProject, setEditingProject] = useState(null);
   const [filterStatus, setFilterStatus] = useState('in_progress');
   const [sortBy, setSortBy] = useState('recent');
   const [viewMode, setViewMode] = useState('list'); // 'grid' | 'list'
@@ -3033,6 +3005,7 @@ function ProjectsView({ projects, createProject, deleteProject, users, currentUs
               onClick={() => onSelectProject(project)}
               onToggleFavorite={() => toggleFavorite(project.id)}
               onDuplicate={() => duplicateProject(project)}
+              onEdit={() => setEditingProject(project)}
               onOpenManagement={() => onOpenProjectManagement(project)}
               onDelete={() => setPendingDeleteProject({ id: project.id, name: project.name })}
             />
@@ -3047,11 +3020,25 @@ function ProjectsView({ projects, createProject, deleteProject, users, currentUs
               index={index}
               onClick={() => onSelectProject(project)}
               onToggleFavorite={() => toggleFavorite(project.id)}
+              onEdit={() => setEditingProject(project)}
               onOpenManagement={() => onOpenProjectManagement(project)}
               onDelete={() => setPendingDeleteProject({ id: project.id, name: project.name })}
             />
           ))}
         </div>
+      )}
+
+      {editingProject && (
+        <EditProjectModal
+          project={editingProject}
+          users={users}
+          currentUser={currentUser}
+          onClose={() => setEditingProject(null)}
+          onSave={(updated) => {
+            updateProject?.(editingProject.id, updated);
+            setEditingProject(null);
+          }}
+        />
       )}
 
       {showNewProject && (
@@ -3108,7 +3095,7 @@ function ProjectsView({ projects, createProject, deleteProject, users, currentUs
 // ============================================================================
 // PROJECT CARD EXTENDED
 // ============================================================================
-function ProjectCardExtended({ project, onClick, onToggleFavorite, onDuplicate, onDelete, onOpenManagement, index = 0 }) {
+function ProjectCardExtended({ project, onClick, onToggleFavorite, onDuplicate, onEdit, onDelete, onOpenManagement, index = 0 }) {
   const [showMenu, setShowMenu] = useState(false);
 
   return (
@@ -3232,10 +3219,17 @@ function ProjectCardExtended({ project, onClick, onToggleFavorite, onDuplicate, 
           animation: 'menuFadeIn 0.15s ease'
         }}>
           <button
-            onClick={(e) => { 
-              e.stopPropagation(); 
+            onClick={(e) => { e.stopPropagation(); setShowMenu(false); onEdit?.(); }}
+            style={menuItemStyle}
+          >
+            <Edit size={16} />
+            Editar
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
               setShowMenu(false);
-              onOpenManagement(); 
+              onOpenManagement();
             }}
             style={menuItemStyle}
           >
@@ -3299,18 +3293,20 @@ const PRIORITY_ROW_MAP = {
   low:    { bg: '#f3f4f6', color: '#6b7280', label: 'Baja' },
 };
 
-function ProjectListRow({ project, onClick, onToggleFavorite, onOpenManagement, onDelete, index = 0 }) {
+function ProjectListRow({ project, onClick, onToggleFavorite, onEdit, onOpenManagement, onDelete, index = 0 }) {
   const [showMenu, setShowMenu] = useState(false);
+
   const sc = STATUS_ROW_MAP[project.status] || STATUS_ROW_MAP.active;
   const pc = PRIORITY_ROW_MAP[project.priority] || PRIORITY_ROW_MAP.medium;
 
+  const isDone = ['completed', 'done', 'archived'].includes(project.status);
   const daysLeft = (() => {
     if (!project.endDate) return null;
     return Math.round((new Date(project.endDate) - new Date()) / 86400000);
   })();
   const dateColor = daysLeft === null ? DESIGN_TOKENS.neutral[400]
-    : daysLeft < 0 ? DESIGN_TOKENS.danger.base
-    : daysLeft <= 7 ? '#f59e0b'
+    : !isDone && daysLeft < 0 ? DESIGN_TOKENS.danger.base
+    : !isDone && daysLeft <= 7 ? '#f59e0b'
     : DESIGN_TOKENS.neutral[400];
 
   return (
@@ -3329,6 +3325,7 @@ function ProjectListRow({ project, onClick, onToggleFavorite, onOpenManagement, 
         transition: 'all 0.18s ease',
         boxShadow: '0 1px 4px rgba(15,23,42,0.05)',
         position: 'relative',
+        zIndex: showMenu ? 100 : 'auto',
         animation: `cardFadeIn 0.3s cubic-bezier(0.4,0,0.2,1) ${index * 0.03}s backwards`,
       }}
       onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 6px 24px rgba(15,23,42,0.1)'; e.currentTarget.style.borderColor = 'rgba(15,23,42,0.12)'; }}
@@ -3370,9 +3367,10 @@ function ProjectListRow({ project, onClick, onToggleFavorite, onOpenManagement, 
           <>
             <div style={{ fontSize: '0.78rem', color: dateColor, fontWeight: 600 }}>{formatDate(project.endDate)}</div>
             <div style={{ fontSize: '0.7rem', color: dateColor, marginTop: 1 }}>
-              {daysLeft < 0 ? `Vencido hace ${Math.abs(daysLeft)}d`
-                : daysLeft === 0 ? 'Vence hoy'
-                : `${daysLeft}d restantes`}
+              {!isDone && daysLeft < 0 ? `Vencido hace ${Math.abs(daysLeft)}d`
+                : !isDone && daysLeft === 0 ? 'Vence hoy'
+                : daysLeft > 0 ? `${daysLeft}d restantes`
+                : null}
             </div>
           </>
         ) : (
@@ -3407,21 +3405,151 @@ function ProjectListRow({ project, onClick, onToggleFavorite, onOpenManagement, 
       </div>
 
       {showMenu && (
-        <div style={{
-          position: 'absolute', top: '100%', right: '1rem', marginTop: 4,
-          background: 'white', border: `1px solid ${DESIGN_TOKENS.border.color.subtle}`,
-          borderRadius: DESIGN_TOKENS.border.radius.sm, boxShadow: DESIGN_TOKENS.shadows.xl,
-          zIndex: 50, minWidth: 160, overflow: 'hidden', animation: 'menuFadeIn 0.15s ease',
-        }}>
-          <button onClick={e => { e.stopPropagation(); setShowMenu(false); onOpenManagement(); }} style={menuItemStyle}>
-            <Copy size={15} /> Duplicar
-          </button>
-          <button onClick={e => { e.stopPropagation(); setShowMenu(false); onDelete(); }} style={{ ...menuItemStyle, color: DESIGN_TOKENS.danger.base }}>
-            <Trash2 size={15} /> Eliminar
-          </button>
-        </div>
+        <>
+          <div
+            onClick={e => { e.stopPropagation(); setShowMenu(false); }}
+            style={{ position: 'fixed', inset: 0, zIndex: 98 }}
+          />
+          <div style={{
+            position: 'absolute', top: '100%', right: '1rem', marginTop: 4,
+            background: 'white', border: `1px solid ${DESIGN_TOKENS.border.color.subtle}`,
+            borderRadius: DESIGN_TOKENS.border.radius.sm, boxShadow: DESIGN_TOKENS.shadows.xl,
+            zIndex: 99, minWidth: 160, overflow: 'hidden', animation: 'menuFadeIn 0.15s ease',
+          }}>
+            <button onClick={e => { e.stopPropagation(); setShowMenu(false); onEdit?.(); }} style={menuItemStyle}>
+              <Edit size={15} /> Editar
+            </button>
+            <button onClick={e => { e.stopPropagation(); setShowMenu(false); onOpenManagement(); }} style={menuItemStyle}>
+              <Copy size={15} /> Duplicar
+            </button>
+            <button onClick={e => { e.stopPropagation(); setShowMenu(false); onDelete(); }} style={{ ...menuItemStyle, color: DESIGN_TOKENS.danger.base }}>
+              <Trash2 size={15} /> Eliminar
+            </button>
+          </div>
+        </>
       )}
     </div>
+  );
+}
+
+// ============================================================================
+// FILTER SELECT — botón trigger negro cuando activo, dropdown con dots de color
+// ============================================================================
+function FilterSelect({ value, onChange, options = [], placeholder, avatarMode = false }) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+  const btnRef = useRef(null);
+  const dropRef = useRef(null);
+
+  const isActive = value !== 'all' && value !== '';
+  const current = options.find(o => String(o.key) === String(value));
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (
+        dropRef.current && !dropRef.current.contains(e.target) &&
+        btnRef.current && !btnRef.current.contains(e.target)
+      ) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const toggle = () => {
+    if (!open && btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect();
+      setPos({ top: rect.bottom + 6, left: rect.left });
+    }
+    setOpen(o => !o);
+  };
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        onClick={toggle}
+        style={{
+          display: 'flex', alignItems: 'center', gap: '6px',
+          padding: '0.55rem 0.9rem',
+          background: isActive ? '#111827' : 'white',
+          border: `1px solid ${isActive ? '#111827' : DESIGN_TOKENS.neutral[200]}`,
+          borderRadius: '8px',
+          fontSize: '0.875rem', fontWeight: isActive ? 600 : 500,
+          color: isActive ? 'white' : DESIGN_TOKENS.neutral[700],
+          cursor: 'pointer', outline: 'none',
+          fontFamily: DESIGN_TOKENS.typography.fontFamily,
+          whiteSpace: 'nowrap', transition: 'all 0.15s',
+        }}
+      >
+        {isActive && current?.color && (
+          <span style={{
+            width: 7, height: 7, borderRadius: '50%',
+            background: 'rgba(255,255,255,0.7)', flexShrink: 0,
+          }} />
+        )}
+        <span>{current ? current.label : placeholder}</span>
+        <ChevronDown size={13} style={{ opacity: 0.55, marginLeft: 2, flexShrink: 0 }} />
+      </button>
+
+      {open && (
+        <>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 9997 }} onClick={() => setOpen(false)} />
+          <div
+            ref={dropRef}
+            style={{
+              position: 'fixed', top: pos.top, left: pos.left,
+              zIndex: 9998, background: 'white',
+              border: '1px solid #e5e7eb', borderRadius: '10px',
+              boxShadow: '0 8px 28px rgba(0,0,0,0.12)',
+              padding: '4px', minWidth: '190px',
+            }}
+          >
+            <button
+              onClick={() => { onChange('all'); setOpen(false); }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '8px',
+                width: '100%', padding: '8px 10px', border: 'none',
+                background: !isActive ? '#f1f5f9' : 'transparent',
+                borderRadius: '7px', cursor: 'pointer',
+                fontSize: '13px', fontWeight: !isActive ? 600 : 400,
+                color: '#374151', textAlign: 'left',
+                fontFamily: DESIGN_TOKENS.typography.fontFamily,
+              }}
+              onMouseEnter={e => { if (isActive) e.currentTarget.style.background = '#f9fafb'; }}
+              onMouseLeave={e => { if (isActive) e.currentTarget.style.background = 'transparent'; }}
+            >
+              {placeholder}
+            </button>
+            {options.map(opt => {
+              const selected = String(value) === String(opt.key);
+              return (
+                <button
+                  key={opt.key}
+                  onClick={() => { onChange(String(opt.key)); setOpen(false); }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '8px',
+                    width: '100%', padding: '8px 10px', border: 'none',
+                    background: selected ? '#f1f5f9' : 'transparent',
+                    borderRadius: '7px', cursor: 'pointer',
+                    fontSize: '13px', fontWeight: selected ? 600 : 400,
+                    color: selected ? '#111827' : '#374151', textAlign: 'left',
+                    fontFamily: DESIGN_TOKENS.typography.fontFamily,
+                  }}
+                  onMouseEnter={e => { if (!selected) e.currentTarget.style.background = '#f9fafb'; }}
+                  onMouseLeave={e => { if (!selected) e.currentTarget.style.background = 'transparent'; }}
+                >
+                  <span style={{
+                    width: 8, height: 8, borderRadius: '50%',
+                    background: opt.color || '#94a3b8', flexShrink: 0,
+                  }} />
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </>
   );
 }
 
@@ -3439,6 +3567,15 @@ function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTask
   const [pendingDeleteTask, setPendingDeleteTask] = useState(null);
   const [deletingTask, setDeletingTask] = useState(false);
   const [liveTasks, setLiveTasks] = useState(null);
+
+  // Sync liveTasks with global tasks when they change externally (e.g. modal updates)
+  useEffect(() => {
+    if (liveTasks === null) return;
+    setLiveTasks(prev =>
+      prev.map(lt => tasks.find(t => t.id === lt.id) ?? lt)
+    );
+  }, [tasks]);
+
   const [showMembersModal, setShowMembersModal] = useState(false);
   const [allSystemUsers, setAllSystemUsers] = useState([]);
   const [loadingAllUsers, setLoadingAllUsers] = useState(false);
@@ -3506,15 +3643,30 @@ function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTask
 
   const projectTasks = tasks.filter(t => t.projectId === project.id);
 
+  // Reset manual reorder when filter changes so we don't show stale sets
+  useEffect(() => { setLiveTasks(null); }, [filterStatus, filterAssignee]);
+
   // When project changes or external tasks update, reset live tasks
   const effectiveTasks = liveTasks !== null ? liveTasks : projectTasks;
   const rootTasks = effectiveTasks.filter(t => !t.parentId);
 
+  const isFiltered = filterStatus !== 'all' || filterAssignee !== 'all';
+
+  // Root-only filtered list — used by TableView
   const filteredTasks = rootTasks.filter(t => {
     if (filterStatus !== 'all' && t.status !== filterStatus) return false;
-    if (filterAssignee !== 'all' && t.assigneeId !== Number(filterAssignee)) return false;
+    if (filterAssignee !== 'all' && String(t.assigneeId) !== String(filterAssignee)) return false;
     return true;
   });
+
+  // All tasks (root + subtasks) with filters applied — used by ListView and GanttView
+  const filteredEffectiveTasks = isFiltered
+    ? effectiveTasks.filter(t => {
+        if (filterStatus !== 'all' && t.status !== filterStatus) return false;
+        if (filterAssignee !== 'all' && String(t.assigneeId) !== String(filterAssignee)) return false;
+        return true;
+      })
+    : effectiveTasks;
 
   const handleAddTask = async (task) => {
     try {
@@ -3665,19 +3817,38 @@ function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTask
         </div>
 
         <div style={{ display: 'flex', gap: '0.75rem' }}>
-          <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} style={selectStyle}>
-            <option value="all">Todos los estados</option>
-            {Object.entries(STATUS_OPTIONS).map(([key, { label }]) => (
-              <option key={key} value={key}>{label}</option>
-            ))}
-          </select>
+          <FilterSelect
+            value={filterStatus}
+            onChange={setFilterStatus}
+            placeholder="Todos los estados"
+            options={Object.entries(STATUS_OPTIONS).map(([key, { label, color }]) => ({ key, label, color }))}
+          />
 
-          <select value={filterAssignee} onChange={(e) => setFilterAssignee(e.target.value)} style={selectStyle}>
-            <option value="all">Todos los asignados</option>
-            {users.map(u => (
-              <option key={u.id} value={u.id}>{u.name}</option>
-            ))}
-          </select>
+          <FilterSelect
+            value={filterAssignee}
+            onChange={setFilterAssignee}
+            placeholder="Todos los asignados"
+            options={users.map(u => ({ key: u.id, label: u.name || u.email, color: '#6366f1' }))}
+          />
+
+          {isFiltered && (
+            <button
+              onClick={() => { setFilterStatus('all'); setFilterAssignee('all'); }}
+              title="Limpiar filtros"
+              style={{
+                padding: '0 10px', height: '36px', background: 'white',
+                border: `1px solid ${DESIGN_TOKENS.neutral[200]}`, borderRadius: '8px',
+                cursor: 'pointer', fontSize: '12px', fontWeight: 500,
+                color: DESIGN_TOKENS.neutral[500], display: 'flex', alignItems: 'center', gap: '4px',
+                whiteSpace: 'nowrap', fontFamily: DESIGN_TOKENS.typography.fontFamily,
+                transition: 'all 0.15s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = '#dc2626'; e.currentTarget.style.color = '#dc2626'; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = DESIGN_TOKENS.neutral[200]; e.currentTarget.style.color = DESIGN_TOKENS.neutral[500]; }}
+            >
+              <X size={13} /> Limpiar
+            </button>
+          )}
 
           {/* ── Botón Miembros ── */}
           <button
@@ -3712,16 +3883,17 @@ function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTask
         <ListView
           listId={null}
           listName={project.name}
-          tasks={effectiveTasks}
+          tasks={filteredEffectiveTasks}
           projects={projects}
           users={users}
           customFieldsProjectId={project.id}
           onProjectUpdate={patchProjectInState || (() => {})}
-          onTasksChange={setLiveTasks}
+          onTasksChange={isFiltered ? undefined : setLiveTasks}
           onListNameChange={() => {}}
           onListDelete={() => {}}
           onError={(msg) => addToast(msg, 'error')}
           globalExpediteCheck={globalExpediteCheck}
+          onTaskClick={onTaskClick}
           hideTitle
         />
       )}
@@ -3736,13 +3908,14 @@ function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTask
       )}
 
       {viewMode === 'gantt' && (
-        <GanttView tasks={projectTasks} project={project} users={users} onTaskClick={onTaskClick} />
+        <GanttView tasks={filteredEffectiveTasks} project={project} users={users} onTaskClick={onTaskClick} />
       )}
       
       {viewMode === 'roadmap' && (
         <ProjectRoadmap
           project={project}
           tasks={projectTasks}
+          users={users}
           onProjectUpdate={onProjectUpdate}
           onTaskCreate={onTaskCreate}
           onTaskUpdate={onTaskUpdate}
@@ -5502,29 +5675,27 @@ function TaskFieldRow({ label, icon, isEmpty, hideEmpty, children }) {
   );
 }
 
-// 2. Ahora definimos el Modal que consume a DetailItem
+// 2. TaskDetailModal — centered beautiful modal
 function TaskDetailModal({ task, project, projects = [], users, comments, onClose, onUpdate, onDelete, onAddComment }) {
   const [form, setForm] = useState({ ...task });
   const [saving, setSaving] = useState(false);
   const [newComment, setNewComment] = useState('');
   const [addingComment, setAddingComment] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [hideEmpty, setHideEmpty] = useState(false);
+  const [activeTab, setActiveTab] = useState('details'); // 'details' | 'comments'
   const [checklist, setChecklist] = useState(() => {
     try { return JSON.parse(task.checklist || '[]'); } catch { return []; }
   });
   const [newCheckItem, setNewCheckItem] = useState('');
   const [addingCheckItem, setAddingCheckItem] = useState(false);
   const { addToast } = useToast();
+  const { canEditTaskDates } = useApp();
 
-  // Sync when task id changes
   useEffect(() => {
     setForm({ ...task });
     try { setChecklist(JSON.parse(task.checklist || '[]')); } catch { setChecklist([]); }
   }, [task.id]);
 
-  // Escape to close
   useEffect(() => {
     const h = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', h);
@@ -5542,7 +5713,7 @@ function TaskDetailModal({ task, project, projects = [], users, comments, onClos
     finally { setSaving(false); }
   };
 
-  const saveChecklist = async (list) => {
+  const saveChecklist = (list) => {
     setChecklist(list);
     onUpdate({ ...form, checklist: JSON.stringify(list) }).catch(() => {});
   };
@@ -5550,10 +5721,8 @@ function TaskDetailModal({ task, project, projects = [], users, comments, onClos
   const handleAddComment = async () => {
     if (!newComment.trim()) return;
     setAddingComment(true);
-    try {
-      await onAddComment({ content: newComment });
-      setNewComment('');
-    } catch { addToast('Error al agregar comentario', 'error'); }
+    try { await onAddComment({ content: newComment }); setNewComment(''); }
+    catch { addToast('Error al agregar comentario', 'error'); }
     finally { setAddingComment(false); }
   };
 
@@ -5564,412 +5733,383 @@ function TaskDetailModal({ task, project, projects = [], users, comments, onClos
 
   const addCheckItem = () => {
     if (!newCheckItem.trim()) return;
-    const newList = [...checklist, { id: Date.now(), text: newCheckItem.trim(), done: false }];
-    saveChecklist(newList);
-    setNewCheckItem('');
-    setAddingCheckItem(false);
+    saveChecklist([...checklist, { id: Date.now(), text: newCheckItem.trim(), done: false }]);
+    setNewCheckItem(''); setAddingCheckItem(false);
   };
 
-  const toggleCheck = (id) => saveChecklist(checklist.map(i => i.id === id ? { ...i, done: !i.done } : i));
-  const removeCheck = (id) => saveChecklist(checklist.filter(i => i.id !== id));
-
   const statusDef = STATUS_OPTIONS[form.status] || STATUS_OPTIONS.todo;
+  const priorityDef = PRIORITY_OPTIONS[form.priority] || PRIORITY_OPTIONS.medium;
   const currentProject = projects.find(p => String(p.id) === String(form.projectId)) || project;
   const assignee = users.find(u => u.id === form.assigneeId);
+  const canEditDates = canEditTaskDates();
   const checkDone = checklist.filter(i => i.done).length;
 
   if (!task) return null;
 
+  const fld = { // field input style
+    border: '1px solid #e5e7eb', borderRadius: 8, padding: '7px 10px',
+    fontSize: '0.875rem', fontFamily: 'inherit', outline: 'none',
+    background: 'white', color: '#1e293b', width: '100%', boxSizing: 'border-box',
+  };
+
   return (
     <div
-      style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(3px)', display: 'flex' }}
       onClick={onClose}
+      style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px', background: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(6px)' }}
     >
-      {/* Inject slideInRight animation */}
       <style>{`
-        @keyframes tdSlideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-        @keyframes tdSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes tdModalIn { from { opacity:0; transform:scale(0.96) translateY(12px); } to { opacity:1; transform:scale(1) translateY(0); } }
+        @keyframes tdSpin    { to { transform:rotate(360deg); } }
       `}</style>
 
-      {/* Panel */}
       <div
         onClick={e => e.stopPropagation()}
         style={{
-          marginLeft: 'auto',
-          width: isExpanded ? '100%' : 'min(90%, 1280px)',
-          height: '100%',
-          background: '#fff',
-          display: 'flex',
-          flexDirection: 'column',
-          boxShadow: '-8px 0 48px rgba(0,0,0,0.13)',
-          animation: 'tdSlideIn 0.22s cubic-bezier(0.4,0,0.2,1)',
+          background: 'white', borderRadius: 20, width: '100%', maxWidth: 860,
+          maxHeight: '90vh', display: 'flex', flexDirection: 'column',
+          boxShadow: '0 32px 80px rgba(0,0,0,0.22), 0 8px 24px rgba(0,0,0,0.1)',
+          animation: 'tdModalIn 0.22s cubic-bezier(0.34,1.56,0.64,1)',
+          overflow: 'hidden',
         }}
       >
-        {/* ── TOP BAR ── */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 20px', borderBottom: '1px solid #f1f5f9', flexShrink: 0 }}>
-          <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>Tarea</span>
-          <ChevronRight size={13} style={{ color: '#cbd5e1' }} />
-          <span style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 500 }}>
-            {String(task.id || '').substring(0, 8)}
-          </span>
-          <div style={{ flex: 1 }} />
-          {saving && (
-            <span style={{ fontSize: '0.72rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}>
-              <Loader size={12} style={{ animation: 'tdSpin 1s linear infinite' }} /> Guardando…
-            </span>
-          )}
-          <button title={isExpanded ? 'Reducir' : 'Expandir'} onClick={() => setIsExpanded(v => !v)} style={_tdIconBtn}>
-            {isExpanded ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-          </button>
-          <button title="Eliminar tarea" onClick={() => setShowDeleteConfirm(true)} style={{ ..._tdIconBtn, color: '#ef4444' }}>
-            <Trash2 size={16} />
-          </button>
-          <button onClick={onClose} style={_tdIconBtn}>
-            <X size={18} />
-          </button>
-        </div>
+        {/* ── HEADER ── */}
+        <div style={{ padding: '20px 24px 0', flexShrink: 0 }}>
+          {/* Top row: status badge + actions */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+            {/* Status selector */}
+            <select
+              value={form.status || 'todo'}
+              onChange={e => saveField({ status: e.target.value })}
+              style={{
+                border: 'none', outline: 'none', cursor: 'pointer',
+                background: statusDef.bg, color: statusDef.color,
+                fontWeight: 700, fontSize: '0.7rem', padding: '4px 10px',
+                borderRadius: 20, fontFamily: 'inherit',
+                textTransform: 'uppercase', letterSpacing: '0.06em',
+              }}
+            >
+              {Object.entries(STATUS_OPTIONS).map(([k, { label }]) => (
+                <option key={k} value={k}>{label}</option>
+              ))}
+            </select>
 
-        {/* ── DELETE CONFIRM BAR ── */}
-        {showDeleteConfirm && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 20px', background: '#fef2f2', borderBottom: '1px solid #fecaca', flexShrink: 0 }}>
-            <AlertTriangle size={16} style={{ color: '#ef4444', flexShrink: 0 }} />
-            <span style={{ fontSize: '0.85rem', color: '#dc2626', fontWeight: 600 }}>¿Eliminar esta tarea? Esta acción no se puede deshacer.</span>
-            <button onClick={handleDelete} style={{ padding: '5px 16px', background: '#dc2626', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.82rem' }}>
-              Sí, eliminar
+            {/* Priority badge */}
+            {form.priority && (
+              <span style={{
+                fontSize: '0.7rem', fontWeight: 700, padding: '4px 10px', borderRadius: 20,
+                background: `${priorityDef.color}18`, color: priorityDef.color,
+                textTransform: 'uppercase', letterSpacing: '0.06em',
+              }}>
+                {priorityDef.label}
+              </span>
+            )}
+
+            <div style={{ flex: 1 }} />
+
+            {saving && (
+              <span style={{ fontSize: '0.72rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}>
+                <Loader size={11} style={{ animation: 'tdSpin 1s linear infinite' }} /> Guardando
+              </span>
+            )}
+            <button onClick={() => setShowDeleteConfirm(v => !v)} style={{ ..._tdIconBtn, color: showDeleteConfirm ? '#ef4444' : '#94a3b8' }} title="Eliminar">
+              <Trash2 size={16} />
             </button>
-            <button onClick={() => setShowDeleteConfirm(false)} style={{ padding: '5px 16px', background: 'white', color: '#374151', border: '1px solid #e2e8f0', borderRadius: 8, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.82rem' }}>
-              Cancelar
+            <button onClick={onClose} style={_tdIconBtn} title="Cerrar">
+              <X size={18} />
             </button>
           </div>
-        )}
+
+          {/* Title */}
+          <input
+            type="text"
+            value={form.title}
+            onChange={e => set('title', e.target.value)}
+            onBlur={e => { if (e.target.value.trim() && e.target.value !== task.title) saveField({ title: e.target.value }); }}
+            style={{
+              width: '100%', border: 'none', outline: 'none', padding: 0,
+              fontSize: '1.35rem', fontWeight: 800, color: '#0f172a',
+              fontFamily: 'inherit', background: 'transparent', boxSizing: 'border-box',
+              marginBottom: 16,
+            }}
+            placeholder="Título de la tarea"
+          />
+
+          {/* Delete confirm inline */}
+          {showDeleteConfirm && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: '#fef2f2', borderRadius: 10, border: '1px solid #fecaca', marginBottom: 12 }}>
+              <AlertTriangle size={15} style={{ color: '#ef4444', flexShrink: 0 }} />
+              <span style={{ fontSize: '0.82rem', color: '#dc2626', fontWeight: 600, flex: 1 }}>¿Eliminar esta tarea? No se puede deshacer.</span>
+              <button onClick={handleDelete} style={{ padding: '5px 14px', background: '#dc2626', color: 'white', border: 'none', borderRadius: 7, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8rem' }}>Eliminar</button>
+              <button onClick={() => setShowDeleteConfirm(false)} style={{ padding: '5px 12px', background: 'white', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: 7, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8rem' }}>Cancelar</button>
+            </div>
+          )}
+
+          {/* Tabs */}
+          <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid #f1f5f9' }}>
+            {[
+              { id: 'details', label: 'Detalles' },
+              { id: 'comments', label: `Comentarios${comments.length ? ` (${comments.length})` : ''}` },
+              { id: 'checklist', label: `Checklist${checklist.length ? ` ${checkDone}/${checklist.length}` : ''}` },
+            ].map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                style={{
+                  padding: '8px 16px', border: 'none', background: 'none', cursor: 'pointer',
+                  fontSize: '0.82rem', fontWeight: 600, fontFamily: 'inherit',
+                  color: activeTab === tab.id ? '#0f172a' : '#94a3b8',
+                  borderBottom: activeTab === tab.id ? '2px solid #0f172a' : '2px solid transparent',
+                  marginBottom: -1, transition: 'all 150ms',
+                }}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
 
         {/* ── BODY ── */}
-        <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+        <div style={{ flex: 1, overflow: 'auto', padding: '20px 24px 24px' }}>
 
-          {/* ─── LEFT: Task Content ─── */}
-          <div style={{ flex: 1, overflow: 'auto', padding: '28px 36px' }}>
+          {/* ── TAB: DETAILS ── */}
+          {activeTab === 'details' && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 24px' }}>
 
-            {/* Title */}
-            <input
-              type="text"
-              value={form.title}
-              onChange={e => set('title', e.target.value)}
-              onBlur={e => { if (e.target.value.trim() && e.target.value !== task.title) saveField({ title: e.target.value }); }}
-              style={{
-                width: '100%', border: 'none', outline: 'none',
-                fontSize: '1.5rem', fontWeight: 800, color: '#0f172a',
-                fontFamily: 'inherit', background: 'transparent',
-                padding: 0, marginBottom: 20, boxSizing: 'border-box',
-              }}
-              placeholder="Título de la tarea"
-            />
-
-            {/* Fields */}
-            <div style={{ marginBottom: 28, borderTop: '1px solid #f8fafc', paddingTop: 12 }}>
-
-              <TaskFieldRow label="Estado" icon={<div style={{ width: 8, height: 8, borderRadius: '50%', background: statusDef.color, flexShrink: 0 }} />} hideEmpty={false} isEmpty={false}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <select
-                    value={form.status || 'todo'}
-                    onChange={e => saveField({ status: e.target.value })}
-                    style={{
-                      ..._tdInlineSelect,
-                      background: statusDef.bg, color: statusDef.color,
-                      fontWeight: 700, textTransform: 'uppercase', fontSize: '0.72rem',
-                      letterSpacing: '0.05em', border: 'none',
-                    }}
-                  >
-                    {Object.entries(STATUS_OPTIONS).map(([k, { label }]) => (
-                      <option key={k} value={k}>{label}</option>
-                    ))}
-                  </select>
-                  <button
-                    title="Marcar como completada"
-                    onClick={() => saveField({ status: 'completed' })}
-                    style={{ ..._tdIconBtn, color: form.status === 'completed' ? '#10b981' : '#cbd5e1', padding: 2 }}
-                  >
-                    <CheckCircle2 size={17} />
-                  </button>
-                </div>
-              </TaskFieldRow>
-
-              <TaskFieldRow label="Fechas" icon={<Calendar size={13} />} isEmpty={!form.startDate && !form.endDate} hideEmpty={hideEmpty}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <input
-                    type="date" value={form.startDate || ''}
-                    onChange={e => set('startDate', e.target.value)}
-                    onBlur={e => saveField({ startDate: e.target.value || null })}
-                    style={_tdInlineInput}
-                  />
-                  <span style={{ color: '#cbd5e1', fontSize: '0.8rem' }}>→</span>
-                  <input
-                    type="date" value={form.endDate || ''}
-                    onChange={e => set('endDate', e.target.value)}
-                    onBlur={e => saveField({ endDate: e.target.value || null })}
-                    style={_tdInlineInput}
-                  />
-                </div>
-              </TaskFieldRow>
-
-              <TaskFieldRow label="Personas asignadas" icon={<Users size={13} />} isEmpty={!form.assigneeId} hideEmpty={hideEmpty}>
-                <select
-                  value={form.assigneeId || ''}
-                  onChange={e => saveField({ assigneeId: e.target.value || null })}
-                  style={_tdInlineSelect}
-                >
-                  <option value="">Vacío</option>
+              {/* Persona asignada */}
+              <div>
+                <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 5 }}>
+                  Persona asignada
+                </label>
+                <select value={form.assigneeId || ''} onChange={e => saveField({ assigneeId: e.target.value || null })} style={fld}>
+                  <option value="">Sin asignar</option>
                   {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
                 </select>
-              </TaskFieldRow>
+              </div>
 
-              <TaskFieldRow label="Prioridad" icon={<AlertCircle size={13} />} isEmpty={!form.priority} hideEmpty={hideEmpty}>
-                <select
-                  value={form.priority || ''}
-                  onChange={e => saveField({ priority: e.target.value || null })}
-                  style={_tdInlineSelect}
-                >
-                  <option value="">Vacío</option>
-                  {Object.entries(PRIORITY_OPTIONS).map(([k, { label }]) => (
-                    <option key={k} value={k}>{label}</option>
-                  ))}
+              {/* Prioridad */}
+              <div>
+                <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 5 }}>
+                  Prioridad
+                </label>
+                <select value={form.priority || ''} onChange={e => saveField({ priority: e.target.value || null })} style={fld}>
+                  <option value="">Sin prioridad</option>
+                  {Object.entries(PRIORITY_OPTIONS).map(([k, { label }]) => <option key={k} value={k}>{label}</option>)}
                 </select>
-              </TaskFieldRow>
+              </div>
 
-              <TaskFieldRow label="Proyecto" icon={<Briefcase size={13} />} isEmpty={!form.projectId} hideEmpty={hideEmpty}>
-                <select
-                  value={form.projectId || ''}
-                  onChange={e => saveField({ projectId: e.target.value || null })}
-                  style={_tdInlineSelect}
-                >
+              {/* Fecha inicio */}
+              <div>
+                <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 5 }}>
+                  Fecha inicio
+                </label>
+                <input
+                  type="date"
+                  value={form.startDate || ''}
+                  onChange={e => canEditDates && set('startDate', e.target.value)}
+                  onBlur={e => canEditDates && saveField({ startDate: e.target.value || null })}
+                  disabled={!canEditDates}
+                  style={{ ...fld, ...(canEditDates ? {} : { opacity: 0.5, cursor: 'not-allowed', background: '#f8fafc' }) }}
+                />
+              </div>
+
+              {/* Fecha límite */}
+              <div>
+                <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 5 }}>
+                  Fecha límite
+                </label>
+                <input
+                  type="date"
+                  value={form.endDate || ''}
+                  onChange={e => canEditDates && set('endDate', e.target.value)}
+                  onBlur={e => canEditDates && saveField({ endDate: e.target.value || null })}
+                  disabled={!canEditDates}
+                  style={{ ...fld, ...(canEditDates ? {} : { opacity: 0.5, cursor: 'not-allowed', background: '#f8fafc' }) }}
+                />
+              </div>
+
+              {/* Proyecto */}
+              <div>
+                <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 5 }}>
+                  Proyecto
+                </label>
+                <select value={form.projectId || ''} onChange={e => saveField({ projectId: e.target.value || null })} style={fld}>
                   <option value="">Sin proyecto</option>
                   {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
-              </TaskFieldRow>
-
-              <TaskFieldRow label="Progreso" icon={<TrendingUp size={13} />} isEmpty={!form.progress} hideEmpty={hideEmpty}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <input
-                    type="range" min="0" max="100"
-                    value={form.progress || 0}
-                    onChange={e => set('progress', Number(e.target.value))}
-                    onMouseUp={e => saveField({ progress: Number(e.target.value) })}
-                    style={{ flex: 1, cursor: 'pointer', accentColor: DESIGN_TOKENS.primary.base, maxWidth: 140 }}
-                  />
-                  <span style={{ fontSize: '0.8rem', fontWeight: 700, color: DESIGN_TOKENS.primary.base, minWidth: 30 }}>
-                    {form.progress || 0}%
-                  </span>
-                </div>
-              </TaskFieldRow>
-
-              <TaskFieldRow label="Etiquetas" icon={<Tag size={13} />} isEmpty={!form.tags?.length} hideEmpty={hideEmpty}>
-                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                  {(form.tags || []).length > 0
-                    ? (form.tags).map(tag => (
-                      <span key={tag} style={{ padding: '2px 8px', background: '#eff6ff', color: '#1d4ed8', borderRadius: 12, fontSize: '0.72rem', fontWeight: 600 }}>#{tag}</span>
-                    ))
-                    : <span style={{ fontSize: '0.8rem', color: '#cbd5e1' }}>Vacío</span>
-                  }
-                </div>
-              </TaskFieldRow>
-
-              {/* Hide/show empty toggle */}
-              <div style={{ marginTop: 6 }}>
-                <button
-                  onClick={() => setHideEmpty(v => !v)}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: '0.76rem', display: 'flex', alignItems: 'center', gap: 3, fontFamily: 'inherit', padding: 0 }}
-                >
-                  {hideEmpty ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
-                  {hideEmpty ? 'Mostrar propiedades vacías' : 'Ocultar propiedades vacías'}
-                </button>
               </div>
-            </div>
 
-            {/* Description */}
-            <div style={{ marginBottom: 24 }}>
-              <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#94a3b8', display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Descripción
-              </label>
-              <textarea
-                value={form.description || ''}
-                onChange={e => set('description', e.target.value)}
-                placeholder="Agregar descripción..."
-                rows={4}
-                style={{
-                  width: '100%', border: '1.5px solid #f1f5f9', borderRadius: 10,
-                  padding: '10px 14px', fontSize: '0.875rem', fontFamily: 'inherit',
-                  resize: 'vertical', outline: 'none', color: '#374151',
-                  background: '#fafbfc', boxSizing: 'border-box', lineHeight: 1.65,
-                  transition: 'border-color 150ms',
-                }}
-                onFocus={e => { e.target.style.borderColor = '#cbd5e1'; e.target.style.background = 'white'; }}
-                onBlur={e => { e.target.style.borderColor = '#f1f5f9'; e.target.style.background = '#fafbfc'; if (e.target.value !== (task.description || '')) saveField({ description: e.target.value }); }}
-              />
-            </div>
+              {/* Progreso */}
+              <div>
+                <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 5 }}>
+                  Progreso — <span style={{ color: DESIGN_TOKENS.primary.base }}>{form.progress || 0}%</span>
+                </label>
+                <input
+                  type="range" min="0" max="100" value={form.progress || 0}
+                  onChange={e => set('progress', Number(e.target.value))}
+                  onMouseUp={e => saveField({ progress: Number(e.target.value) })}
+                  style={{ width: '100%', accentColor: DESIGN_TOKENS.primary.base, cursor: 'pointer' }}
+                />
+              </div>
 
-            {/* CHECKLIST — only when expanded */}
-            {isExpanded && (
-              <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 20 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <ClipboardList size={16} style={{ color: '#64748b' }} />
-                    <span style={{ fontWeight: 700, fontSize: '0.9rem', color: '#1e293b' }}>Listas de control</span>
-                    {checklist.length > 0 && (
-                      <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{checkDone} de {checklist.length}</span>
-                    )}
-                  </div>
-                  <button onClick={() => setAddingCheckItem(true)} style={{ ..._tdIconBtn, gap: 4, fontSize: '0.8rem', color: '#64748b' }}>
-                    <Plus size={15} /> Agregar elemento
-                  </button>
-                </div>
+              {/* Descripción — full width */}
+              <div style={{ gridColumn: '1 / -1' }}>
+                <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 5 }}>
+                  Descripción
+                </label>
+                <textarea
+                  value={form.description || ''}
+                  onChange={e => set('description', e.target.value)}
+                  onBlur={e => { if (e.target.value !== (task.description || '')) saveField({ description: e.target.value }); }}
+                  placeholder="Agrega una descripción…"
+                  rows={4}
+                  style={{ ...fld, resize: 'vertical', lineHeight: 1.6 }}
+                />
+              </div>
 
-                {checklist.length > 0 && (
-                  <div style={{ background: '#f8fafc', borderRadius: 10, border: '1px solid #f1f5f9', marginBottom: 12, overflow: 'hidden' }}>
-                    <div style={{ padding: '8px 16px 6px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                        <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748b' }}>Checklist</span>
-                        <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>{checkDone}/{checklist.length}</span>
-                      </div>
-                      <div style={{ height: 3, background: '#e2e8f0', borderRadius: 2, overflow: 'hidden' }}>
-                        <div style={{ width: `${checklist.length ? (checkDone / checklist.length * 100) : 0}%`, height: '100%', background: '#10b981', transition: 'width 0.3s' }} />
-                      </div>
-                    </div>
-                    {checklist.map(item => (
-                      <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 16px', borderTop: '1px solid #f1f5f9' }}>
-                        <input
-                          type="checkbox" checked={item.done}
-                          onChange={() => toggleCheck(item.id)}
-                          style={{ cursor: 'pointer', accentColor: '#10b981', width: 15, height: 15, flexShrink: 0 }}
-                        />
-                        <span style={{ flex: 1, fontSize: '0.875rem', color: item.done ? '#94a3b8' : '#374151', textDecoration: item.done ? 'line-through' : 'none' }}>
-                          {item.text}
-                        </span>
-                        <button onClick={() => removeCheck(item.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#cbd5e1', padding: 2, display: 'flex' }}>
-                          <X size={13} />
-                        </button>
-                      </div>
+              {/* Etiquetas — full width */}
+              {(form.tags || []).length > 0 && (
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 6 }}>
+                    Etiquetas
+                  </label>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {form.tags.map(tag => (
+                      <span key={tag} style={{ padding: '3px 10px', background: '#eff6ff', color: '#1d4ed8', borderRadius: 20, fontSize: '0.75rem', fontWeight: 600 }}>#{tag}</span>
                     ))}
                   </div>
-                )}
-
-                {addingCheckItem ? (
-                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                    <input
-                      autoFocus
-                      type="text" value={newCheckItem}
-                      onChange={e => setNewCheckItem(e.target.value)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter') addCheckItem();
-                        if (e.key === 'Escape') { setAddingCheckItem(false); setNewCheckItem(''); }
-                      }}
-                      placeholder="Nuevo elemento…"
-                      style={{ flex: 1, padding: '7px 10px', border: '1.5px solid #e2e8f0', borderRadius: 8, fontSize: '0.875rem', fontFamily: 'inherit', outline: 'none' }}
-                    />
-                    <button onClick={addCheckItem} style={{ padding: '7px 16px', background: '#1e293b', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.82rem' }}>
-                      Agregar
-                    </button>
-                    <button onClick={() => { setAddingCheckItem(false); setNewCheckItem(''); }} style={_tdIconBtn}>
-                      <X size={16} />
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => setAddingCheckItem(true)}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: 4, fontFamily: 'inherit', padding: '4px 0' }}
-                  >
-                    <Plus size={13} /> Agregar lista de control
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* ─── RIGHT: Activity / Comments ─── */}
-          <div style={{ width: 340, borderLeft: '1px solid #f1f5f9', display: 'flex', flexDirection: 'column', flexShrink: 0, background: 'white' }}>
-            {/* Header */}
-            <div style={{ padding: '14px 18px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-              <span style={{ fontWeight: 700, fontSize: '0.9rem', color: '#1e293b' }}>Actividad</span>
-              <div style={{ display: 'flex', gap: 2 }}>
-                <button style={_tdIconBtn}><Search size={14} /></button>
-                <button style={_tdIconBtn}><Bell size={14} /></button>
-                <button style={_tdIconBtn}><Filter size={14} /></button>
-              </div>
-            </div>
-
-            {/* Comments list */}
-            <div style={{ flex: 1, overflow: 'auto', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {comments.length === 0 && (
-                <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: '0.82rem', marginTop: 48, lineHeight: 1.6 }}>
-                  <MessageSquare size={28} style={{ opacity: 0.3, display: 'block', margin: '0 auto 8px' }} />
-                  No hay comentarios aún
                 </div>
               )}
-              {[...comments].reverse().map(comment => {
-                const author = users.find(u => u.id === comment.userId);
-                return (
-                  <div key={comment.id} style={{ display: 'flex', gap: 8 }}>
-                    <div style={{
-                      width: 28, height: 28, borderRadius: '50%', background: '#e2e8f0',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      flexShrink: 0, fontSize: '0.72rem', fontWeight: 700, color: '#64748b', overflow: 'hidden',
-                    }}>
-                      {typeof author?.avatar === 'string' && (author.avatar.startsWith('http') || author.avatar.startsWith('data:'))
-                        ? <img src={author.avatar} alt={author.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                        : (author?.name?.charAt(0)?.toUpperCase() || '?')
-                      }
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 2 }}>
-                        <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#1e293b' }}>{author?.name || 'Usuario'}</span>
-                        <span style={{ fontSize: '0.68rem', color: '#94a3b8' }}>
-                          {new Date(comment.createdAt).toLocaleString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                      </div>
-                      <p style={{ margin: 0, fontSize: '0.85rem', color: '#374151', lineHeight: 1.5 }}>
-                        {comment.content || comment.text}
-                      </p>
-                    </div>
-                  </div>
-                );
-              })}
             </div>
+          )}
 
-            {/* Comment input */}
-            <div style={{ padding: '12px 16px', borderTop: '1px solid #f1f5f9', flexShrink: 0 }}>
-              <textarea
-                value={newComment}
-                onChange={e => setNewComment(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAddComment(); } }}
-                placeholder="Escribe un comentario… (Enter para enviar)"
-                rows={3}
-                style={{
-                  width: '100%', border: '1.5px solid #e2e8f0', borderRadius: 10,
-                  padding: '10px 12px', fontSize: '0.85rem', fontFamily: 'inherit',
-                  resize: 'none', outline: 'none', color: '#374151',
-                  boxSizing: 'border-box', lineHeight: 1.5, transition: 'border-color 150ms',
-                }}
-                onFocus={e => e.target.style.borderColor = '#94a3b8'}
-                onBlur={e => e.target.style.borderColor = '#e2e8f0'}
-              />
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
-                <button
-                  onClick={handleAddComment}
-                  disabled={!newComment.trim() || addingComment}
-                  style={{
-                    padding: '6px 18px',
-                    background: newComment.trim() ? '#1e293b' : '#f1f5f9',
-                    color: newComment.trim() ? 'white' : '#94a3b8',
-                    border: 'none', borderRadius: 8, fontWeight: 700,
-                    cursor: newComment.trim() ? 'pointer' : 'default',
-                    fontFamily: 'inherit', fontSize: '0.82rem',
-                    display: 'flex', alignItems: 'center', gap: 6, transition: 'all 150ms',
-                  }}
-                >
-                  <Send size={13} />
-                  {addingComment ? 'Enviando…' : 'Comentar'}
-                </button>
+          {/* ── TAB: COMMENTS ── */}
+          {activeTab === 'comments' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {/* Comment input */}
+              <div style={{ background: '#f8fafc', borderRadius: 12, padding: 14, border: '1px solid #f1f5f9' }}>
+                <textarea
+                  value={newComment}
+                  onChange={e => setNewComment(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAddComment(); } }}
+                  placeholder="Escribe un comentario… (Enter para enviar, Shift+Enter para nueva línea)"
+                  rows={3}
+                  style={{ ...fld, background: 'white', resize: 'none', lineHeight: 1.5, marginBottom: 8 }}
+                />
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <button
+                    onClick={handleAddComment}
+                    disabled={!newComment.trim() || addingComment}
+                    style={{
+                      padding: '7px 20px', background: newComment.trim() ? '#0f172a' : '#e2e8f0',
+                      color: newComment.trim() ? 'white' : '#94a3b8', border: 'none', borderRadius: 8,
+                      fontWeight: 700, cursor: newComment.trim() ? 'pointer' : 'default',
+                      fontFamily: 'inherit', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: 6,
+                    }}
+                  >
+                    <Send size={13} /> {addingComment ? 'Enviando…' : 'Comentar'}
+                  </button>
+                </div>
               </div>
+
+              {/* Comments list */}
+              {comments.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '32px 0', color: '#94a3b8' }}>
+                  <MessageSquare size={32} style={{ opacity: 0.25, display: 'block', margin: '0 auto 10px' }} />
+                  <p style={{ margin: 0, fontSize: '0.85rem' }}>Sin comentarios aún. ¡Sé el primero!</p>
+                </div>
+              ) : (
+                [...comments].reverse().map(comment => {
+                  const author = users.find(u => u.id === comment.userId);
+                  return (
+                    <div key={comment.id} style={{ display: 'flex', gap: 10 }}>
+                      <div style={{
+                        width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
+                        background: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: '0.8rem', fontWeight: 700, color: '#475569', overflow: 'hidden',
+                      }}>
+                        {typeof author?.avatar === 'string' && (author.avatar.startsWith('http') || author.avatar.startsWith('data:'))
+                          ? <img src={author.avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          : (author?.name?.charAt(0)?.toUpperCase() || '?')
+                        }
+                      </div>
+                      <div style={{ flex: 1, background: '#f8fafc', borderRadius: 12, padding: '10px 14px', border: '1px solid #f1f5f9' }}>
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4 }}>
+                          <span style={{ fontSize: '0.83rem', fontWeight: 700, color: '#1e293b' }}>{author?.name || 'Usuario'}</span>
+                          <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>
+                            {new Date(comment.createdAt).toLocaleString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                        <p style={{ margin: 0, fontSize: '0.875rem', color: '#374151', lineHeight: 1.55 }}>
+                          {comment.content || comment.text}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
-          </div>
+          )}
+
+          {/* ── TAB: CHECKLIST ── */}
+          {activeTab === 'checklist' && (
+            <div>
+              {/* Progress bar */}
+              {checklist.length > 0 && (
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                    <span style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 600 }}>Progreso del checklist</span>
+                    <span style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 700 }}>{checkDone}/{checklist.length}</span>
+                  </div>
+                  <div style={{ height: 5, background: '#e2e8f0', borderRadius: 3, overflow: 'hidden' }}>
+                    <div style={{ width: `${checklist.length ? (checkDone / checklist.length * 100) : 0}%`, height: '100%', background: '#10b981', borderRadius: 3, transition: 'width 0.3s' }} />
+                  </div>
+                </div>
+              )}
+
+              {/* Items */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 12 }}>
+                {checklist.map(item => (
+                  <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 8, background: item.done ? '#f0fdf4' : '#f8fafc', border: `1px solid ${item.done ? '#bbf7d0' : '#f1f5f9'}` }}>
+                    <input
+                      type="checkbox" checked={item.done}
+                      onChange={() => saveChecklist(checklist.map(i => i.id === item.id ? { ...i, done: !i.done } : i))}
+                      style={{ cursor: 'pointer', accentColor: '#10b981', width: 16, height: 16, flexShrink: 0 }}
+                    />
+                    <span style={{ flex: 1, fontSize: '0.875rem', color: item.done ? '#6b7280' : '#1e293b', textDecoration: item.done ? 'line-through' : 'none' }}>
+                      {item.text}
+                    </span>
+                    <button onClick={() => saveChecklist(checklist.filter(i => i.id !== item.id))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#cbd5e1', padding: 2, display: 'flex' }}>
+                      <X size={13} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              {/* Add item */}
+              {addingCheckItem ? (
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <input
+                    autoFocus type="text" value={newCheckItem}
+                    onChange={e => setNewCheckItem(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') addCheckItem(); if (e.key === 'Escape') { setAddingCheckItem(false); setNewCheckItem(''); } }}
+                    placeholder="Nuevo elemento…"
+                    style={{ flex: 1, ...fld }}
+                  />
+                  <button onClick={addCheckItem} style={{ padding: '7px 16px', background: '#0f172a', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.82rem' }}>
+                    Agregar
+                  </button>
+                  <button onClick={() => { setAddingCheckItem(false); setNewCheckItem(''); }} style={_tdIconBtn}><X size={16} /></button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setAddingCheckItem(true)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: 'none', border: '1.5px dashed #cbd5e1', borderRadius: 8, cursor: 'pointer', fontSize: '0.82rem', fontWeight: 600, color: '#64748b', fontFamily: 'inherit', width: '100%', justifyContent: 'center' }}
+                >
+                  <Plus size={15} /> Agregar elemento
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -6199,6 +6339,8 @@ function ProjectFormModal({ users = [], onSave, onClose, currentUser }) {
 }
 
 function TaskFormModal({ initialTask, users, tasks, projects = [], currentProject, onSave, onClose, tags }) {
+  const { canEditTaskDates } = useApp();
+  const canEditDates = !initialTask || canEditTaskDates();
   const [formData, setFormData] = useState(() => {
     if (initialTask) {
       return {
@@ -6342,8 +6484,9 @@ function TaskFormModal({ initialTask, users, tasks, projects = [], currentProjec
             <input
               type="date"
               value={formData.startDate}
-              onChange={(e) => setFormData(p => ({ ...p, startDate: e.target.value }))}
-              style={inputStyle}
+              onChange={(e) => canEditDates && setFormData(p => ({ ...p, startDate: e.target.value }))}
+              disabled={!canEditDates}
+              style={{ ...inputStyle, ...(canEditDates ? {} : { opacity: 0.5, cursor: 'not-allowed', background: '#f8fafc' }) }}
               required
             />
           </FormField>
@@ -6352,8 +6495,9 @@ function TaskFormModal({ initialTask, users, tasks, projects = [], currentProjec
             <input
               type="date"
               value={formData.endDate}
-              onChange={(e) => setFormData(p => ({ ...p, endDate: e.target.value }))}
-              style={inputStyle}
+              onChange={(e) => canEditDates && setFormData(p => ({ ...p, endDate: e.target.value }))}
+              disabled={!canEditDates}
+              style={{ ...inputStyle, ...(canEditDates ? {} : { opacity: 0.5, cursor: 'not-allowed', background: '#f8fafc' }) }}
               required
             />
           </FormField>
@@ -6939,7 +7083,7 @@ const topBarStyle = {
   boxShadow: 'var(--shadow-topbar)',
   gap: '1.5rem',
   position: 'relative',
-  zIndex: 10,
+  zIndex: 500,
   transition: 'background 0.4s ease, border-color 0.4s ease'
 };
 

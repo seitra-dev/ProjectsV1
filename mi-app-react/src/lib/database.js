@@ -273,10 +273,10 @@ const mapTask = (row) => {
     progress: row.progress || 0,
     tags: row.tags || [],
     estimatedHours: row.estimated_hours,
-    dependencies: row.dependencies || [],
     roadmapPhaseId: row.roadmap_phase_id || null,
     customFields: row.custom_fields != null && typeof row.custom_fields === 'object' ? row.custom_fields : {},
     closedAt: row.closed_at || null,
+    frente: row.frente || null,
     isDeleted: row.is_deleted === true,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -298,11 +298,11 @@ const toDbTask = (task) => {
   if (task.progress !== undefined) db.progress = task.progress;
   if (task.tags !== undefined) db.tags = task.tags;
   if (task.estimatedHours !== undefined) db.estimated_hours = task.estimatedHours || null;
-  if (task.dependencies !== undefined) db.dependencies = task.dependencies;
   if (task.workspaceId !== undefined) db.workspace_id = task.workspaceId || null;
   if (task.environmentId !== undefined) db.environment_id = task.environmentId || null;
   if ('roadmapPhaseId' in task) db.roadmap_phase_id = task.roadmapPhaseId || null;
   if (task.customFields !== undefined) db.custom_fields = task.customFields;
+  if (task.frente !== undefined) db.frente = task.frente || null;
   return db;
 };
 
@@ -645,7 +645,7 @@ export const dbTasks = {
   },
   create: async (taskData, currentUser = null) => {
     if (currentUser) await setAuditUser(currentUser.id, currentUser.email, currentUser.name);
-    const data = await restFetch('tasks', 'POST', toDbTask(taskData));
+    const data = await restFetch('tasks', 'POST', { ...toDbTask(taskData), is_deleted: false });
     return mapTask(Array.isArray(data) ? data[0] : data);
   },
   update: async (id, updates, currentUser = null) => {
@@ -656,11 +656,7 @@ export const dbTasks = {
   },
   delete: async (id, currentUser = null) => {
     if (currentUser) await setAuditUser(currentUser.id, currentUser.email, currentUser.name);
-    const { data, error } = await supabase.from('tasks').delete().eq('id', id).select('id');
-    if (error) throw error;
-    if (!data || data.length === 0) {
-      throw new Error('La tarea no existe o no tienes permisos para eliminarla');
-    }
+    await restFetch(`tasks?id=eq.${id}`, 'DELETE');
   },
   getDeleted: async () => {
     const { data, error } = await supabase
@@ -914,6 +910,63 @@ export const dbAuditLog = {
     const { data, error } = await query.order('changed_at', { ascending: false });
     if (error) throw error;
     return data || [];
+  },
+};
+
+// ============================================================================
+// KPI THRESHOLDS
+// ============================================================================
+
+export const dbKpiThresholds = {
+  get: async (environmentId = null) => {
+    let query = supabase.from('kpi_thresholds').select('*');
+    if (environmentId) query = query.eq('environment_id', environmentId);
+    else query = query.is('environment_id', null);
+    const { data, error } = await query.maybeSingle();
+    if (error) throw error;
+    return data || { threshold_good: 90, threshold_leve: 80 };
+  },
+  upsert: async (environmentId, thresholdGood, thresholdLeve) => {
+    const payload = {
+      environment_id: environmentId || null,
+      threshold_good: thresholdGood,
+      threshold_leve: thresholdLeve,
+      updated_at: new Date().toISOString(),
+    };
+    const { data, error } = await supabase
+      .from('kpi_thresholds')
+      .upsert(payload, { onConflict: 'environment_id' })
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+};
+
+// ============================================================================
+// PERFORMANCE METRICS (RPC)
+// ============================================================================
+
+export const dbPerformance = {
+  getMetrics: async ({ environmentId, frente, area, startDate, endDate } = {}) => {
+    const { data, error } = await supabase.rpc('get_performance_metrics', {
+      p_environment_id: environmentId || null,
+      p_frente:         frente        || null,
+      p_area:           area          || null,
+      p_start_date:     startDate     || null,
+      p_end_date:       endDate       || null,
+    });
+    if (error) throw error;
+    return data || [];
+  },
+  getFrenteOptions: async () => {
+    const { data, error } = await supabase
+      .from('tasks')
+      .select('frente')
+      .not('frente', 'is', null)
+      .neq('frente', '');
+    if (error) throw error;
+    return [...new Set((data || []).map(r => r.frente))].sort();
   },
 };
 

@@ -1,5 +1,5 @@
 
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import {
   dbEnvironments,
   dbEnvironmentMembers,
@@ -103,18 +103,9 @@ export const AppProvider = ({ children }) => {
     return role === 'owner' || role === 'admin';
   };
 
-  /**
-   * Puede editar las fechas de una tarea si:
-   * - Es super_admin, admin o project_manager (roles de jefe de sistema)
-   * - Es owner del entorno
-   * - Es el líder/dueño del proyecto al que pertenece la tarea
-   */
-  const canEditTaskDates = (envId, projectLeaderId) => {
+  const canEditTaskDates = () => {
     const sysRole = currentUser?.system_role;
-    if (sysRole === 'super_admin' || sysRole === 'admin' || sysRole === 'project_manager') return true;
-    if (getUserRoleInEnv(envId) === 'owner') return true;
-    if (projectLeaderId && projectLeaderId === currentUser?.id) return true;
-    return false;
+    return sysRole === 'super_admin' || sysRole === 'admin' || sysRole === 'project_manager';
   };
 
   const canDeleteEnvironment = (envId) => {
@@ -172,18 +163,17 @@ export const AppProvider = ({ children }) => {
       const newMembershipMap = {};
       let myMemberships = [];
 
+      // Cargar membresías una sola vez para todos los roles
+      try {
+        myMemberships = await dbEnvironmentMembers.getMyMemberships(userId);
+        myMemberships.forEach(m => { newMembershipMap[m.environment_id] = m; });
+      } catch {}
+
       if (systemRole === 'super_admin') {
         // Super admin ve TODOS los entornos
         envs = await dbEnvironments.getAll();
-        // Carga sus propias membresías para determinar su entorno propio
-        try {
-          myMemberships = await dbEnvironmentMembers.getMyMemberships(userId);
-          myMemberships.forEach(m => { newMembershipMap[m.environment_id] = m; });
-        } catch {}
       } else {
         // Otros roles: solo entornos donde son miembros
-        myMemberships = await dbEnvironmentMembers.getMyMemberships(userId);
-        myMemberships.forEach(m => { newMembershipMap[m.environment_id] = m; });
         const memberEnvIds = myMemberships.map(m => m.environment_id);
 
         if (memberEnvIds.length > 0) {
@@ -518,7 +508,7 @@ export const AppProvider = ({ children }) => {
   // VALOR DEL CONTEXTO
   // ============================================================================
 
-  const value = {
+  const value = useMemo(() => ({
     // Estado
     environments,
     currentEnvironment,
@@ -544,7 +534,6 @@ export const AppProvider = ({ children }) => {
     canEditTaskDates,
     canDeleteEnvironment,
     canViewEnvironment,
-    // Usuarios que pueden operar sin entorno seleccionado (vista Gestión)
     canWorkWithoutEnvironment: () =>
       ['super_admin', 'admin', 'project_manager'].includes(currentUser?.system_role),
 
@@ -570,7 +559,10 @@ export const AppProvider = ({ children }) => {
       comments: dbComments,
       chat: dbChatMessages
     }
-  };
+  }), [
+    environments, currentEnvironment, currentWorkspace, currentUser,
+    isLoading, authChecked, lists, membershipMap,
+  ]);
 
   return (
     <AppContext.Provider value={value}>

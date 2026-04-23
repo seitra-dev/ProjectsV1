@@ -1,193 +1,347 @@
 import React, { useState } from 'react';
-import { X } from 'lucide-react';
+import { X, Plus, Trash2 } from 'lucide-react';
 import { DESIGN_TOKENS } from '../../styles/tokens';
-import { dbProjects } from '../../lib/database';
 
-const FIELD_TYPES = [
-  { value: 'text', label: 'Texto' },
-  { value: 'number', label: 'Número' },
-  { value: 'date', label: 'Fecha' },
-];
+// ============================================================================
+// ADD CUSTOM FIELD MODAL - Modal para crear nuevas columnas personalizadas
+// ============================================================================
+function AddCustomFieldModal({ isOpen, onClose, onSave }) {
+  const [fieldName, setFieldName] = useState('');
+  const [fieldType, setFieldType] = useState('text');
+  const [options, setOptions] = useState(['']);
+  const [required, setRequired] = useState(false);
+  const [showInTable, setShowInTable] = useState(true);
 
-export default function AddCustomFieldModal({ open, onClose, project, onSaved }) {
-  const [name, setName] = useState('');
-  const [type, setType] = useState('text');
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
+  const handleAddOption = () => {
+    setOptions([...options, '']);
+  };
 
-  if (!open) return null;
+  const handleRemoveOption = (index) => {
+    setOptions(options.filter((_, i) => i !== index));
+  };
 
-  const handleSubmit = async (e) => {
+  const handleOptionChange = (index, value) => {
+    const newOptions = [...options];
+    newOptions[index] = value;
+    setOptions(newOptions);
+  };
+
+  const handleSubmit = (e) => {
     e.preventDefault();
-    if (!project?.id) {
-      setError('No hay proyecto seleccionado');
+    
+    if (!fieldName.trim()) {
+      alert('El nombre del campo es requerido');
       return;
     }
-    if (!name.trim()) {
-      setError('Indica un nombre para el campo');
+
+    if (fieldType === 'select' && options.filter(o => o.trim()).length === 0) {
+      alert('Agrega al menos una opción para el campo de selección');
       return;
     }
-    setSaving(true);
-    setError('');
-    try {
-      const defs = project.customFieldDefinitions || [];
-      const newDef = {
-        id: crypto.randomUUID(),
-        name: name.trim(),
-        type,
-      };
-      const updated = await dbProjects.update(project.id, {
-        customFieldDefinitions: [...defs, newDef],
-      });
-      onSaved?.(updated);
-      setName('');
-      setType('text');
-      onClose();
-    } catch (err) {
-      setError(err.message || 'No se pudo guardar el campo');
-    } finally {
-      setSaving(false);
-    }
+
+    const fieldData = {
+      name: fieldName.trim(),
+      type: fieldType,
+      options: fieldType === 'select' ? options.filter(o => o.trim()) : [],
+      required,
+      showInTable
+    };
+
+    onSave(fieldData);
+    handleClose();
   };
 
-  const overlay = {
-    position: 'fixed',
-    inset: 0,
-    zIndex: 10020,
-    background: 'rgba(31, 41, 51, 0.35)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: DESIGN_TOKENS.spacing.lg,
-    fontFamily: DESIGN_TOKENS.typography.fontFamily,
+  const handleClose = () => {
+    setFieldName('');
+    setFieldType('text');
+    setOptions(['']);
+    setRequired(false);
+    setShowInTable(true);
+    onClose();
   };
 
-  const panel = {
-    width: '100%',
-    maxWidth: '400px',
-    background: 'white',
-    borderRadius: DESIGN_TOKENS.border.radius.md,
-    boxShadow: DESIGN_TOKENS.shadows.xl,
-    border: `1px solid ${DESIGN_TOKENS.border.color.subtle}`,
-    padding: DESIGN_TOKENS.spacing.xl,
-  };
+  if (!isOpen) return null;
 
   return (
-    <div style={overlay} onClick={onClose} role="presentation">
+    <div
+      onClick={handleClose}
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: 'rgba(0, 0, 0, 0.5)',
+        backdropFilter: 'blur(4px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 1000,
+        padding: '2rem'
+      }}
+    >
       <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="add-custom-field-title"
         onClick={(e) => e.stopPropagation()}
-        style={panel}
+        style={{
+          background: 'white',
+          borderRadius: '16px',
+          maxWidth: '500px',
+          width: '100%',
+          maxHeight: '90vh',
+          overflow: 'auto',
+          boxShadow: DESIGN_TOKENS.shadows.xl
+        }}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: DESIGN_TOKENS.spacing.lg }}>
-          <h2 id="add-custom-field-title" style={{ margin: 0, fontSize: DESIGN_TOKENS.typography.size.lg, fontWeight: DESIGN_TOKENS.typography.weight.semibold, color: DESIGN_TOKENS.neutral[800] }}>
-            Nuevo campo personalizado
-          </h2>
+        {/* HEADER */}
+        <div style={{
+          padding: '24px',
+          borderBottom: `1px solid ${DESIGN_TOKENS.border.color.subtle}`,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}>
+          <div>
+            <h3 style={{
+              fontSize: '20px',
+              fontWeight: 700,
+              margin: 0,
+              color: DESIGN_TOKENS.neutral[900]
+            }}>
+              Agregar columna personalizada
+            </h3>
+            <p style={{
+              fontSize: '14px',
+              color: DESIGN_TOKENS.neutral[600],
+              margin: '4px 0 0'
+            }}>
+              Crea un campo personalizado para tus tareas
+            </p>
+          </div>
           <button
-            type="button"
-            onClick={onClose}
+            onClick={handleClose}
             style={{
+              background: 'none',
               border: 'none',
-              background: 'transparent',
               cursor: 'pointer',
-              color: DESIGN_TOKENS.neutral[500],
-              padding: 4,
-              borderRadius: DESIGN_TOKENS.border.radius.xs,
+              padding: '4px',
               display: 'flex',
+              color: DESIGN_TOKENS.neutral[500]
             }}
-            aria-label="Cerrar"
           >
             <X size={20} />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit}>
-          <label style={{ display: 'block', fontSize: DESIGN_TOKENS.typography.size.xs, fontWeight: DESIGN_TOKENS.typography.weight.medium, color: DESIGN_TOKENS.neutral[600], marginBottom: 6 }}>
-            Nombre
-          </label>
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            autoFocus
-            style={{
-              width: '100%',
-              boxSizing: 'border-box',
-              padding: '10px 12px',
-              fontSize: DESIGN_TOKENS.typography.size.sm,
-              border: `1px solid ${DESIGN_TOKENS.border.color.normal}`,
-              borderRadius: DESIGN_TOKENS.border.radius.sm,
-              marginBottom: DESIGN_TOKENS.spacing.lg,
-              outline: 'none',
-              fontFamily: DESIGN_TOKENS.typography.fontFamily,
-            }}
-          />
+        {/* FORM */}
+        <form onSubmit={handleSubmit} style={{ padding: '24px' }}>
+          {/* Nombre del campo */}
+          <div style={{ marginBottom: '20px' }}>
+            <label style={{
+              display: 'block',
+              marginBottom: '8px',
+              fontSize: '13px',
+              fontWeight: 600,
+              color: DESIGN_TOKENS.neutral[700]
+            }}>
+              Nombre del campo
+            </label>
+            <input
+              type="text"
+              value={fieldName}
+              onChange={(e) => setFieldName(e.target.value)}
+              placeholder="Ej: Cliente, Presupuesto, Estado interno..."
+              style={{
+                width: '100%',
+                padding: '10px 14px',
+                border: `1px solid ${DESIGN_TOKENS.border.color.normal}`,
+                borderRadius: '8px',
+                fontSize: '14px',
+                outline: 'none'
+              }}
+              autoFocus
+            />
+          </div>
 
-          <label style={{ display: 'block', fontSize: DESIGN_TOKENS.typography.size.xs, fontWeight: DESIGN_TOKENS.typography.weight.medium, color: DESIGN_TOKENS.neutral[600], marginBottom: 6 }}>
-            Tipo
-          </label>
-          <select
-            value={type}
-            onChange={(e) => setType(e.target.value)}
-            style={{
-              width: '100%',
-              boxSizing: 'border-box',
-              padding: '10px 12px',
-              fontSize: DESIGN_TOKENS.typography.size.sm,
-              border: `1px solid ${DESIGN_TOKENS.border.color.normal}`,
-              borderRadius: DESIGN_TOKENS.border.radius.sm,
-              marginBottom: DESIGN_TOKENS.spacing.lg,
-              background: 'white',
-              fontFamily: DESIGN_TOKENS.typography.fontFamily,
-            }}
-          >
-            {FIELD_TYPES.map((t) => (
-              <option key={t.value} value={t.value}>{t.label}</option>
-            ))}
-          </select>
+          {/* Tipo de campo */}
+          <div style={{ marginBottom: '20px' }}>
+            <label style={{
+              display: 'block',
+              marginBottom: '8px',
+              fontSize: '13px',
+              fontWeight: 600,
+              color: DESIGN_TOKENS.neutral[700]
+            }}>
+              Tipo de campo
+            </label>
+            <select
+              value={fieldType}
+              onChange={(e) => setFieldType(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '10px 14px',
+                border: `1px solid ${DESIGN_TOKENS.border.color.normal}`,
+                borderRadius: '8px',
+                fontSize: '14px',
+                outline: 'none',
+                cursor: 'pointer'
+              }}
+            >
+              <option value="text">Texto</option>
+              <option value="select">Lista desplegable</option>
+              <option value="number">Número</option>
+              <option value="date">Fecha</option>
+              <option value="checkbox">Casilla de verificación</option>
+              <option value="url">URL / Enlace</option>
+            </select>
+          </div>
 
-          {error ? (
-            <div style={{ fontSize: DESIGN_TOKENS.typography.size.xs, color: DESIGN_TOKENS.danger.base, marginBottom: DESIGN_TOKENS.spacing.md }}>
-              {error}
+          {/* Opciones (solo para tipo select) */}
+          {fieldType === 'select' && (
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{
+                display: 'block',
+                marginBottom: '8px',
+                fontSize: '13px',
+                fontWeight: 600,
+                color: DESIGN_TOKENS.neutral[700]
+              }}>
+                Opciones de la lista
+              </label>
+              {options.map((option, index) => (
+                <div key={index} style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                  <input
+                    type="text"
+                    value={option}
+                    onChange={(e) => handleOptionChange(index, e.target.value)}
+                    placeholder={`Opción ${index + 1}`}
+                    style={{
+                      flex: 1,
+                      padding: '10px 14px',
+                      border: `1px solid ${DESIGN_TOKENS.border.color.normal}`,
+                      borderRadius: '8px',
+                      fontSize: '14px',
+                      outline: 'none'
+                    }}
+                  />
+                  {options.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveOption(index)}
+                      style={{
+                        padding: '10px',
+                        background: DESIGN_TOKENS.danger.lightest,
+                        border: 'none',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        color: DESIGN_TOKENS.danger.base,
+                        display: 'flex'
+                      }}
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  )}
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={handleAddOption}
+                style={{
+                  padding: '8px 16px',
+                  background: DESIGN_TOKENS.neutral[100],
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  color: DESIGN_TOKENS.neutral[700],
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                <Plus size={14} />
+                Agregar opción
+              </button>
             </div>
-          ) : null}
+          )}
 
-          <div style={{ display: 'flex', gap: DESIGN_TOKENS.spacing.sm, justifyContent: 'flex-end' }}>
+          {/* Opciones adicionales */}
+          <div style={{
+            marginBottom: '20px',
+            padding: '16px',
+            background: DESIGN_TOKENS.neutral[50],
+            borderRadius: '8px'
+          }}>
+            <label style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              marginBottom: '12px',
+              cursor: 'pointer'
+            }}>
+              <input
+                type="checkbox"
+                checked={required}
+                onChange={(e) => setRequired(e.target.checked)}
+                style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+              />
+              <span style={{ fontSize: '14px', fontWeight: 500 }}>
+                Campo requerido
+              </span>
+            </label>
+
+            <label style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              cursor: 'pointer'
+            }}>
+              <input
+                type="checkbox"
+                checked={showInTable}
+                onChange={(e) => setShowInTable(e.target.checked)}
+                style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+              />
+              <span style={{ fontSize: '14px', fontWeight: 500 }}>
+                Mostrar en tabla de tareas
+              </span>
+            </label>
+          </div>
+
+          {/* Botones */}
+          <div style={{ display: 'flex', gap: '12px' }}>
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleClose}
               style={{
-                padding: '8px 16px',
-                border: `1px solid ${DESIGN_TOKENS.border.color.normal}`,
-                borderRadius: DESIGN_TOKENS.border.radius.sm,
+                flex: 1,
+                padding: '12px',
                 background: 'white',
-                color: DESIGN_TOKENS.neutral[700],
-                fontSize: DESIGN_TOKENS.typography.size.sm,
-                fontWeight: DESIGN_TOKENS.typography.weight.medium,
+                border: `1px solid ${DESIGN_TOKENS.border.color.normal}`,
+                borderRadius: '8px',
                 cursor: 'pointer',
-                fontFamily: DESIGN_TOKENS.typography.fontFamily,
+                fontSize: '14px',
+                fontWeight: 600,
+                color: DESIGN_TOKENS.neutral[700]
               }}
             >
               Cancelar
             </button>
             <button
               type="submit"
-              disabled={saving}
               style={{
-                padding: '8px 16px',
+                flex: 1,
+                padding: '12px',
+                background: DESIGN_TOKENS.primary.base,
                 border: 'none',
-                borderRadius: DESIGN_TOKENS.border.radius.sm,
-                background: saving ? DESIGN_TOKENS.neutral[300] : DESIGN_TOKENS.primary.base,
-                color: 'white',
-                fontSize: DESIGN_TOKENS.typography.size.sm,
-                fontWeight: DESIGN_TOKENS.typography.weight.semibold,
-                cursor: saving ? 'not-allowed' : 'pointer',
-                fontFamily: DESIGN_TOKENS.typography.fontFamily,
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontSize: '14px',
+                fontWeight: 600,
+                color: 'white'
               }}
             >
-              {saving ? 'Guardando…' : 'Añadir campo'}
+              Crear campo
             </button>
           </div>
         </form>
@@ -195,3 +349,5 @@ export default function AddCustomFieldModal({ open, onClose, project, onSaved })
     </div>
   );
 }
+
+export default AddCustomFieldModal;

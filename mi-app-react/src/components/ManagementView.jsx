@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Briefcase, AlertTriangle, ChevronDown, RefreshCw, Users,
   BarChart2, Calendar, ChevronLeft, ChevronRight, Settings, X,
+  Map, Flag, CheckSquare, User,
 } from 'lucide-react';
 import { DESIGN_TOKENS } from '../styles/tokens';
 import { useApp } from '../context/AppContext';
@@ -10,6 +11,7 @@ import {
   getEnvironmentMetrics,
   getWeeklyTasks,
 } from './metrics';
+import { dbProjects, dbTasks, dbUsers } from '../lib/database';
 import ProjectsView from './ProjectsView';
 
 // ============================================================================
@@ -412,6 +414,532 @@ const PersonRow = ({ person, index, capacities }) => {
 };
 
 // ============================================================================
+// MANAGEMENT ROADMAP
+// ============================================================================
+const MONTHS_ES   = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+const MONTHS_FULL = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+const RANGE_YEARS = [2024, 2025, 2026, 2027];
+
+const RM_TYPE_CFG = {
+  project:  { label: 'PROYECTO', bg: '#eef2ff', color: '#6366f1', Icon: Briefcase },
+  milestone:{ label: 'HITO',     bg: '#f5f3ff', color: '#8b5cf6', Icon: Flag },
+  task:     { label: 'TAREA',    bg: '#ecfdf5', color: '#10b981', Icon: CheckSquare },
+};
+const RM_PRI_CFG = {
+  urgent: { label: 'Urgente', bg: '#fee2e2', color: '#991b1b' },
+  high:   { label: 'Alta',    bg: '#fef3c7', color: '#92400e' },
+  medium: { label: 'Media',   bg: '#ede9fe', color: '#5b21b6' },
+  low:    { label: 'Baja',    bg: '#f0fdf4', color: '#166534' },
+};
+const RM_STATUS_CFG = {
+  completed:   { label: 'Completado',  bg: '#d1fae5', color: '#065f46' },
+  done:        { label: 'Hecho',       bg: '#d1fae5', color: '#065f46' },
+  in_progress: { label: 'En Progreso', bg: '#dbeafe', color: '#1e40af' },
+  blocked:     { label: 'Bloqueado',   bg: '#fee2e2', color: '#991b1b' },
+  pending:     { label: 'Pendiente',   bg: '#fff7ed', color: '#9a3412' },
+  todo:        { label: 'Por Hacer',   bg: '#f3f4f6', color: '#374151' },
+  active:      { label: 'Activo',      bg: '#dbeafe', color: '#1e40af' },
+  paused:      { label: 'En Pausa',    bg: '#eceff1', color: '#37474f' },
+  review:      { label: 'En Revisión', bg: '#ffe4e6', color: '#be123c' },
+};
+
+const rmDaysUntil = (dateStr) => {
+  if (!dateStr) return null;
+  const d = new Date(dateStr + 'T00:00:00');
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  return Math.round((d - today) / 86400000);
+};
+
+function RMDaysChip({ days }) {
+  if (days === null) return null;
+  const cfg = days < 0
+    ? { bg: '#fee2e2', color: '#991b1b', label: `${Math.abs(days)}d vencido` }
+    : days === 0
+    ? { bg: '#fef9c3', color: '#713f12', label: '¡Hoy!' }
+    : days <= 3
+    ? { bg: '#fef3c7', color: '#92400e', label: `${days}d` }
+    : days <= 7
+    ? { bg: '#fff7ed', color: '#9a3412', label: `${days}d` }
+    : { bg: '#f0fdf4', color: '#166534', label: `${days}d` };
+  return (
+    <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 5,
+      background: cfg.bg, color: cfg.color, whiteSpace: 'nowrap' }}>
+      {cfg.label}
+    </span>
+  );
+}
+
+function RMCard({ item, compact = false }) {
+  const typeCfg  = RM_TYPE_CFG[item.type]    || RM_TYPE_CFG.task;
+  const priCfg   = RM_PRI_CFG[item.priority] || RM_PRI_CFG.medium;
+  const stCfg    = RM_STATUS_CFG[item.status] || RM_STATUS_CFG.todo;
+  const days     = rmDaysUntil(item.endDate);
+  const TypeIcon = typeCfg.Icon;
+
+  const dateStr = item.endDate
+    ? new Date(item.endDate + 'T00:00:00').toLocaleDateString('es-ES',
+        { day: '2-digit', month: 'short', year: '2-digit' })
+    : null;
+
+  return (
+    <div style={{
+      background: 'white',
+      borderRadius: 12,
+      borderTop: '1px solid #e8edf3',
+      borderRight: '1px solid #e8edf3',
+      borderBottom: '1px solid #e8edf3',
+      borderLeft: `4px solid ${priCfg.color}`,
+      padding: compact ? '7px 10px' : '11px 14px',
+      display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: 0,
+      width: compact ? 210 : 265,
+      flexShrink: 0, alignSelf: 'stretch',
+      boxShadow: '0 1px 4px rgba(0,0,0,0.07), 0 4px 12px rgba(0,0,0,0.04)',
+    }}>
+
+      {/* ── Bloque superior: badges + título + proyecto ── */}
+      <div>
+        {/* Fila 1: tipo + días */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', gap: 3,
+              fontSize: 9, fontWeight: 700, padding: '3px 6px', borderRadius: 5,
+              background: typeCfg.bg, color: typeCfg.color, letterSpacing: '0.05em',
+            }}>
+              <TypeIcon size={9} style={{ flexShrink: 0 }} />
+              {typeCfg.label}
+            </span>
+            <span style={{
+              fontSize: 9, fontWeight: 700, padding: '3px 6px', borderRadius: 5,
+              background: priCfg.bg, color: priCfg.color,
+            }}>
+              {priCfg.label.toUpperCase()}
+            </span>
+          </div>
+          <RMDaysChip days={days} />
+        </div>
+
+        {/* Fila 2: título — reserva siempre 2 líneas */}
+        <div style={{
+          fontSize: compact ? 11 : 13, fontWeight: 700, color: '#0f172a',
+          lineHeight: 1.3, marginBottom: compact ? 4 : 6,
+          minHeight: compact ? '2.2em' : '2.5em',
+          overflow: 'hidden', display: '-webkit-box',
+          WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
+        }}>
+          {item.title}
+        </div>
+
+        {/* Fila 3: proyecto padre — siempre ocupa espacio para alineación */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 4, minWidth: 0,
+          marginBottom: compact ? 5 : 7, paddingBottom: compact ? 5 : 7, minHeight: compact ? 17 : 20,
+          borderBottom: '1px solid #f1f5f9',
+          visibility: item.type !== 'project' && item.projectName ? 'visible' : 'hidden',
+        }}>
+          <span style={{
+            width: compact ? 6 : 7, height: compact ? 6 : 7, borderRadius: '50%',
+            background: item.projectColor || '#6366f1', flexShrink: 0,
+          }} />
+          <span style={{
+            fontSize: compact ? 10 : 11, color: '#475569', fontWeight: 500,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>
+            {item.projectName || ''}
+          </span>
+        </div>
+      </div>
+
+      {/* ── Fila 4: fecha · asignado · estado ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: compact ? 5 : 8, flexWrap: 'wrap' }}>
+        {dateStr && (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: compact ? 10 : 11, color: '#94a3b8' }}>
+            <Calendar size={9} />{dateStr}
+          </span>
+        )}
+        {item.assigneeName && (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: compact ? 10 : 11, color: '#64748b', fontWeight: 500 }}>
+            <User size={9} />{item.assigneeName.split(' ')[0]}
+          </span>
+        )}
+        <div style={{ flex: 1 }} />
+        <span style={{
+          fontSize: compact ? 9 : 10, fontWeight: 700, padding: compact ? '2px 6px' : '3px 8px', borderRadius: 20,
+          background: stCfg.bg, color: stCfg.color, whiteSpace: 'nowrap',
+        }}>
+          {stCfg.label}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function ManagementRoadmap({ selectedEnv = 'all' }) {
+  const [rangePreset, setRangePreset] = useState('2026');
+  const [customStart, setCustomStart] = useState({ year: 2026, month: 0 });
+  const [customEnd,   setCustomEnd]   = useState({ year: 2026, month: 11 });
+  const [filterType,     setFilterType]     = useState('all');
+  const [filterPriority, setFilterPriority] = useState('all');
+  const [filterStatus,   setFilterStatus]   = useState('all');
+  const [projects, setProjects] = useState([]);
+  const [tasks,    setTasks]    = useState([]);
+  const [users,    setUsers]    = useState([]);
+  const [loading,  setLoading]  = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      try {
+        const [p, t, u] = await Promise.all([
+          dbProjects.getAll(),
+          dbTasks.getAll(),
+          dbUsers.getAll(),
+        ]);
+        setProjects(p || []);
+        setTasks(t || []);
+        setUsers(u || []);
+      } catch (e) {
+        console.error('[ManagementRoadmap]', e);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  const { startYear, startMonth, endYear, endMonth } = useMemo(() => {
+    if (rangePreset === '2025')      return { startYear: 2025, startMonth: 0, endYear: 2025, endMonth: 11 };
+    if (rangePreset === '2026')      return { startYear: 2026, startMonth: 0, endYear: 2026, endMonth: 11 };
+    if (rangePreset === '2025-2026') return { startYear: 2025, startMonth: 0, endYear: 2026, endMonth: 11 };
+    return { startYear: customStart.year, startMonth: customStart.month,
+             endYear: customEnd.year, endMonth: customEnd.month };
+  }, [rangePreset, customStart, customEnd]);
+
+  const months = useMemo(() => {
+    const result = []; let y = startYear, m = startMonth;
+    while (y < endYear || (y === endYear && m <= endMonth)) {
+      result.push({ year: y, month: m });
+      if (++m > 11) { m = 0; y++; }
+    }
+    return result;
+  }, [startYear, startMonth, endYear, endMonth]);
+
+  const allItems = useMemo(() => {
+    const items = [];
+    const showProj = filterType === 'all' || filterType === 'projects';
+    const showMile = filterType === 'all' || filterType === 'milestones';
+    const showTask = filterType === 'all' || filterType === 'tasks';
+
+    const envProjects = selectedEnv === 'all'
+      ? projects
+      : projects.filter(p => String(p.environmentId) === String(selectedEnv));
+    const envProjIds = new Set(envProjects.map(p => String(p.id)));
+    const envTasks = selectedEnv === 'all'
+      ? tasks
+      : tasks.filter(t => envProjIds.has(String(t.projectId)));
+
+    envProjects.forEach(proj => {
+      if (showProj) {
+        items.push({
+          id: `proj-${proj.id}`, type: 'project',
+          title: proj.name, status: proj.status || 'active',
+          priority: proj.priority || 'medium',
+          endDate: proj.endDate || null, startDate: proj.startDate || null,
+          projectId: proj.id, projectName: proj.name, projectColor: proj.color || '#6366f1',
+          assigneeId: proj.leaderId,
+          assigneeName: users.find(u => u.id === proj.leaderId)?.name || null,
+        });
+      }
+      if (showMile) {
+        (proj.roadmap?.phases || []).forEach(phase => {
+          if (!phase.endDate) return;
+          items.push({
+            id: `phase-${phase.id}`, type: 'milestone',
+            title: phase.name, status: phase.status || 'pending',
+            priority: phase.priority || 'medium',
+            endDate: phase.endDate || null, startDate: phase.startDate || null,
+            projectId: proj.id, projectName: proj.name, projectColor: proj.color || '#8b5cf6',
+            assigneeId: phase.responsableId,
+            assigneeName: users.find(u => u.id === phase.responsableId)?.name || null,
+          });
+        });
+      }
+    });
+
+    if (showTask) {
+      envTasks.forEach(task => {
+        const proj = envProjects.find(p => String(p.id) === String(task.projectId));
+        items.push({
+          id: `task-${task.id}`, type: 'task',
+          title: task.title, status: task.status || 'todo',
+          priority: task.priority || 'medium',
+          endDate: task.endDate || task.dueDate || null, startDate: task.startDate || null,
+          projectId: task.projectId, projectName: proj?.name || null,
+          projectColor: proj?.color || '#10b981',
+          assigneeId: task.assigneeId,
+          assigneeName: users.find(u => u.id === task.assigneeId)?.name || null,
+        });
+      });
+    }
+    return items;
+  }, [projects, tasks, users, filterType, selectedEnv]);
+
+  const filteredItems = useMemo(() => allItems.filter(item => {
+    if (filterPriority !== 'all' && item.priority !== filterPriority) return false;
+    if (filterStatus   !== 'all' && item.status   !== filterStatus)   return false;
+    if (!item.endDate) return false;
+    const d = new Date(item.endDate + 'T00:00:00');
+    if (isNaN(d.getTime())) return false;
+    const iy = d.getFullYear(), im = d.getMonth();
+    return (iy > startYear || (iy === startYear && im >= startMonth)) &&
+           (iy < endYear   || (iy === endYear   && im <= endMonth));
+  }), [allItems, filterPriority, filterStatus, startYear, startMonth, endYear, endMonth]);
+
+  const itemsByMonth = useMemo(() => {
+    const map = {};
+    months.forEach(({ year, month }) => { map[`${year}-${month}`] = []; });
+    filteredItems.forEach(item => {
+      const d = new Date(item.endDate + 'T00:00:00');
+      const key = `${d.getFullYear()}-${d.getMonth()}`;
+      if (map[key]) map[key].push(item);
+    });
+    return map;
+  }, [filteredItems, months]);
+
+  const PRI_ORDER = { urgent: 0, high: 1, medium: 2, low: 3 };
+  const upcoming = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return allItems
+      .filter(item => {
+        if (!item.endDate) return false;
+        const d = new Date(item.endDate + 'T00:00:00');
+        if (isNaN(d.getTime())) return false;
+        if (d < today) return false;
+        if (filterType     !== 'all' && item.type !== (filterType === 'milestones' ? 'milestone' : filterType === 'projects' ? 'project' : 'task')) return false;
+        if (filterPriority !== 'all' && item.priority !== filterPriority) return false;
+        if (filterStatus   !== 'all' && item.status   !== filterStatus)   return false;
+        return true;
+      })
+      .sort((a, b) => {
+        const dateDiff = new Date(a.endDate) - new Date(b.endDate);
+        if (dateDiff !== 0) return dateDiff;
+        return (PRI_ORDER[a.priority] ?? 2) - (PRI_ORDER[b.priority] ?? 2);
+      })
+      .slice(0, 4);
+  }, [allItems, filterType, filterPriority, filterStatus]);
+
+  const stats = useMemo(() => ({
+    total:       filteredItems.length,
+    completed:   filteredItems.filter(i => i.status === 'completed' || i.status === 'done').length,
+    blocked:     filteredItems.filter(i => i.status === 'blocked').length,
+    highPriority:filteredItems.filter(i => i.priority === 'urgent' || i.priority === 'high').length,
+    monthsInView:months.length,
+  }), [filteredItems, months]);
+
+  const rangeLabel = rangePreset === 'custom'
+    ? `${MONTHS_ES[customStart.month]} ${customStart.year} → ${MONTHS_ES[customEnd.month]} ${customEnd.year}`
+    : rangePreset === '2025-2026' ? 'Ene 2025 → Dic 2026'
+    : `Año ${rangePreset}`;
+
+  const selStyle = {
+    padding: '7px 10px', border: '1px solid #e2e8f0', borderRadius: 8,
+    fontSize: 12, fontFamily: 'inherit', color: '#334155',
+    background: 'white', cursor: 'pointer', outline: 'none',
+  };
+
+  if (loading) return (
+    <div style={{ padding: '60px 0', textAlign: 'center', color: '#94a3b8', fontSize: 14 }}>
+      Cargando roadmap…
+    </div>
+  );
+
+  return (
+    <div style={{ minWidth: 0 }}>
+      {/* ── FILTROS ── */}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
+        {/* Rango presets */}
+        <div style={{ display: 'flex', gap: 3, background: 'white', padding: '4px',
+          borderRadius: 10, boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
+          {['2025', '2026', '2025-2026', 'custom'].map(p => (
+            <button key={p} onClick={() => setRangePreset(p)} style={{
+              padding: '6px 12px', border: 'none', borderRadius: 7, cursor: 'pointer',
+              fontFamily: 'inherit', fontSize: 12, fontWeight: 600, transition: 'all 0.15s',
+              background: rangePreset === p ? '#1e293b' : 'transparent',
+              color: rangePreset === p ? 'white' : '#64748b',
+            }}>{p === 'custom' ? 'Personalizado' : p}</button>
+          ))}
+        </div>
+
+        {/* Custom picker */}
+        {rangePreset === 'custom' && (
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', background: 'white',
+            padding: '6px 12px', borderRadius: 10, boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
+            <select value={customStart.month} onChange={e => setCustomStart(s => ({ ...s, month: +e.target.value }))}
+              style={{ border: 'none', outline: 'none', fontSize: 12, fontFamily: 'inherit', color: '#334155', cursor: 'pointer' }}>
+              {MONTHS_FULL.map((m, i) => <option key={i} value={i}>{m}</option>)}
+            </select>
+            <select value={customStart.year} onChange={e => setCustomStart(s => ({ ...s, year: +e.target.value }))}
+              style={{ border: 'none', outline: 'none', fontSize: 12, fontFamily: 'inherit', color: '#334155', cursor: 'pointer' }}>
+              {RANGE_YEARS.map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+            <span style={{ color: '#94a3b8', fontSize: 14 }}>→</span>
+            <select value={customEnd.month} onChange={e => setCustomEnd(s => ({ ...s, month: +e.target.value }))}
+              style={{ border: 'none', outline: 'none', fontSize: 12, fontFamily: 'inherit', color: '#334155', cursor: 'pointer' }}>
+              {MONTHS_FULL.map((m, i) => <option key={i} value={i}>{m}</option>)}
+            </select>
+            <select value={customEnd.year} onChange={e => setCustomEnd(s => ({ ...s, year: +e.target.value }))}
+              style={{ border: 'none', outline: 'none', fontSize: 12, fontFamily: 'inherit', color: '#334155', cursor: 'pointer' }}>
+              {RANGE_YEARS.map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+          </div>
+        )}
+
+        <div style={{ flex: 1 }} />
+
+        <select value={filterType} onChange={e => setFilterType(e.target.value)} style={selStyle}>
+          <option value="all">Proyectos, Hitos y Tareas</option>
+          <option value="projects">Solo Proyectos</option>
+          <option value="milestones">Solo Hitos</option>
+          <option value="tasks">Solo Tareas</option>
+        </select>
+        <select value={filterPriority} onChange={e => setFilterPriority(e.target.value)} style={selStyle}>
+          <option value="all">Todas las prioridades</option>
+          <option value="urgent">Urgente</option>
+          <option value="high">Alta</option>
+          <option value="medium">Media</option>
+          <option value="low">Baja</option>
+        </select>
+        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={selStyle}>
+          <option value="all">Todos los estados</option>
+          {Object.entries(RM_STATUS_CFG).filter(([k]) => k !== 'done').map(([k, v]) => (
+            <option key={k} value={k}>{v.label}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* ── STATS (compacto, integrado) ── */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap',
+        marginBottom: 20, padding: '8px 14px',
+        background: 'white', borderRadius: 10,
+        border: '1px solid #e8edf3',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+      }}>
+        <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>{rangeLabel}</span>
+        <span style={{ width: 1, height: 14, background: '#e2e8f0', flexShrink: 0 }} />
+        {[
+          { v: stats.total,         l: 'en roadmap',     bg: '#f1f5f9', color: '#1e293b' },
+          { v: stats.completed,     l: 'completados',    bg: '#d1fae5', color: '#065f46' },
+          { v: stats.blocked,       l: 'bloqueados',     bg: '#fee2e2', color: '#991b1b' },
+          { v: stats.highPriority,  l: 'alta prioridad', bg: '#fef3c7', color: '#92400e' },
+        ].map(({ v, l, bg, color }, i) => (
+          <span key={i} style={{
+            display: 'inline-flex', alignItems: 'center', gap: 5,
+            padding: '3px 10px', borderRadius: 20,
+            background: bg, color,
+            fontSize: 12, fontWeight: 700,
+          }}>
+            {v}
+            <span style={{ fontWeight: 500, opacity: 0.8 }}>{l}</span>
+          </span>
+        ))}
+      </div>
+
+      {/* ── PRÓXIMAS ENTREGAS ── */}
+      <div style={{
+        background: '#f8fafc', borderRadius: 16,
+        padding: '20px 20px 16px', marginBottom: 28,
+        border: '1px solid #e8edf3',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+          <span style={{ fontSize: 14, fontWeight: 800, color: '#0f172a' }}>Próximas entregas</span>
+          <span style={{ fontSize: 12, color: '#94a3b8' }}>— ordenadas por fecha más cercana</span>
+          {upcoming.length > 0 && (
+            <span style={{
+              marginLeft: 4, fontSize: 11, fontWeight: 700, padding: '2px 8px',
+              borderRadius: 20, background: '#1e293b', color: 'white',
+            }}>{upcoming.length}</span>
+          )}
+        </div>
+        {upcoming.length > 0 ? (
+          <div style={{
+            display: 'flex', gap: 14, overflowX: 'auto', paddingBottom: 8,
+            scrollbarWidth: 'thin', alignItems: 'stretch',
+          }}>
+            {upcoming.map((item) => <RMCard key={item.id} item={item} />)}
+          </div>
+        ) : (
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: '32px 16px', color: '#94a3b8', fontSize: 13, gap: 8,
+          }}>
+            <Calendar size={16} style={{ flexShrink: 0 }} />
+            No hay entregas próximas a partir de hoy
+          </div>
+        )}
+      </div>
+
+      {/* ── TIMELINE POR MES ── */}
+      <div>
+        <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a', marginBottom: 12 }}>
+          Timeline de entregas · {rangeLabel}
+        </div>
+        <div style={{ overflowX: 'auto', paddingBottom: 12, scrollbarWidth: 'thin' }}>
+          <div style={{ display: 'flex', minWidth: 'max-content', gap: 0 }}>
+            {months.map(({ year, month }) => {
+              const colItems = itemsByMonth[`${year}-${month}`] || [];
+              const isToday = new Date().getFullYear() === year && new Date().getMonth() === month;
+              return (
+                <div key={`${year}-${month}`} style={{ width: 226, flexShrink: 0, padding: '0 6px' }}>
+                  {/* Header de mes */}
+                  <div style={{
+                    padding: '7px 10px', background: isToday ? '#1e293b' : 'white',
+                    borderRadius: 8, marginBottom: 8, textAlign: 'center',
+                    border: `1px solid ${isToday ? '#1e293b' : '#e2e8f0'}`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                  }}>
+                    <span style={{ fontSize: 12, fontWeight: 700,
+                      color: isToday ? 'white' : '#334155' }}>
+                      {MONTHS_FULL[month]}
+                    </span>
+                    <span style={{ fontSize: 11, fontWeight: 500,
+                      color: isToday ? '#94a3b8' : '#94a3b8' }}>{year}</span>
+                    {colItems.length > 0 && (
+                      <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px',
+                        borderRadius: 8, background: isToday ? 'rgba(255,255,255,0.2)' : '#6366f1',
+                        color: 'white' }}>
+                        {colItems.length}
+                      </span>
+                    )}
+                  </div>
+                  {/* Cards del mes */}
+                  {colItems.length === 0 ? (
+                    <div style={{ height: 70, border: '1px dashed #e2e8f0', borderRadius: 10,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <span style={{ fontSize: 12, color: '#e2e8f0' }}>—</span>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {colItems.map(item => <RMCard key={item.id} item={item} compact />)}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {filteredItems.length === 0 && !loading && (
+          <div style={{ padding: '48px 0', textAlign: 'center', color: '#94a3b8', fontSize: 14 }}>
+            No hay entregables en el período seleccionado con los filtros actuales.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
 // MAIN VIEW
 // ============================================================================
 export default function ManagementView() {
@@ -477,11 +1005,12 @@ export default function ManagementView() {
   useEffect(() => { loadData(); }, [loadData]);
 
   // ── Procesamiento de tareas semanales ─────────────────────────────────────
-  // Incluye todas las tareas activas de la semana (no solo in_progress)
-  const activeTasks = useMemo(() =>
-    (weeklyTasks || []).filter(t => !['completed', 'done'].includes(t.status)),
-    [weeklyTasks]
-  );
+  // Semana actual: solo in_progress. Semanas pasadas/futuras: todas menos completadas/done.
+  const activeTasks = useMemo(() => {
+    const tasks = weeklyTasks || [];
+    if (isCurrentWeek) return tasks.filter(t => t.status === 'in_progress');
+    return tasks.filter(t => !['completed', 'done'].includes(t.status));
+  }, [weeklyTasks, isCurrentWeek]);
 
   // Agrupar por persona + calcular saturación basada en capacidad
   const weeklyByPerson = useMemo(() => {
@@ -569,7 +1098,7 @@ export default function ManagementView() {
   }
 
   return (
-    <div style={{ padding: '16px 24px', maxWidth: 1400, margin: '0 auto', fontFamily: DESIGN_TOKENS.typography.fontFamily }}>
+    <div style={{ padding: '16px 24px', maxWidth: activeTab === 'roadmap' ? 'none' : 1400, margin: '0 auto', fontFamily: DESIGN_TOKENS.typography.fontFamily }}>
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
 
       {/* ── HEADER ─────────────────────────────────────────────────────────── */}
@@ -630,6 +1159,7 @@ export default function ManagementView() {
         {[
           { id: 'projects', label: 'Proyectos', icon: <Briefcase size={15} /> },
           { id: 'week',     label: 'Semana',    icon: <Calendar size={15} /> },
+          { id: 'roadmap',  label: 'Roadmap',   icon: <Map size={15} /> },
         ].map(tab => (
           <button
             key={tab.id}
@@ -795,6 +1325,9 @@ export default function ManagementView() {
       {activeTab === 'projects' && (
         <ProjectsView selectedEnvironment={selectedEnv} onRefresh={loadData} />
       )}
+
+      {/* ── TAB: ROADMAP ──────────────────────────────────────────────────── */}
+      {activeTab === 'roadmap' && <ManagementRoadmap selectedEnv={selectedEnv} />}
 
       {/* ── MODAL CAPACIDADES ─────────────────────────────────────────────── */}
       {showCapModal && (

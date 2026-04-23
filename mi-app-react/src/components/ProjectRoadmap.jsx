@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import { useApp } from '../context/AppContext';
 import ConfirmModal from './ConfirmModal';
 import { 
-  Plus, ChevronDown, ChevronRight, Edit, Trash2, Check, X,
+  Plus, ChevronDown, ChevronRight, ChevronLeft, Edit, Trash2, Check, X,
   Home, Clipboard, FileText, AlertTriangle, Calendar, Target, CheckCircle2, AlertCircle, Users, TrendingUp, Map
 } from 'lucide-react';
 import { DESIGN_TOKENS } from '../styles/tokens';
@@ -10,7 +11,7 @@ import { DESIGN_TOKENS } from '../styles/tokens';
 // PROJECT ROADMAP - Dynamic Component
 // ============================================================================
 
-const ProjectRoadmap = ({ project, tasks = [], onProjectUpdate, onTaskCreate, onTaskUpdate, onTaskDelete }) => {
+const ProjectRoadmap = ({ project, tasks = [], users = [], onProjectUpdate, onTaskCreate, onTaskUpdate, onTaskDelete }) => {
   const [activeTab, setActiveTab] = useState('overview');
 
   // Inicializar estructura si no existe
@@ -235,9 +236,12 @@ const ProjectRoadmap = ({ project, tasks = [], onProjectUpdate, onTaskCreate, on
         padding: '0 24px 48px'
       }}>
         {activeTab === 'overview' && (
-          <OverviewTab 
+          <OverviewTab
             project={project}
             roadmapData={roadmapData}
+            tasks={tasks}
+            users={users}
+            onTabChange={setActiveTab}
           />
         )}
         {activeTab === 'plan' && (
@@ -245,6 +249,7 @@ const ProjectRoadmap = ({ project, tasks = [], onProjectUpdate, onTaskCreate, on
             phases={roadmapData.phases || []}
             tasks={tasks}
             projectId={project.id}
+            users={users}
             onUpdate={(phases) => updateRoadmap({ phases })}
             onTaskCreate={onTaskCreate}
             onTaskUpdate={onTaskUpdate}
@@ -276,6 +281,7 @@ const ProjectRoadmap = ({ project, tasks = [], onProjectUpdate, onTaskCreate, on
           0%, 100% { opacity: 1; }
           50% { opacity: 0.5; }
         }
+        .rmap-tl-scroll::-webkit-scrollbar { display: none; }
       `}</style>
     </div>
   );
@@ -368,43 +374,54 @@ const NavTab = ({ label, icon: Icon, color, active, onClick }) => (
 // OVERVIEW TAB
 // ============================================================================
 
-const OverviewTab = ({ project, roadmapData }) => {
+const OverviewTab = ({ project, roadmapData, tasks = [], users = [], onTabChange }) => {
   const phases = roadmapData.phases || [];
   const stories = roadmapData.userStories || [];
   const risks = roadmapData.risks || [];
-  
-  const totalActivities = phases.reduce((sum, p) => sum + (p.activities?.length || 0), 0);
+
+  const phasedTasks = tasks.filter(t => phases.some(p => String(p.id) === String(t.roadmapPhaseId)));
+  const totalActivities = phasedTasks.length;
+  const completedActivities = phasedTasks.filter(t => t.status === 'completed' || t.status === 'done').length;
   const totalPoints = stories.reduce((sum, s) => sum + (s.points || 0), 0);
   const criticalRisks = risks.filter(r => r.level === 'critical' || r.level === 'high').length;
 
+  // Fase actual = primera fase en progreso o pendiente
+  const currentPhaseIdx = phases.findIndex(p => p.status === 'in_progress' || !p.status || p.status === 'pending');
+  const currentPhase = currentPhaseIdx >= 0 ? phases[currentPhaseIdx] : phases[0];
+  const phaseLabel = phases.length > 0 ? `${Math.max(currentPhaseIdx, 0) + 1} / ${phases.length}` : '0 / 0';
+
   const kpis = [
-    { 
-      label: 'Fase actual', 
-      value: phases.length > 0 ? `1 / ${phases.length}` : '0 / 0',
-      sub: phases[0]?.name || 'Sin fases',
+    {
+      label: 'Fase actual',
+      value: phaseLabel,
+      sub: currentPhase?.name || 'Sin fases',
       icon: Target,
-      gradient: `linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)`
+      gradient: `linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)`,
+      tab: 'plan',
     },
-    { 
-      label: 'Actividades', 
+    {
+      label: 'Actividades',
       value: totalActivities,
-      sub: '0 completadas',
+      sub: `${completedActivities} completadas`,
       icon: CheckCircle2,
-      gradient: `linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%)`
+      gradient: `linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%)`,
+      tab: 'plan',
     },
-    { 
-      label: 'Historias de Usuario', 
+    {
+      label: 'Historias de Usuario',
       value: stories.length,
       sub: `${totalPoints} story points`,
       icon: FileText,
-      gradient: `linear-gradient(135deg, #10b981 0%, #059669 100%)`
+      gradient: `linear-gradient(135deg, #10b981 0%, #059669 100%)`,
+      tab: 'stories',
     },
-    { 
-      label: 'Riesgos activos', 
+    {
+      label: 'Riesgos activos',
       value: criticalRisks,
-      sub: 'críticos / altos',
+      sub: `${risks.length} total`,
       icon: AlertCircle,
-      gradient: `linear-gradient(135deg, #f59e0b 0%, #ef4444 100%)`
+      gradient: `linear-gradient(135deg, #f59e0b 0%, #ef4444 100%)`,
+      tab: 'risks',
     },
   ];
 
@@ -418,9 +435,13 @@ const OverviewTab = ({ project, roadmapData }) => {
       }}>
         {kpis.map((kpi, i) => {
           const IconComponent = kpi.icon;
+          const clickable = !!kpi.tab && !!onTabChange;
           return (
             <div
               key={i}
+              role={clickable ? 'button' : undefined}
+              title={clickable ? `Ver ${kpi.label}` : undefined}
+              onClick={clickable ? () => onTabChange(kpi.tab) : undefined}
               style={{
                 background: kpi.gradient,
                 borderRadius: '16px',
@@ -430,13 +451,15 @@ const OverviewTab = ({ project, roadmapData }) => {
                 overflow: 'hidden',
                 boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
                 transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                cursor: 'pointer'
+                cursor: clickable ? 'pointer' : 'default',
               }}
               onMouseEnter={(e) => {
+                if (!clickable) return;
                 e.currentTarget.style.transform = 'translateY(-4px) scale(1.02)';
                 e.currentTarget.style.boxShadow = '0 12px 32px rgba(0,0,0,0.18)';
               }}
               onMouseLeave={(e) => {
+                if (!clickable) return;
                 e.currentTarget.style.transform = 'translateY(0) scale(1)';
                 e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.12)';
               }}
@@ -520,7 +543,7 @@ const OverviewTab = ({ project, roadmapData }) => {
           }}>
             Roadmap del Proyecto
           </h3>
-          <PhaseTimeline phases={phases} />
+          <PhaseTimeline phases={phases} tasks={tasks} users={users} />
         </div>
       ) : (
         <EmptyState
@@ -534,100 +557,408 @@ const OverviewTab = ({ project, roadmapData }) => {
 };
 
 // ============================================================================
-// PHASE TIMELINE
+// PHASE TIMELINE  — compact scrollable
 // ============================================================================
 
-const PhaseTimeline = ({ phases }) => {
-  return (
-    <div style={{ position: 'relative' }}>
-      {/* Progress Line */}
-      <div style={{
-        position: 'absolute',
-        top: '28px',
-        left: '32px',
-        right: '32px',
-        height: '2px',
-        background: DESIGN_TOKENS.neutral[200]
-      }} />
-      <div style={{
-        position: 'absolute',
-        top: '28px',
-        left: '32px',
-        width: '5%',
-        height: '2px',
-        background: `linear-gradient(90deg, ${DESIGN_TOKENS.primary.base}, ${DESIGN_TOKENS.primary.dark})`,
-        transition: 'width 1s ease'
-      }} />
+const TL_SLOT   = 64;   // px per phase slot
+const TL_ICON   = 36;   // icon diameter
+const TL_LINE_Y = 18;   // line Y = icon center (TL_ICON / 2)
+const TL_HEIGHT = 110;  // inner container height (enough for expanded active label)
 
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        position: 'relative'
-      }}>
-        {phases.map((phase, i) => (
-          <div
-            key={phase.id}
-            style={{
-              flex: 1,
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: '12px'
-            }}
-          >
+const TL_NODE_STYLE = (status) => {
+  if (status === 'completed') return { bg: '#d1fae5', border: '#10b981', accent: '#10b981' };
+  if (status === 'in_progress') return { bg: '#eef2ff', border: '#6366f1', accent: '#6366f1' };
+  if (status === 'blocked')    return { bg: '#fee2e2', border: '#ef4444', accent: '#ef4444' };
+  return { bg: '#f3f4f6', border: '#d1d5db', accent: '#9ca3af' };
+};
+
+const TL_STATUS_LABEL = (status) => {
+  if (status === 'completed')  return '✅ Completada';
+  if (status === 'in_progress') return '🟣 Activa';
+  if (status === 'blocked')    return '🔴 Bloqueada';
+  return '⚪ Pendiente';
+};
+
+const PhaseTimeline = ({ phases, tasks = [], users = [] }) => {
+  const [selectedId,   setSelectedId]   = useState(null);
+  const [tooltipData,  setTooltipData]  = useState(null); // { phase, rect }
+  const [canScrollL,   setCanScrollL]   = useState(false);
+  const [canScrollR,   setCanScrollR]   = useState(false);
+  const scrollRef = useRef(null);
+
+  const activeIndex   = phases.findIndex(p => p.status === 'in_progress');
+  const selectedPhase = phases.find(p => p.id === selectedId) || null;
+
+  const checkScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setCanScrollL(el.scrollLeft > 4);
+    setCanScrollR(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
+  };
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    checkScroll();
+    el.addEventListener('scroll', checkScroll, { passive: true });
+    window.addEventListener('resize', checkScroll);
+    return () => {
+      el.removeEventListener('scroll', checkScroll);
+      window.removeEventListener('resize', checkScroll);
+    };
+  }, [phases.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-scroll to active phase on mount
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || activeIndex < 0) return;
+    const target = activeIndex * TL_SLOT + TL_SLOT / 2 - el.clientWidth / 2;
+    setTimeout(() => el.scrollTo({ left: Math.max(0, target), behavior: 'smooth' }), 120);
+  }, [activeIndex]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const doScroll = (dir) => {
+    scrollRef.current?.scrollBy({ left: dir * TL_SLOT * 4, behavior: 'smooth' });
+  };
+
+  // Progress line colored width: up to center of active (or last completed)
+  let coloredEnd = -1;
+  if (activeIndex >= 0) {
+    coloredEnd = activeIndex;
+  } else {
+    for (let i = phases.length - 1; i >= 0; i--) {
+      if (phases[i].status === 'completed') { coloredEnd = i; break; }
+    }
+  }
+  const totalLineW  = phases.length > 1 ? (phases.length - 1) * TL_SLOT : 0;
+  const coloredLineW = coloredEnd > 0 ? coloredEnd * TL_SLOT : 0;
+
+  const arrowBtn = (dir) => ({
+    position: 'absolute',
+    [dir > 0 ? 'right' : 'left']: 4,
+    top: TL_LINE_Y,
+    transform: 'translateY(-50%)',
+    zIndex: 10,
+    width: 28, height: 28, borderRadius: '50%',
+    background: 'white', border: '1px solid #e5e7eb',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+    padding: 0,
+  });
+
+  return (
+    <div>
+      {/* Scroll area + arrows */}
+      <div style={{ position: 'relative' }}>
+        {/* Edge fades */}
+        <div style={{
+          position: 'absolute', left: 0, top: 0, bottom: 0, width: 48,
+          background: 'linear-gradient(90deg, white, transparent)',
+          zIndex: 5, pointerEvents: 'none',
+          opacity: canScrollL ? 1 : 0, transition: 'opacity 0.2s',
+        }} />
+        <div style={{
+          position: 'absolute', right: 0, top: 0, bottom: 0, width: 48,
+          background: 'linear-gradient(270deg, white, transparent)',
+          zIndex: 5, pointerEvents: 'none',
+          opacity: canScrollR ? 1 : 0, transition: 'opacity 0.2s',
+        }} />
+
+        {canScrollL && (
+          <button onClick={() => doScroll(-1)} style={arrowBtn(-1)}>
+            <ChevronLeft size={16} color="#6b7280" />
+          </button>
+        )}
+        {canScrollR && (
+          <button onClick={() => doScroll(1)} style={arrowBtn(1)}>
+            <ChevronRight size={16} color="#6b7280" />
+          </button>
+        )}
+
+        {/* Scroll container */}
+        <div
+          ref={scrollRef}
+          className="rmap-tl-scroll"
+          style={{
+            overflowX: 'auto', scrollbarWidth: 'none', msOverflowStyle: 'none',
+            padding: '0 8px',
+          }}
+        >
+          <div style={{
+            position: 'relative',
+            width: Math.max(phases.length * TL_SLOT, 200),
+            height: TL_HEIGHT,
+          }}>
+            {/* Gray baseline */}
+            {phases.length > 1 && (
+              <div style={{
+                position: 'absolute', top: TL_LINE_Y, left: TL_SLOT / 2,
+                width: totalLineW, height: 2,
+                background: '#e5e7eb', borderRadius: 1,
+              }} />
+            )}
+            {/* Colored progress */}
+            {coloredLineW > 0 && (
+              <div style={{
+                position: 'absolute', top: TL_LINE_Y, left: TL_SLOT / 2,
+                width: coloredLineW, height: 2,
+                background: 'linear-gradient(90deg, #10b981, #6366f1)',
+                borderRadius: 1, transition: 'width 0.6s ease',
+              }} />
+            )}
+
+            {phases.map((phase, i) => {
+              const phaseTasks     = tasks.filter(t => String(t.roadmapPhaseId) === String(phase.id));
+              const completedCount = phaseTasks.filter(t => t.status === 'completed' || t.status === 'done').length;
+              const status   = phase.status || 'pending';
+              const isActive = status === 'in_progress';
+              const isDone   = status === 'completed';
+              const isSelected = selectedId === phase.id;
+              const ns = TL_NODE_STYLE(status);
+
+              return (
+                <div
+                  key={phase.id}
+                  style={{
+                    position: 'absolute', left: i * TL_SLOT, top: 0,
+                    width: TL_SLOT, display: 'flex', flexDirection: 'column',
+                    alignItems: 'center', cursor: 'pointer',
+                  }}
+                  onMouseEnter={(e) => setTooltipData({ phase, phaseTasks, rect: e.currentTarget.getBoundingClientRect() })}
+                  onMouseLeave={() => setTooltipData(null)}
+                  onClick={() => setSelectedId(selectedId === phase.id ? null : phase.id)}
+                >
+                  {/* Icon */}
+                  <div style={{
+                    width: TL_ICON, height: TL_ICON, borderRadius: '10px',
+                    background: isSelected ? `${ns.accent}28` : ns.bg,
+                    border: `2px solid ${ns.border}`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: '16px', position: 'relative', zIndex: 2,
+                    boxShadow: isActive
+                      ? `0 0 0 4px ${ns.accent}28, 0 2px 8px ${ns.accent}30`
+                      : isSelected ? `0 0 0 3px ${ns.accent}40` : 'none',
+                    transition: 'all 0.2s',
+                    transform: isSelected ? 'scale(1.12)' : 'scale(1)',
+                  }}>
+                    {phase.icon || '📋'}
+                    {isDone && (
+                      <div style={{
+                        position: 'absolute', bottom: -3, right: -3,
+                        width: 13, height: 13, borderRadius: '50%',
+                        background: '#10b981', border: '2px solid white',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: '7px', color: 'white', fontWeight: 900, lineHeight: 1,
+                      }}>✓</div>
+                    )}
+                  </div>
+
+                  {/* Phase number */}
+                  <span style={{
+                    fontSize: '9px', fontWeight: 700, marginTop: '5px', letterSpacing: '0.3px',
+                    color: isActive ? '#6366f1' : isDone ? '#10b981' : '#9ca3af',
+                  }}>
+                    {i + 1}
+                  </span>
+
+                  {/* Active phase: expanded label */}
+                  {isActive && (
+                    <>
+                      <span style={{
+                        fontSize: '10px', fontWeight: 700, color: '#1f2937',
+                        maxWidth: TL_SLOT - 4, marginTop: '2px',
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        textAlign: 'center',
+                      }}>{phase.name}</span>
+                      <span style={{ fontSize: '9px', color: '#6b7280', marginTop: '1px' }}>
+                        {completedCount}/{phaseTasks.length}
+                      </span>
+                      <span style={{
+                        fontSize: '9px', fontWeight: 700, padding: '2px 7px',
+                        background: '#6366f1', color: 'white', borderRadius: '10px',
+                        marginTop: '3px', animation: 'pulse 2s infinite',
+                      }}>Activa</span>
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Tooltip — position:fixed so it escapes the scroll container */}
+      {tooltipData && tooltipData.phase.status !== 'in_progress' && (
+        <div style={{
+          position: 'fixed',
+          top: tooltipData.rect.bottom + 6,
+          left: tooltipData.rect.left + tooltipData.rect.width / 2,
+          transform: 'translateX(-50%)',
+          zIndex: 9999, pointerEvents: 'none',
+          background: '#1f2937', color: 'white',
+          borderRadius: '10px', padding: '10px 14px',
+          fontSize: '12px', minWidth: '150px',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
+        }}>
+          <div style={{ fontWeight: 700, fontSize: '13px', marginBottom: '5px' }}>
+            Fase {phases.indexOf(tooltipData.phase) + 1} — {tooltipData.phase.name || 'Sin nombre'}
+          </div>
+          <div style={{ opacity: 0.75, marginBottom: '3px' }}>
+            {tooltipData.phaseTasks.length} actividades
+          </div>
+          <div style={{ opacity: 0.85, fontSize: '11px' }}>
+            {TL_STATUS_LABEL(tooltipData.phase.status || 'pending')}
+          </div>
+        </div>
+      )}
+
+      {/* Detail panel */}
+      {selectedPhase && (
+        <PhaseDetailPanel
+          phase={selectedPhase}
+          phaseIndex={phases.findIndex(p => p.id === selectedPhase.id)}
+          phaseTasks={tasks.filter(t => String(t.roadmapPhaseId) === String(selectedPhase.id))}
+          users={users}
+          onClose={() => setSelectedId(null)}
+        />
+      )}
+    </div>
+  );
+};
+
+// ============================================================================
+// PHASE DETAIL PANEL
+// ============================================================================
+
+const PhaseDetailPanel = ({ phase, phaseIndex, phaseTasks, users, onClose }) => {
+  const completedCount = phaseTasks.filter(t => t.status === 'completed' || t.status === 'done').length;
+  const progress       = phaseTasks.length > 0 ? Math.round((completedCount / phaseTasks.length) * 100) : 0;
+  const responsable    = users.find(u => String(u.id) === String(phase.responsableId));
+  const status    = phase.status || 'pending';
+  const statusDef = PHASE_STATUS[status] || PHASE_STATUS.pending;
+
+  return (
+    <div style={{
+      marginTop: '16px',
+      background: 'linear-gradient(135deg, #f8faff 0%, #f0f4ff 100%)',
+      border: '1px solid #c7d2fe', borderRadius: '12px',
+      padding: '16px 20px', position: 'relative',
+      animation: 'fadeSlideDown 0.18s ease',
+    }}>
+      <button
+        onClick={onClose}
+        style={{
+          position: 'absolute', top: 12, right: 12,
+          background: 'none', border: 'none', cursor: 'pointer',
+          padding: 4, color: '#9ca3af', display: 'flex', borderRadius: '6px',
+        }}
+        onMouseEnter={e => { e.currentTarget.style.color = '#374151'; e.currentTarget.style.background = '#e5e7eb'; }}
+        onMouseLeave={e => { e.currentTarget.style.color = '#9ca3af'; e.currentTarget.style.background = 'none'; }}
+      >
+        <X size={15} />
+      </button>
+
+      {/* Header row */}
+      <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', flexWrap: 'wrap', paddingRight: 28 }}>
+        {/* Icon + name */}
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flex: 1, minWidth: '180px' }}>
+          <div style={{
+            width: 44, height: 44, borderRadius: '12px', flexShrink: 0,
+            background: `${phase.color || '#6366f1'}18`,
+            border: `2px solid ${phase.color || '#6366f1'}50`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px',
+          }}>{phase.icon || '📋'}</div>
+          <div>
+            <div style={{ fontSize: '11px', color: '#9ca3af', fontWeight: 600, marginBottom: 2, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              Fase {phaseIndex + 1}
+            </div>
+            <div style={{ fontSize: '16px', fontWeight: 800, color: '#111827' }}>
+              {phase.name || 'Sin nombre'}
+            </div>
+          </div>
+        </div>
+
+        {/* Status */}
+        <div>
+          <div style={{ fontSize: '11px', color: '#9ca3af', fontWeight: 600, marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Estado</div>
+          <span style={{
+            padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 700,
+            background: statusDef.bg, color: statusDef.color,
+            display: 'inline-flex', alignItems: 'center', gap: 5,
+          }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: statusDef.dot }} />
+            {statusDef.label}
+          </span>
+        </div>
+
+        {/* Progress */}
+        <div style={{ minWidth: 140 }}>
+          <div style={{ fontSize: '11px', color: '#9ca3af', fontWeight: 600, marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Avance</div>
+          <div style={{ fontSize: '14px', fontWeight: 700, color: '#111827', marginBottom: 6 }}>
+            {completedCount}/{phaseTasks.length} actividades
+          </div>
+          <div style={{ height: 5, background: '#e5e7eb', borderRadius: 3, overflow: 'hidden', width: 120 }}>
             <div style={{
-              width: '56px',
-              height: '56px',
-              borderRadius: '16px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '24px',
-              zIndex: 10,
-              transition: 'all 0.3s',
-              background: i === 0 
-                ? `linear-gradient(135deg, ${phase.color || DESIGN_TOKENS.primary.base}22, ${phase.color || DESIGN_TOKENS.primary.base}44)`
-                : DESIGN_TOKENS.neutral[100],
-              border: i === 0 
-                ? `2px solid ${phase.color || DESIGN_TOKENS.primary.base}`
-                : `2px solid ${DESIGN_TOKENS.neutral[200]}`,
-              opacity: i === 0 ? 1 : 0.5,
-              boxShadow: i === 0 ? DESIGN_TOKENS.shadows.lg : 'none'
-            }}>
-              {phase.icon || '📋'}
+              height: '100%', borderRadius: 3, transition: 'width 0.4s',
+              background: phase.color || '#6366f1', width: `${progress}%`,
+            }} />
+          </div>
+          <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: 3 }}>{progress}% completado</div>
+        </div>
+
+        {/* Responsable */}
+        {responsable && (
+          <div>
+            <div style={{ fontSize: '11px', color: '#9ca3af', fontWeight: 600, marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Responsable</div>
+            <div style={{ fontSize: '13px', fontWeight: 600, color: '#374151', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontSize: '18px' }}>{responsable.avatar || '👤'}</span>
+              {responsable.name || responsable.email}
             </div>
-            <div style={{ textAlign: 'center' }}>
-              <p style={{
-                fontSize: '12px',
-                fontWeight: 700,
-                color: i === 0 ? DESIGN_TOKENS.neutral[800] : DESIGN_TOKENS.neutral[400],
-                margin: '0 0 2px'
-              }}>
-                {phase.name}
-              </p>
-              <p style={{
-                fontSize: '11px',
-                color: DESIGN_TOKENS.neutral[500],
-                margin: 0
-              }}>
-                {phase.activities?.length || 0} actividades
-              </p>
-            </div>
-            {i === 0 && (
+          </div>
+        )}
+      </div>
+
+      {/* Task chips */}
+      {phaseTasks.length > 0 ? (
+        <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid #c7d2fe' }}>
+          <div style={{ fontSize: '11px', color: '#9ca3af', fontWeight: 600, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+            Actividades ({phaseTasks.length})
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {phaseTasks.slice(0, 10).map(t => {
+              const isDone = t.status === 'completed' || t.status === 'done';
+              return (
+                <span key={t.id} style={{
+                  fontSize: '12px', padding: '3px 10px', borderRadius: '20px',
+                  background: isDone ? '#d1fae5' : 'white',
+                  color: isDone ? '#065f46' : '#6b7280',
+                  border: `1px solid ${isDone ? '#a7f3d0' : '#e5e7eb'}`,
+                  textDecoration: isDone ? 'line-through' : 'none',
+                  fontWeight: isDone ? 600 : 400,
+                }}>
+                  {t.title || t.name}
+                </span>
+              );
+            })}
+            {phaseTasks.length > 10 && (
               <span style={{
-                fontSize: '11px',
-                fontWeight: 700,
-                padding: '4px 8px',
-                borderRadius: '12px',
-                color: 'white',
-                background: phase.color || DESIGN_TOKENS.primary.base
-              }}>
-                Activa
-              </span>
+                fontSize: '12px', padding: '3px 10px', borderRadius: '20px',
+                background: '#f3f4f6', color: '#9ca3af',
+              }}>+{phaseTasks.length - 10} más</span>
             )}
           </div>
-        ))}
-      </div>
+        </div>
+      ) : (
+        <p style={{ margin: '12px 0 0', fontSize: '13px', color: '#9ca3af', fontStyle: 'italic' }}>
+          Sin actividades en esta fase.
+        </p>
+      )}
+
+      <style>{`
+        @keyframes fadeSlideDown {
+          from { opacity: 0; transform: translateY(-6px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
     </div>
   );
 };
@@ -636,7 +967,7 @@ const PhaseTimeline = ({ phases }) => {
 // PLAN TAB
 // ============================================================================
 
-const PlanTab = ({ phases, tasks = [], projectId, onUpdate, onTaskCreate, onTaskUpdate, onTaskDelete }) => {
+const PlanTab = ({ phases, tasks = [], projectId, users = [], onUpdate, onTaskCreate, onTaskUpdate, onTaskDelete }) => {
   const [openPhase, setOpenPhase] = useState(phases[0]?.id || null);
   const [isCreating, setIsCreating] = useState(false);
   const [confirmData, setConfirmData] = useState(null);
@@ -687,6 +1018,7 @@ const PlanTab = ({ phases, tasks = [], projectId, onUpdate, onTaskCreate, onTask
           isOpen={openPhase === phase.id}
           isCreating={isCreating && phase.id === openPhase}
           projectId={projectId}
+          users={users}
           onToggle={() => setOpenPhase(openPhase === phase.id ? null : phase.id)}
           onUpdate={(updates) => handleUpdatePhase(phase.id, updates)}
           onDelete={() => handleDeletePhase(phase.id)}
@@ -752,17 +1084,39 @@ const TASK_STATUS_STYLE = {
   completed:   { label: 'Completado',  color: '#10b981', bg: '#f0fdf4' },
 };
 
-const PhaseCard = ({ phase, phaseTasks = [], isOpen, isCreating, onToggle, onUpdate, onDelete, onFinishCreating }) => {
+const PHASE_STATUS = {
+  pending:     { label: 'Pendiente',  bg: '#f3f4f6', color: '#6b7280', dot: '#9ca3af' },
+  in_progress: { label: 'En Curso',   bg: '#dbeafe', color: '#1e40af', dot: '#3b82f6' },
+  completed:   { label: 'Completado', bg: '#d1fae5', color: '#065f46', dot: '#10b981' },
+  blocked:     { label: 'Bloqueado',  bg: '#fee2e2', color: '#991b1b', dot: '#ef4444' },
+};
+
+const PhaseCard = ({ phase, phaseTasks = [], isOpen, isCreating, projectId, users = [], onToggle, onUpdate, onDelete, onFinishCreating, onTaskCreate, onTaskUpdate, onTaskDelete }) => {
   const [isEditing, setIsEditing] = useState(isCreating);
   const [editedName, setEditedName] = useState(phase.name);
+  const [editedResponsableId, setEditedResponsableId] = useState(phase.responsableId || '');
+  const [showStatusMenu, setShowStatusMenu] = useState(false);
+  const [statusMenuPos, setStatusMenuPos] = useState({ top: 0, left: 0 });
+  const statusBtnRef = useRef(null);
 
-  const completedActivities = phase.activities?.filter(a => a.status === 'done').length || 0;
-  const totalActivities = phase.activities?.length || 0;
+  const phaseStatus = PHASE_STATUS[phase.status] || PHASE_STATUS.pending;
+
+  const handleOpenStatusMenu = (e) => {
+    e.stopPropagation();
+    if (statusBtnRef.current) {
+      const rect = statusBtnRef.current.getBoundingClientRect();
+      setStatusMenuPos({ top: rect.bottom + 6, left: rect.left });
+    }
+    setShowStatusMenu(v => !v);
+  };
+
+  const completedActivities = phaseTasks.filter(t => t.status === 'completed' || t.status === 'done').length;
+  const totalActivities = phaseTasks.length;
   const progress = totalActivities > 0 ? Math.round((completedActivities / totalActivities) * 100) : 0;
 
   const handleSaveName = () => {
     if (editedName.trim()) {
-      onUpdate({ name: editedName.trim() });
+      onUpdate({ name: editedName.trim(), responsableId: editedResponsableId || null });
       setIsEditing(false);
       if (isCreating) onFinishCreating();
     }
@@ -846,71 +1200,161 @@ const PhaseCard = ({ phase, phaseTasks = [], isOpen, isCreating, onToggle, onUpd
                 }}
               />
             ) : (
-              <span style={{
-                fontWeight: 700,
-                color: DESIGN_TOKENS.neutral[800],
-                fontSize: '14px'
-              }}>
-                Fase {phase.order} — {phase.name || 'Sin nombre'}
-              </span>
+              <>
+                <span style={{
+                  fontWeight: 700,
+                  color: DESIGN_TOKENS.neutral[800],
+                  fontSize: '14px'
+                }}>
+                  Fase {phase.order} — {phase.name || 'Sin nombre'}
+                </span>
+                {phase.responsableId && (() => {
+                  const resp = users.find(u => String(u.id) === String(phase.responsableId));
+                  return resp ? (
+                    <span style={{
+                      fontSize: '11px', color: DESIGN_TOKENS.neutral[500],
+                      display: 'flex', alignItems: 'center', gap: '4px',
+                    }}>
+                      <span style={{ fontSize: '13px' }}>{resp.avatar || '👤'}</span>
+                      {resp.name || resp.email}
+                    </span>
+                  ) : null;
+                })()}
+              </>
             )}
 
             {isEditing && (
-              <div style={{ display: 'flex', gap: '4px' }}>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleSaveName();
-                  }}
-                  style={{
-                    padding: '6px',
-                    background: DESIGN_TOKENS.success.base,
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                    display: 'flex'
-                  }}
-                >
-                  <Check size={16} />
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setEditedName(phase.name);
-                    setIsEditing(false);
-                    if (isCreating) onDelete();
-                  }}
-                  style={{
-                    padding: '6px',
-                    background: DESIGN_TOKENS.neutral[200],
-                    color: DESIGN_TOKENS.neutral[700],
-                    border: 'none',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                    display: 'flex'
-                  }}
-                >
-                  <X size={16} />
-                </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                {/* Responsable selector */}
+                {users.length > 0 && (
+                  <select
+                    value={editedResponsableId}
+                    onChange={(e) => setEditedResponsableId(e.target.value)}
+                    onClick={(e) => e.stopPropagation()}
+                    style={{
+                      border: `1px solid ${DESIGN_TOKENS.border.color.normal}`,
+                      borderRadius: '8px',
+                      padding: '7px 10px',
+                      fontSize: '13px',
+                      fontFamily: DESIGN_TOKENS.typography.fontFamily,
+                      color: DESIGN_TOKENS.neutral[700],
+                      background: 'white',
+                      cursor: 'pointer',
+                      outline: 'none',
+                      minWidth: '160px',
+                    }}
+                  >
+                    <option value="">— Sin responsable</option>
+                    {users.map(u => (
+                      <option key={u.id} value={u.id}>{u.name || u.email}</option>
+                    ))}
+                  </select>
+                )}
+                <div style={{ display: 'flex', gap: '4px' }}>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleSaveName();
+                    }}
+                    style={{
+                      padding: '6px',
+                      background: DESIGN_TOKENS.success.base,
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      display: 'flex'
+                    }}
+                  >
+                    <Check size={16} />
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditedName(phase.name);
+                      setEditedResponsableId(phase.responsableId || '');
+                      setIsEditing(false);
+                      if (isCreating) onDelete();
+                    }}
+                    style={{
+                      padding: '6px',
+                      background: DESIGN_TOKENS.neutral[200],
+                      color: DESIGN_TOKENS.neutral[700],
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      display: 'flex'
+                    }}
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
               </div>
             )}
 
             {!isEditing && (
               <>
-                <span style={{
-                  fontSize: '11px',
-                  color: DESIGN_TOKENS.neutral[500]
-                }}>
+                <span style={{ fontSize: '11px', color: DESIGN_TOKENS.neutral[500] }}>
                   {totalActivities} actividades
                 </span>
-                <span style={{
-                  fontSize: '12px',
-                  fontWeight: 700,
-                  color: phase.color || DESIGN_TOKENS.primary.base
-                }}>
+                <span style={{ fontSize: '12px', fontWeight: 700, color: phase.color || DESIGN_TOKENS.primary.base }}>
                   {completedActivities}/{totalActivities} completadas
                 </span>
+                {/* Status pill */}
+                <button
+                  ref={statusBtnRef}
+                  onClick={handleOpenStatusMenu}
+                  style={{
+                    padding: '3px 10px',
+                    background: phaseStatus.bg,
+                    color: phaseStatus.color,
+                    border: `1px solid ${phaseStatus.color}30`,
+                    borderRadius: '20px',
+                    fontSize: '11px', fontWeight: 700,
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: phaseStatus.dot, flexShrink: 0 }} />
+                  {phaseStatus.label}
+                </button>
+                {showStatusMenu && (
+                  <>
+                    <div
+                      style={{ position: 'fixed', inset: 0, zIndex: 9998 }}
+                      onClick={e => { e.stopPropagation(); setShowStatusMenu(false); }}
+                    />
+                    <div style={{
+                      position: 'fixed',
+                      top: statusMenuPos.top,
+                      left: statusMenuPos.left,
+                      zIndex: 9999,
+                      background: 'white', borderRadius: '10px',
+                      boxShadow: '0 8px 24px rgba(0,0,0,0.14)',
+                      border: '1px solid #e5e7eb', padding: '4px', minWidth: '150px',
+                    }}>
+                      {Object.entries(PHASE_STATUS).map(([key, def]) => (
+                        <button
+                          key={key}
+                          onClick={e => { e.stopPropagation(); onUpdate({ status: key }); setShowStatusMenu(false); }}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: '8px',
+                            width: '100%', padding: '7px 10px', border: 'none',
+                            background: (phase.status || 'pending') === key ? def.bg : 'transparent',
+                            borderRadius: '8px', cursor: 'pointer', fontSize: '12px',
+                            fontWeight: (phase.status || 'pending') === key ? 700 : 400,
+                            color: (phase.status || 'pending') === key ? def.color : DESIGN_TOKENS.neutral[600],
+                          }}
+                          onMouseEnter={e => { if ((phase.status || 'pending') !== key) e.currentTarget.style.background = '#f9fafb'; }}
+                          onMouseLeave={e => { if ((phase.status || 'pending') !== key) e.currentTarget.style.background = 'transparent'; }}
+                        >
+                          <span style={{ width: 7, height: 7, borderRadius: '50%', background: def.dot, flexShrink: 0 }} />
+                          {def.label}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
               </>
             )}
           </div>
@@ -1003,52 +1447,12 @@ const PhaseCard = ({ phase, phaseTasks = [], isOpen, isCreating, onToggle, onUpd
       {isOpen && !isEditing && (
         <ActivityList
           phase={phase}
-          onUpdate={onUpdate}
+          phaseTasks={phaseTasks}
+          projectId={projectId}
+          onTaskCreate={onTaskCreate}
+          onTaskUpdate={onTaskUpdate}
+          onTaskDelete={onTaskDelete}
         />
-      )}
-
-      {/* Tareas asignadas a esta fase */}
-      {isOpen && !isEditing && phaseTasks.length > 0 && (
-        <div style={{
-          borderTop: `1px solid ${DESIGN_TOKENS.border.color.subtle}`,
-          padding: '12px 20px 16px',
-          background: DESIGN_TOKENS.neutral[50],
-        }}>
-          <p style={{
-            fontSize: '11px', fontWeight: 700, color: DESIGN_TOKENS.neutral[400],
-            textTransform: 'uppercase', letterSpacing: '0.8px', margin: '0 0 10px'
-          }}>
-            Tareas vinculadas ({phaseTasks.length})
-          </p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            {phaseTasks.map(task => {
-              const s = TASK_STATUS_STYLE[task.status] || TASK_STATUS_STYLE.todo;
-              return (
-                <div key={task.id} style={{
-                  display: 'flex', alignItems: 'center', gap: '10px',
-                  padding: '8px 12px', background: 'white', borderRadius: '8px',
-                  border: `1px solid ${DESIGN_TOKENS.border.color.subtle}`,
-                }}>
-                  <div style={{ flex: 1, fontSize: '13px', fontWeight: 500, color: DESIGN_TOKENS.neutral[700] }}>
-                    {task.title}
-                  </div>
-                  <span style={{
-                    fontSize: '11px', fontWeight: 600, padding: '2px 8px',
-                    borderRadius: '20px', color: s.color, background: s.bg,
-                    flexShrink: 0
-                  }}>
-                    {s.label}
-                  </span>
-                  {task.endDate && (
-                    <span style={{ fontSize: '11px', color: DESIGN_TOKENS.neutral[400], flexShrink: 0 }}>
-                      {task.endDate}
-                    </span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
       )}
     </div>
   );
@@ -1060,93 +1464,88 @@ const PhaseCard = ({ phase, phaseTasks = [], isOpen, isCreating, onToggle, onUpd
 
 const ACTIVITY_STATUS = {
   pending:     { label: 'Pendiente',   color: '#94a3b8', bg: '#f1f5f9' },
+  todo:        { label: 'Pendiente',   color: '#94a3b8', bg: '#f1f5f9' },
   in_progress: { label: 'En Curso',    color: '#3b82f6', bg: '#eff6ff' },
   waiting:     { label: 'En Espera',   color: '#0369a1', bg: '#e0f2fe' },
   review:      { label: 'En Revisión', color: '#f59e0b', bg: '#fffbeb' },
   done:        { label: 'Completado',  color: '#10b981', bg: '#f0fdf4' },
+  completed:   { label: 'Completado',  color: '#10b981', bg: '#f0fdf4' },
 };
 
-const ActivityList = ({ phase, onUpdate }) => {
+const ActivityList = ({ phase, phaseTasks = [], projectId, onTaskCreate, onTaskUpdate, onTaskDelete }) => {
   const [isAdding, setIsAdding] = useState(false);
   const [newName, setNewName] = useState('');
+  const [saving, setSaving] = useState(false);
   const inputRef = React.useRef(null);
-
-  const activities = phase.activities || [];
-
-  const handleAddActivity = () => {
-    const name = newName.trim();
-    if (!name) { setIsAdding(false); return; }
-    const newActivity = {
-      id: Date.now(),
-      name,
-      status: 'pending',
-      dueDate: '',
-    };
-    onUpdate({ activities: [...activities, newActivity] });
-    setNewName('');
-    setIsAdding(false);
-  };
-
-  const handleToggleDone = (actId) => {
-    onUpdate({
-      activities: activities.map(a =>
-        a.id === actId
-          ? { ...a, status: a.status === 'done' ? 'pending' : 'done' }
-          : a
-      )
-    });
-  };
-
-  const handleUpdateActivity = (actId, updates) => {
-    onUpdate({
-      activities: activities.map(a => a.id === actId ? { ...a, ...updates } : a)
-    });
-  };
-
-  const handleDeleteActivity = (actId) => {
-    onUpdate({ activities: activities.filter(a => a.id !== actId) });
-  };
 
   React.useEffect(() => {
     if (isAdding && inputRef.current) inputRef.current.focus();
   }, [isAdding]);
 
+  const handleAddActivity = async () => {
+    const title = newName.trim();
+    if (!title) { setIsAdding(false); return; }
+    setSaving(true);
+    try {
+      await onTaskCreate({
+        title,
+        projectId,
+        roadmapPhaseId: String(phase.id),
+        status: 'pending',
+        priority: 'medium',
+      });
+      setNewName('');
+      setIsAdding(false);
+    } catch {
+      // error handled by parent
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleToggleDone = async (task) => {
+    const next = (task.status === 'completed' || task.status === 'done') ? 'pending' : 'completed';
+    await onTaskUpdate(task.id, { status: next });
+  };
+
+  const handleUpdateTask = async (taskId, updates) => {
+    await onTaskUpdate(taskId, updates);
+  };
+
+  const handleDeleteTask = async (taskId) => {
+    await onTaskDelete(taskId);
+  };
+
   return (
-    <div style={{
-      borderTop: `1px solid ${DESIGN_TOKENS.border.color.subtle}`,
-    }}>
-      {/* Activity rows */}
-      {activities.length > 0 && (
+    <div style={{ borderTop: `1px solid ${DESIGN_TOKENS.border.color.subtle}` }}>
+      {/* Task rows */}
+      {phaseTasks.length > 0 && (
         <div>
-          {activities.map((activity, idx) => (
+          {phaseTasks.map((task, idx) => (
             <ActivityRow
-              key={activity.id}
-              activity={activity}
-              isLast={idx === activities.length - 1}
+              key={task.id}
+              activity={task}
+              isLast={idx === phaseTasks.length - 1}
               phaseColor={phase.color || DESIGN_TOKENS.primary.base}
-              onToggleDone={() => handleToggleDone(activity.id)}
-              onUpdate={(updates) => handleUpdateActivity(activity.id, updates)}
-              onDelete={() => handleDeleteActivity(activity.id)}
+              onToggleDone={() => handleToggleDone(task)}
+              onUpdate={(updates) => handleUpdateTask(task.id, updates)}
+              onDelete={() => handleDeleteTask(task.id)}
             />
           ))}
         </div>
       )}
 
-      {/* New activity inline form */}
+      {/* New task inline form */}
       {isAdding && (
         <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '12px',
+          display: 'flex', alignItems: 'center', gap: '12px',
           padding: '10px 20px',
           borderBottom: `1px solid ${DESIGN_TOKENS.border.color.subtle}`,
           background: '#fafbff',
         }}>
-          {/* Checkbox placeholder */}
           <div style={{
             width: '18px', height: '18px', borderRadius: '50%',
-            border: `2px solid ${DESIGN_TOKENS.neutral[300]}`,
-            flexShrink: 0
+            border: `2px solid ${DESIGN_TOKENS.neutral[300]}`, flexShrink: 0
           }} />
           <input
             ref={inputRef}
@@ -1159,43 +1558,29 @@ const ActivityList = ({ phase, onUpdate }) => {
             }}
             placeholder="Nombre de la actividad..."
             style={{
-              flex: 1,
-              border: `1px solid ${DESIGN_TOKENS.primary.base}`,
-              borderRadius: '8px',
-              padding: '7px 12px',
-              fontSize: '13px',
-              fontFamily: DESIGN_TOKENS.typography.fontFamily,
-              outline: 'none',
+              flex: 1, border: `1px solid ${DESIGN_TOKENS.primary.base}`,
+              borderRadius: '8px', padding: '7px 12px', fontSize: '13px',
+              fontFamily: DESIGN_TOKENS.typography.fontFamily, outline: 'none',
               color: DESIGN_TOKENS.neutral[800],
             }}
           />
           <button
             onClick={handleAddActivity}
+            disabled={saving}
             style={{
-              padding: '7px 16px',
-              background: DESIGN_TOKENS.primary.base,
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              fontSize: '13px',
-              fontWeight: 600,
-              display: 'flex', alignItems: 'center', gap: '6px',
+              padding: '7px 16px', background: saving ? '#94a3b8' : DESIGN_TOKENS.primary.base,
+              color: 'white', border: 'none', borderRadius: '8px', cursor: saving ? 'not-allowed' : 'pointer',
+              fontSize: '13px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px',
             }}
           >
-            <Check size={14} /> Guardar
+            <Check size={14} /> {saving ? 'Guardando…' : 'Guardar'}
           </button>
           <button
             onClick={() => { setIsAdding(false); setNewName(''); }}
             style={{
-              padding: '7px 10px',
-              background: DESIGN_TOKENS.neutral[100],
-              color: DESIGN_TOKENS.neutral[600],
-              border: 'none',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              fontSize: '13px',
-              display: 'flex', alignItems: 'center',
+              padding: '7px 10px', background: DESIGN_TOKENS.neutral[100],
+              color: DESIGN_TOKENS.neutral[600], border: 'none', borderRadius: '8px',
+              cursor: 'pointer', fontSize: '13px', display: 'flex', alignItems: 'center',
             }}
           >
             <X size={14} />
@@ -1205,12 +1590,11 @@ const ActivityList = ({ phase, onUpdate }) => {
 
       {/* Empty state + Add button */}
       <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: activities.length === 0 ? 'center' : 'flex-start',
-        padding: activities.length === 0 ? '24px 20px' : '10px 20px',
+        display: 'flex', alignItems: 'center',
+        justifyContent: phaseTasks.length === 0 ? 'center' : 'flex-start',
+        padding: phaseTasks.length === 0 ? '24px 20px' : '10px 20px',
       }}>
-        {activities.length === 0 && !isAdding && (
+        {phaseTasks.length === 0 && !isAdding && (
           <span style={{ fontSize: '13px', color: DESIGN_TOKENS.neutral[400], marginRight: '16px' }}>
             Sin actividades aún.
           </span>
@@ -1220,15 +1604,10 @@ const ActivityList = ({ phase, onUpdate }) => {
             onClick={() => setIsAdding(true)}
             style={{
               display: 'flex', alignItems: 'center', gap: '6px',
-              padding: '7px 14px',
-              background: 'transparent',
+              padding: '7px 14px', background: 'transparent',
               border: `1.5px dashed ${DESIGN_TOKENS.neutral[300]}`,
-              borderRadius: '8px',
-              cursor: 'pointer',
-              fontSize: '13px',
-              fontWeight: 600,
-              color: DESIGN_TOKENS.neutral[500],
-              transition: 'all 0.15s',
+              borderRadius: '8px', cursor: 'pointer', fontSize: '13px',
+              fontWeight: 600, color: DESIGN_TOKENS.neutral[500], transition: 'all 0.15s',
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.borderColor = phase.color || DESIGN_TOKENS.primary.base;
@@ -1255,11 +1634,24 @@ const ActivityList = ({ phase, onUpdate }) => {
 
 const ActivityRow = ({ activity, isLast, phaseColor, onToggleDone, onUpdate, onDelete }) => {
   const [isEditingName, setIsEditingName] = useState(false);
-  const [editedName, setEditedName] = useState(activity.name);
+  const [editedName, setEditedName] = useState(activity.title || activity.name || '');
   const [showActions, setShowActions] = useState(false);
   const [showStatusMenu, setShowStatusMenu] = useState(false);
+  const [statusMenuPos, setStatusMenuPos] = useState({ top: 0, left: 0 });
+  const statusBtnRef = useRef(null);
   const statusDef = ACTIVITY_STATUS[activity.status] || ACTIVITY_STATUS.pending;
-  const isDone = activity.status === 'done';
+  const isDone = activity.status === 'completed' || activity.status === 'done';
+  const { canEditTaskDates } = useApp();
+  const canEditDates = canEditTaskDates();
+
+  const handleOpenStatusMenu = (e) => {
+    e.stopPropagation();
+    if (statusBtnRef.current) {
+      const rect = statusBtnRef.current.getBoundingClientRect();
+      setStatusMenuPos({ top: rect.bottom + 6, left: rect.left });
+    }
+    setShowStatusMenu(v => !v);
+  };
 
   return (
     <div
@@ -1272,6 +1664,7 @@ const ActivityRow = ({ activity, isLast, phaseColor, onToggleDone, onUpdate, onD
         background: 'white',
         transition: 'background 0.12s',
         position: 'relative',
+        zIndex: showStatusMenu ? 10 : 'auto',
       }}
       onMouseEnter={(e) => { e.currentTarget.style.background = '#f8faff'; setShowActions(true); }}
       onMouseLeave={(e) => { e.currentTarget.style.background = 'white'; setShowActions(false); setShowStatusMenu(false); }}
@@ -1300,13 +1693,13 @@ const ActivityRow = ({ activity, isLast, phaseColor, onToggleDone, onUpdate, onD
           onChange={(e) => setEditedName(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
-              if (editedName.trim()) onUpdate({ name: editedName.trim() });
+              if (editedName.trim()) onUpdate({ title: editedName.trim() });
               setIsEditingName(false);
             }
-            if (e.key === 'Escape') { setEditedName(activity.name); setIsEditingName(false); }
+            if (e.key === 'Escape') { setEditedName(activity.title || activity.name || ''); setIsEditingName(false); }
           }}
           onBlur={() => {
-            if (editedName.trim()) onUpdate({ name: editedName.trim() });
+            if (editedName.trim()) onUpdate({ title: editedName.trim() });
             setIsEditingName(false);
           }}
           style={{
@@ -1317,7 +1710,7 @@ const ActivityRow = ({ activity, isLast, phaseColor, onToggleDone, onUpdate, onD
         />
       ) : (
         <span
-          onDoubleClick={() => { setEditedName(activity.name); setIsEditingName(true); }}
+          onDoubleClick={() => { setEditedName(activity.title || activity.name || ''); setIsEditingName(true); }}
           style={{
             flex: 1, fontSize: '13px', fontWeight: 500, cursor: 'text',
             color: isDone ? DESIGN_TOKENS.neutral[400] : DESIGN_TOKENS.neutral[700],
@@ -1325,40 +1718,48 @@ const ActivityRow = ({ activity, isLast, phaseColor, onToggleDone, onUpdate, onD
             transition: 'all 0.15s',
           }}
         >
-          {activity.name}
+          {activity.title || activity.name}
         </span>
       )}
 
       {/* Status pill */}
-      <div style={{ position: 'relative' }}>
-        <button
-          onClick={() => setShowStatusMenu(v => !v)}
-          style={{
-            padding: '3px 10px',
-            background: statusDef.bg,
-            color: statusDef.color,
-            border: `1px solid ${statusDef.color}40`,
-            borderRadius: '20px',
-            cursor: 'pointer',
-            fontSize: '11px',
-            fontWeight: 700,
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {statusDef.label}
-        </button>
-        {showStatusMenu && (
+      <button
+        ref={statusBtnRef}
+        onClick={handleOpenStatusMenu}
+        style={{
+          padding: '3px 10px',
+          background: statusDef.bg,
+          color: statusDef.color,
+          border: `1px solid ${statusDef.color}40`,
+          borderRadius: '20px',
+          cursor: 'pointer',
+          fontSize: '11px',
+          fontWeight: 700,
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {statusDef.label}
+      </button>
+      {showStatusMenu && (
+        <>
+          <div
+            style={{ position: 'fixed', inset: 0, zIndex: 9998 }}
+            onClick={e => { e.stopPropagation(); setShowStatusMenu(false); }}
+          />
           <div style={{
-            position: 'absolute', top: 'calc(100% + 4px)', right: 0, zIndex: 100,
+            position: 'fixed',
+            top: statusMenuPos.top,
+            left: statusMenuPos.left,
+            zIndex: 9999,
             background: 'white', borderRadius: '10px',
-            boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
-            border: '1px solid #f3f4f6', padding: '4px',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.14)',
+            border: '1px solid #e5e7eb', padding: '4px',
             minWidth: '150px',
           }}>
-            {Object.entries(ACTIVITY_STATUS).map(([key, def]) => (
+            {Object.entries(ACTIVITY_STATUS).filter(([k]) => !['todo','completed'].includes(k)).map(([key, def]) => (
               <button
                 key={key}
-                onClick={() => { onUpdate({ status: key }); setShowStatusMenu(false); }}
+                onClick={e => { e.stopPropagation(); onUpdate({ status: key }); setShowStatusMenu(false); }}
                 style={{
                   display: 'flex', alignItems: 'center', gap: '8px',
                   width: '100%', padding: '7px 10px', border: 'none',
@@ -1367,28 +1768,30 @@ const ActivityRow = ({ activity, isLast, phaseColor, onToggleDone, onUpdate, onD
                   fontWeight: activity.status === key ? 700 : 400,
                   color: activity.status === key ? def.color : DESIGN_TOKENS.neutral[600],
                 }}
-                onMouseEnter={(e) => { if (activity.status !== key) e.currentTarget.style.background = DESIGN_TOKENS.neutral[50]; }}
-                onMouseLeave={(e) => { if (activity.status !== key) e.currentTarget.style.background = 'transparent'; }}
+                onMouseEnter={e => { if (activity.status !== key) e.currentTarget.style.background = DESIGN_TOKENS.neutral[50]; }}
+                onMouseLeave={e => { if (activity.status !== key) e.currentTarget.style.background = 'transparent'; }}
               >
                 <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: def.color, display: 'inline-block', flexShrink: 0 }} />
                 {def.label}
               </button>
             ))}
           </div>
-        )}
-      </div>
+        </>
+      )}
 
       {/* Due date */}
       <input
         type="date"
-        value={activity.dueDate || ''}
-        onChange={(e) => onUpdate({ dueDate: e.target.value })}
+        value={activity.endDate || activity.dueDate || ''}
+        onChange={(e) => canEditDates && onUpdate({ endDate: e.target.value })}
+        disabled={!canEditDates}
         style={{
           border: `1px solid ${DESIGN_TOKENS.border.color.subtle}`,
           borderRadius: '6px', padding: '3px 8px', fontSize: '11px',
-          color: DESIGN_TOKENS.neutral[600], cursor: 'pointer',
+          color: DESIGN_TOKENS.neutral[600],
+          cursor: canEditDates ? 'pointer' : 'not-allowed',
           fontFamily: DESIGN_TOKENS.typography.fontFamily,
-          opacity: showActions || activity.dueDate ? 1 : 0,
+          opacity: canEditDates ? (showActions || activity.endDate || activity.dueDate ? 1 : 0) : 0.5,
           transition: 'opacity 0.15s',
         }}
       />
@@ -1415,12 +1818,94 @@ const ActivityRow = ({ activity, isLast, phaseColor, onToggleDone, onUpdate, onD
 // ============================================================================
 
 const StoriesTab = ({ stories, onUpdate }) => {
+  const [items, setItems] = useState(stories || []);
+  const [adding, setAdding] = useState(false);
+  const [newText, setNewText] = useState('');
+
+  const handleAdd = () => {
+    if (!newText.trim()) return;
+    const next = [...items, { id: Date.now(), title: newText.trim(), points: 0, status: 'pending' }];
+    setItems(next);
+    onUpdate(next);
+    setNewText('');
+    setAdding(false);
+  };
+
+  const handleRemove = (id) => {
+    const next = items.filter(s => s.id !== id);
+    setItems(next);
+    onUpdate(next);
+  };
+
+  if (items.length === 0 && !adding) {
+    return (
+      <EmptyState
+        icon={FileText}
+        title="Sin historias de usuario"
+        description="Registra los requerimientos del proyecto como historias de usuario para mantener el foco en el valor entregado."
+        action={{ label: 'Agregar primera historia', onClick: () => setAdding(true) }}
+      />
+    );
+  }
+
   return (
-    <EmptyState
-      icon={FileText}
-      title="Historias de Usuario"
-      description="Esta sección permitirá gestionar historias de usuario del proyecto"
-    />
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      {items.map(s => (
+        <div key={s.id} style={{
+          background: 'white', borderRadius: '12px', padding: '16px 20px',
+          border: `1px solid ${DESIGN_TOKENS.border.color.subtle}`,
+          display: 'flex', alignItems: 'center', gap: '12px',
+        }}>
+          <FileText size={16} color={DESIGN_TOKENS.neutral[400]} style={{ flexShrink: 0 }} />
+          <span style={{ flex: 1, fontSize: '14px', color: DESIGN_TOKENS.neutral[700] }}>{s.title}</span>
+          {s.points > 0 && (
+            <span style={{
+              fontSize: '11px', fontWeight: 700, padding: '2px 8px',
+              background: '#eef2ff', color: '#6366f1', borderRadius: '20px',
+            }}>{s.points} pts</span>
+          )}
+          <button onClick={() => handleRemove(s.id)} style={{
+            background: 'none', border: 'none', cursor: 'pointer', padding: 4,
+            color: DESIGN_TOKENS.neutral[400], display: 'flex',
+          }}>
+            <X size={14} />
+          </button>
+        </div>
+      ))}
+
+      {adding ? (
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <input
+            autoFocus
+            value={newText}
+            onChange={e => setNewText(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') handleAdd(); if (e.key === 'Escape') setAdding(false); }}
+            placeholder="Como [usuario], quiero [acción] para [beneficio]..."
+            style={{
+              flex: 1, padding: '10px 14px', border: `1px solid ${DESIGN_TOKENS.primary.base}`,
+              borderRadius: '10px', fontSize: '13px', outline: 'none',
+              fontFamily: DESIGN_TOKENS.typography.fontFamily,
+            }}
+          />
+          <button onClick={handleAdd} style={{
+            padding: '10px 16px', background: DESIGN_TOKENS.primary.base, color: 'white',
+            border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '13px', fontWeight: 600,
+          }}>Agregar</button>
+          <button onClick={() => setAdding(false)} style={{
+            padding: '10px 14px', background: DESIGN_TOKENS.neutral[100], color: DESIGN_TOKENS.neutral[600],
+            border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '13px',
+          }}>Cancelar</button>
+        </div>
+      ) : (
+        <button onClick={() => setAdding(true)} style={{
+          padding: '12px', background: 'white', border: `2px dashed ${DESIGN_TOKENS.border.color.normal}`,
+          borderRadius: '12px', cursor: 'pointer', fontSize: '13px', fontWeight: 600,
+          color: DESIGN_TOKENS.neutral[500], display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+        }}>
+          <Plus size={16} /> Agregar historia de usuario
+        </button>
+      )}
+    </div>
   );
 };
 
@@ -1428,13 +1913,114 @@ const StoriesTab = ({ stories, onUpdate }) => {
 // RISKS TAB
 // ============================================================================
 
+const RISK_LEVELS = [
+  { key: 'low',      label: 'Bajo',     color: '#10b981', bg: '#d1fae5' },
+  { key: 'medium',   label: 'Medio',    color: '#f59e0b', bg: '#fef3c7' },
+  { key: 'high',     label: 'Alto',     color: '#f97316', bg: '#ffedd5' },
+  { key: 'critical', label: 'Crítico',  color: '#ef4444', bg: '#fee2e2' },
+];
+
 const RisksTab = ({ risks, onUpdate }) => {
+  const [items, setItems] = useState(risks || []);
+  const [adding, setAdding] = useState(false);
+  const [newRisk, setNewRisk] = useState({ title: '', level: 'medium' });
+
+  const handleAdd = () => {
+    if (!newRisk.title.trim()) return;
+    const next = [...items, { id: Date.now(), ...newRisk, title: newRisk.title.trim() }];
+    setItems(next);
+    onUpdate(next);
+    setNewRisk({ title: '', level: 'medium' });
+    setAdding(false);
+  };
+
+  const handleRemove = (id) => {
+    const next = items.filter(r => r.id !== id);
+    setItems(next);
+    onUpdate(next);
+  };
+
+  if (items.length === 0 && !adding) {
+    return (
+      <EmptyState
+        icon={AlertTriangle}
+        title="Sin riesgos registrados"
+        description="Identifica y documenta los riesgos del proyecto para anticiparte a problemas y definir planes de mitigación."
+        action={{ label: 'Registrar primer riesgo', onClick: () => setAdding(true) }}
+      />
+    );
+  }
+
   return (
-    <EmptyState
-      icon={AlertTriangle}
-      title="Gestión de Riesgos"
-      description="Esta sección permitirá identificar y mitigar riesgos del proyecto"
-    />
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      {items.map(r => {
+        const lvl = RISK_LEVELS.find(l => l.key === r.level) || RISK_LEVELS[1];
+        return (
+          <div key={r.id} style={{
+            background: 'white', borderRadius: '12px', padding: '16px 20px',
+            border: `1px solid ${DESIGN_TOKENS.border.color.subtle}`,
+            display: 'flex', alignItems: 'center', gap: '12px',
+          }}>
+            <span style={{
+              fontSize: '11px', fontWeight: 700, padding: '3px 10px',
+              background: lvl.bg, color: lvl.color, borderRadius: '20px', whiteSpace: 'nowrap',
+            }}>{lvl.label}</span>
+            <span style={{ flex: 1, fontSize: '14px', color: DESIGN_TOKENS.neutral[700] }}>{r.title}</span>
+            <button onClick={() => handleRemove(r.id)} style={{
+              background: 'none', border: 'none', cursor: 'pointer', padding: 4,
+              color: DESIGN_TOKENS.neutral[400], display: 'flex',
+            }}>
+              <X size={14} />
+            </button>
+          </div>
+        );
+      })}
+
+      {adding ? (
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <input
+            autoFocus
+            value={newRisk.title}
+            onChange={e => setNewRisk(p => ({ ...p, title: e.target.value }))}
+            onKeyDown={e => { if (e.key === 'Enter') handleAdd(); if (e.key === 'Escape') setAdding(false); }}
+            placeholder="Descripción del riesgo..."
+            style={{
+              flex: 1, minWidth: '200px', padding: '10px 14px',
+              border: `1px solid ${DESIGN_TOKENS.primary.base}`,
+              borderRadius: '10px', fontSize: '13px', outline: 'none',
+              fontFamily: DESIGN_TOKENS.typography.fontFamily,
+            }}
+          />
+          <select
+            value={newRisk.level}
+            onChange={e => setNewRisk(p => ({ ...p, level: e.target.value }))}
+            style={{
+              padding: '10px 12px', border: `1px solid ${DESIGN_TOKENS.border.color.normal}`,
+              borderRadius: '10px', fontSize: '13px', outline: 'none',
+              fontFamily: DESIGN_TOKENS.typography.fontFamily, background: 'white', cursor: 'pointer',
+            }}
+          >
+            {RISK_LEVELS.map(l => <option key={l.key} value={l.key}>{l.label}</option>)}
+          </select>
+          <button onClick={handleAdd} style={{
+            padding: '10px 16px', background: DESIGN_TOKENS.primary.base, color: 'white',
+            border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '13px', fontWeight: 600,
+          }}>Agregar</button>
+          <button onClick={() => setAdding(false)} style={{
+            padding: '10px 14px', background: DESIGN_TOKENS.neutral[100], color: DESIGN_TOKENS.neutral[600],
+            border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '13px',
+          }}>Cancelar</button>
+        </div>
+      ) : (
+        <button onClick={() => setAdding(true)} style={{
+          padding: '12px', background: 'white', border: `2px dashed ${DESIGN_TOKENS.border.color.normal}`,
+          borderRadius: '12px', cursor: 'pointer', fontSize: '13px', fontWeight: 600,
+          color: DESIGN_TOKENS.neutral[500], display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+        }}>
+          <Plus size={16} /> Registrar riesgo
+        </button>
+      )}
+    </div>
   );
 };
 
@@ -1443,12 +2029,119 @@ const RisksTab = ({ risks, onUpdate }) => {
 // ============================================================================
 
 const MeetingsTab = ({ meetings, onUpdate }) => {
+  const [items, setItems] = useState(meetings || []);
+  const [adding, setAdding] = useState(false);
+  const [newMeeting, setNewMeeting] = useState({ title: '', date: '', notes: '' });
+
+  const handleAdd = () => {
+    if (!newMeeting.title.trim()) return;
+    const next = [...items, { id: Date.now(), ...newMeeting, title: newMeeting.title.trim() }];
+    setItems(next);
+    onUpdate(next);
+    setNewMeeting({ title: '', date: '', notes: '' });
+    setAdding(false);
+  };
+
+  const handleRemove = (id) => {
+    const next = items.filter(m => m.id !== id);
+    setItems(next);
+    onUpdate(next);
+  };
+
+  if (items.length === 0 && !adding) {
+    return (
+      <EmptyState
+        icon={Calendar}
+        title="Sin reuniones registradas"
+        description="Lleva un registro de las reuniones de seguimiento, decisiones tomadas y compromisos del equipo."
+        action={{ label: 'Registrar primera reunión', onClick: () => setAdding(true) }}
+      />
+    );
+  }
+
   return (
-    <EmptyState
-      icon={Calendar}
-      title="Seguimiento y Reuniones"
-      description="Esta sección permitirá registrar reuniones y acuerdos del proyecto"
-    />
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      {items.map(m => (
+        <div key={m.id} style={{
+          background: 'white', borderRadius: '12px', padding: '16px 20px',
+          border: `1px solid ${DESIGN_TOKENS.border.color.subtle}`,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <Calendar size={15} color={DESIGN_TOKENS.neutral[400]} style={{ flexShrink: 0 }} />
+            <span style={{ flex: 1, fontSize: '14px', fontWeight: 600, color: DESIGN_TOKENS.neutral[700] }}>{m.title}</span>
+            {m.date && <span style={{ fontSize: '12px', color: DESIGN_TOKENS.neutral[400] }}>{m.date}</span>}
+            <button onClick={() => handleRemove(m.id)} style={{
+              background: 'none', border: 'none', cursor: 'pointer', padding: 4,
+              color: DESIGN_TOKENS.neutral[400], display: 'flex',
+            }}>
+              <X size={14} />
+            </button>
+          </div>
+          {m.notes && (
+            <p style={{ margin: '8px 0 0 25px', fontSize: '13px', color: DESIGN_TOKENS.neutral[500], lineHeight: 1.5 }}>
+              {m.notes}
+            </p>
+          )}
+        </div>
+      ))}
+
+      {adding ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <input
+              autoFocus
+              value={newMeeting.title}
+              onChange={e => setNewMeeting(p => ({ ...p, title: e.target.value }))}
+              placeholder="Título de la reunión..."
+              style={{
+                flex: 1, padding: '10px 14px', border: `1px solid ${DESIGN_TOKENS.primary.base}`,
+                borderRadius: '10px', fontSize: '13px', outline: 'none',
+                fontFamily: DESIGN_TOKENS.typography.fontFamily,
+              }}
+            />
+            <input
+              type="date"
+              value={newMeeting.date}
+              onChange={e => setNewMeeting(p => ({ ...p, date: e.target.value }))}
+              style={{
+                padding: '10px 12px', border: `1px solid ${DESIGN_TOKENS.border.color.normal}`,
+                borderRadius: '10px', fontSize: '13px', outline: 'none',
+                fontFamily: DESIGN_TOKENS.typography.fontFamily,
+              }}
+            />
+          </div>
+          <textarea
+            value={newMeeting.notes}
+            onChange={e => setNewMeeting(p => ({ ...p, notes: e.target.value }))}
+            placeholder="Acuerdos, decisiones o notas de la reunión..."
+            rows={2}
+            style={{
+              width: '100%', padding: '10px 14px', border: `1px solid ${DESIGN_TOKENS.border.color.normal}`,
+              borderRadius: '10px', fontSize: '13px', outline: 'none', resize: 'vertical',
+              fontFamily: DESIGN_TOKENS.typography.fontFamily, boxSizing: 'border-box',
+            }}
+          />
+          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+            <button onClick={() => setAdding(false)} style={{
+              padding: '10px 14px', background: DESIGN_TOKENS.neutral[100], color: DESIGN_TOKENS.neutral[600],
+              border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '13px',
+            }}>Cancelar</button>
+            <button onClick={handleAdd} style={{
+              padding: '10px 16px', background: DESIGN_TOKENS.primary.base, color: 'white',
+              border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '13px', fontWeight: 600,
+            }}>Guardar</button>
+          </div>
+        </div>
+      ) : (
+        <button onClick={() => setAdding(true)} style={{
+          padding: '12px', background: 'white', border: `2px dashed ${DESIGN_TOKENS.border.color.normal}`,
+          borderRadius: '12px', cursor: 'pointer', fontSize: '13px', fontWeight: 600,
+          color: DESIGN_TOKENS.neutral[500], display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+        }}>
+          <Plus size={16} /> Registrar reunión
+        </button>
+      )}
+    </div>
   );
 };
 
