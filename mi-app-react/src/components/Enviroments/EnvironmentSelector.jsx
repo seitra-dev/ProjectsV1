@@ -146,7 +146,7 @@ const EnvironmentSelector = ({ onCreateEnvironment, onOpenSettings, onManageMemb
           minWidth: '280px',
           maxHeight: '400px',
           overflowY: 'auto',
-          zIndex: 1000,
+          zIndex: 9999,
           animation: 'dropdownFadeIn 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
           padding: '8px'
         }}>

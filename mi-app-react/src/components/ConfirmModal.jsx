@@ -1,8 +1,31 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Trash2, AlertTriangle } from 'lucide-react';
 
 const ConfirmModal = ({ isOpen, title, message, onConfirm, onCancel, type = 'delete' }) => {
+  const [confirming, setConfirming] = useState(false);
+
+  // Cerrar con Escape
+  useEffect(() => {
+    if (!isOpen) return;
+    const handler = (e) => { if (e.key === 'Escape') onCancel(); };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [isOpen, onCancel]);
+
+  // Resetear estado al cerrar
+  useEffect(() => { if (!isOpen) setConfirming(false); }, [isOpen]);
+
   if (!isOpen) return null;
+
+  const handleConfirm = async () => {
+    setConfirming(true);
+    try {
+      await onConfirm();
+    } finally {
+      setConfirming(false);
+    }
+  };
+
   return (
     <div onClick={onCancel} style={{
       position: 'fixed', inset: 0, zIndex: 9999,
@@ -34,18 +57,35 @@ const ConfirmModal = ({ isOpen, title, message, onConfirm, onCancel, type = 'del
           {message || 'Esta acción no se puede deshacer.'}
         </p>
         <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-          <button onClick={onCancel} style={{
-            padding: '10px 20px', border: '1.5px solid #e5e7eb',
-            borderRadius: '10px', background: 'white', color: '#374151',
-            fontSize: '14px', fontWeight: 600, cursor: 'pointer'
-          }}>Cancelar</button>
-          <button onClick={onConfirm} style={{
-            padding: '10px 20px', border: 'none',
-            borderRadius: '10px',
-            background: type === 'delete' ? '#ef4444' : '#f59e0b',
-            color: 'white', fontSize: '14px', fontWeight: 600, cursor: 'pointer'
-          }}>
-            {type === 'delete' ? 'Eliminar' : 'Confirmar'}
+          <button
+            onClick={onCancel}
+            disabled={confirming}
+            style={{
+              padding: '10px 20px', border: '1.5px solid #e5e7eb',
+              borderRadius: '10px', background: 'white', color: '#374151',
+              fontSize: '14px', fontWeight: 600, cursor: confirming ? 'not-allowed' : 'pointer',
+              opacity: confirming ? 0.5 : 1,
+            }}
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={handleConfirm}
+            disabled={confirming}
+            style={{
+              padding: '10px 20px', border: 'none',
+              borderRadius: '10px',
+              background: type === 'delete' ? '#ef4444' : '#f59e0b',
+              color: 'white', fontSize: '14px', fontWeight: 600,
+              cursor: confirming ? 'not-allowed' : 'pointer',
+              opacity: confirming ? 0.7 : 1,
+              minWidth: '100px',
+            }}
+          >
+            {confirming
+              ? (type === 'delete' ? 'Eliminando...' : 'Confirmando...')
+              : (type === 'delete' ? 'Eliminar' : 'Confirmar')
+            }
           </button>
         </div>
       </div>

@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { dbProjects, dbTasks } from '../lib/database';
+import PerformanceDashboard from './PerformanceDashboard';
 
 // ============================================================================
 // HELPERS
@@ -82,6 +83,9 @@ const CustomTooltip = ({ active, payload, label }) => {
 export default function AnalyticsDashboard() {
   const { environments, currentUser, membershipMap, isSuperAdmin } = useApp();
   const superAdmin = isSuperAdmin();
+  const canSeePerformance = superAdmin || ['admin', 'super_admin'].includes(currentUser?.role);
+
+  const [activeTab, setActiveTab] = useState('general');
 
   const [stats, setStats] = useState({
     totalProjects: 0,
@@ -109,10 +113,9 @@ export default function AnalyticsDashboard() {
       let allTasks = [];
 
       for (const env of environments) {
-        const [projects, tasks] = await Promise.all([
-          dbProjects.getByEnvironment(env.id).catch(() => []),
-          dbTasks.getByEnvironment(env.id).catch(() => []),
-        ]);
+        const projects = await dbProjects.getByEnvironment(env.id).catch(() => []);
+        const taskArrays = await Promise.all(projects.map(p => dbTasks.getByProject(p.id).catch(() => [])));
+        const tasks = taskArrays.flat();
 
         const completed = tasks.filter(t => t.status === 'done' || t.status === 'completed').length;
         const progress = tasks.length > 0 ? Math.round((completed / tasks.length) * 100) : 0;
@@ -165,21 +168,11 @@ export default function AnalyticsDashboard() {
     ? Math.round((stats.completedTasks / stats.totalTasks) * 100)
     : 0;
 
-  if (stats.loading) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh', flexDirection: 'column', gap: '1rem' }}>
-        <Loader size={28} color="#667eea" style={{ animation: 'spin 1s linear infinite' }} />
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-        <p style={{ color: '#64748b', fontSize: '0.9rem' }}>Cargando métricas...</p>
-      </div>
-    );
-  }
-
   return (
     <div style={{ padding: '1.5rem 2rem', fontFamily: 'Inter, system-ui, sans-serif', maxWidth: '1100px' }}>
 
       {/* ── HEADER ── */}
-      <div style={{ marginBottom: '1.75rem' }}>
+      <div style={{ marginBottom: '1.5rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
           <h2 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-primary, #1e293b)' }}>
             Analítica
@@ -201,6 +194,48 @@ export default function AnalyticsDashboard() {
           }
         </p>
       </div>
+
+      {/* ── TABS ── */}
+      <div style={{ display: 'flex', gap: '4px', marginBottom: '1.5rem', borderBottom: '1px solid #e8ecf0', paddingBottom: '0' }}>
+        {[
+          { id: 'general', label: 'General' },
+          ...(canSeePerformance ? [{ id: 'desempeno', label: 'Desempeño' }] : []),
+        ].map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            style={{
+              padding: '8px 18px',
+              background: 'none',
+              border: 'none',
+              borderBottom: activeTab === tab.id ? '2px solid #667eea' : '2px solid transparent',
+              color: activeTab === tab.id ? '#667eea' : '#64748b',
+              fontWeight: activeTab === tab.id ? 700 : 500,
+              fontSize: '0.875rem',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+              marginBottom: '-1px',
+              fontFamily: 'inherit',
+            }}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'desempeno' && <PerformanceDashboard />}
+
+      {activeTab === 'general' && (<>
+
+      {stats.loading && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh', flexDirection: 'column', gap: '1rem' }}>
+          <Loader size={28} color="#667eea" style={{ animation: 'spin 1s linear infinite' }} />
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+          <p style={{ color: '#64748b', fontSize: '0.9rem' }}>Cargando métricas...</p>
+        </div>
+      )}
+
+      {!stats.loading && (<>
 
       {stats.error && (
         <div style={{ padding: '12px 16px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', color: '#dc2626', marginBottom: '1.5rem', fontSize: '0.875rem' }}>
@@ -386,6 +421,9 @@ export default function AnalyticsDashboard() {
           </div>
         )}
       </div>
+
+      </>)}
+      </>)}
     </div>
   );
 }

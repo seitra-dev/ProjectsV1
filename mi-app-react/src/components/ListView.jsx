@@ -231,6 +231,7 @@ const SortableTaskRow = ({
   weeks = [],
   onUpdate,
   onDelete,
+  onTaskClick,
   columns = [],
   visibleColumns = [],
   currentUser = null,
@@ -251,6 +252,13 @@ const SortableTaskRow = ({
   const [isEditing, setIsEditing] = useState(false);
   const [editedTask, setEditedTask] = useState(task);
   const [showHistory, setShowHistory] = useState(false);
+
+  // Keep editedTask in sync when task prop changes externally (optimistic updates, modal saves)
+  useEffect(() => {
+    if (!isEditing) {
+      setEditedTask(task);
+    }
+  }, [task]);
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -329,7 +337,12 @@ const SortableTaskRow = ({
                   }}
                 />
               ) : (
-                <div style={{ fontWeight: 500, color: DESIGN_TOKENS.neutral[800] }}>{task.title}</div>
+                <div
+                  style={{ fontWeight: 500, color: DESIGN_TOKENS.neutral[800], cursor: onTaskClick ? 'pointer' : 'default' }}
+                  onClick={() => onTaskClick && onTaskClick(task)}
+                >
+                  {task.title}
+                </div>
               );
             case 'proyecto':
               return isEditing ? (
@@ -746,6 +759,7 @@ function ListView({
   hideTitle = false,
   globalExpediteCheck = null,   // { active, task, tasks } — viene de MainApp (todos los tasks del usuario)
   onProjectUpdate = () => {},
+  onTaskClick = null,
 }) {
   const { currentEnvironment, currentWorkspace, currentUser, canEditTaskDates, membershipMap } = useApp();
   const [listName, setListName] = useState(initialListName);
@@ -1185,15 +1199,11 @@ function ListView({
                         visibleColumns={visibleColumns}
                         currentUser={currentUser}
                         environmentId={currentEnvironment?.id}
-                        canEditDates={canEditTaskDates(
-                          currentEnvironment?.id,
-                          workspaceProjects.find(p => p.id === task.projectId)?.leaderId
-                        )}
+                        canEditDates={canEditTaskDates()}
                         isExpedite={task.status === 'expedite'}
                         isBlocked={hasActiveExpedite && task.status !== 'expedite'}
+                        onTaskClick={onTaskClick}
                         onUpdate={async (updated) => {
-                          console.log('[updateTask] campo: assigneeId, valor:', updated.assigneeId);
-                          // Asegurar que assigneeId sea solo el ID, no el objeto completo
                           const assigneeIdValue = typeof updated.assigneeId === 'object' ? updated.assigneeId?.id : updated.assigneeId;
                           const dbPayload = {
                             title: updated.title,
@@ -1204,15 +1214,14 @@ function ListView({
                             startDate: updated.startDate || null,
                             dueDate: updated.endDate || null,
                           };
-                          console.log('[updateTask] enviando a Supabase:', dbPayload);
-                          // Optimistic update: refleja el cambio antes del await
                           const prevTasks = tasks;
+                          // Optimistic: reflect change immediately
                           onTasksChange(tasks.map(t => t.id === updated.id ? updated : t));
                           try {
                             const result = await dbTasks.update(updated.id, dbPayload, currentUser);
-                            console.log('[updateTask] respuesta Supabase:', result);
+                            // Sync with actual DB result
+                            onTasksChange(prevTasks.map(t => t.id === result.id ? result : t));
                           } catch (err) {
-                            console.log('[updateTask] error si hay:', err);
                             // Revert on error
                             onTasksChange(prevTasks);
                           }

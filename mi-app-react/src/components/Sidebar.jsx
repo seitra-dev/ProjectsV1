@@ -232,8 +232,8 @@ function Sidebar({ isOpen, activeView, onViewChange, projects, onProjectSelect, 
                     padding: '12px 14px',
                     marginBottom: '4px',
                     position: 'relative',
-                    background: isActive 
-                      ? 'linear-gradient(135deg, rgba(15, 23, 42, 0.06) 0%, rgba(2, 6, 23, 0.1) 100%)' 
+                    background: isActive
+                      ? 'linear-gradient(135deg, rgba(15, 23, 42, 0.06) 0%, rgba(2, 6, 23, 0.1) 100%)'
                       : 'transparent',
                     color: isActive ? 'var(--text-primary)' : 'var(--text-muted)',
                     border: isActive ? '1px solid rgba(15, 23, 42, 0.05)' : '1px solid transparent',
