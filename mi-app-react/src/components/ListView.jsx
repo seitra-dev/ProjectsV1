@@ -11,6 +11,7 @@ import {
 import { useApp } from '../context/AppContext';
 import { DESIGN_TOKENS } from '../styles/tokens';
 import { dbTasks, hasExpediteActive } from '../lib/database';
+import { TASK_STATUS_DROPDOWN } from '../constants/statuses';
 import {
   buildGroups, GroupBySelector, SortSelector, GenericGroup
 } from './shared/GroupBySelector';
@@ -50,15 +51,7 @@ const PRIORITY_OPTIONS = {
   low:    { label: 'Baja',    color: '#86868B' },
 };
 
-const STATUS_OPTIONS = {
-  pending:     { label: 'Pendiente',   color: '#FF9800', bg: '#FFF4E5' },
-  in_progress: { label: 'En Curso',    color: '#2196F3', bg: '#E3F2FD' },
-  waiting:     { label: 'En Espera',   color: '#0369a1', bg: '#e0f2fe' },
-  paused:      { label: 'En Pausa',    color: '#78909C', bg: '#ECEFF1' },
-  expedite:    { label: 'Expedite',    color: '#FF1744', bg: '#FFEBEE' },
-  completed:   { label: 'Completado',  color: '#00D68F', bg: '#E8F5E9' },
-  blocked:     { label: 'Bloqueado',   color: '#DC2626', bg: '#FFF0F0' },
-};
+const STATUS_OPTIONS = TASK_STATUS_DROPDOWN;
 
 
 // ============================================================================

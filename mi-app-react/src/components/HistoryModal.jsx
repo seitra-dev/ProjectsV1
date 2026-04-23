@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, Clock, User, Edit3, Trash2, Plus, Loader } from 'lucide-react';
 import { dbAuditLog } from '../lib/database';
+import { getTaskStatus, getProjectStatus } from '../constants/statuses';
 
 // ============================================================================
 // HELPERS
@@ -28,18 +29,6 @@ const FIELD_LABELS = {
   parent_id:   'Tarea padre',
 };
 
-const STATUS_LABELS = {
-  pending:     'Pendiente',
-  in_progress: 'En Curso',
-  waiting:     'En Espera',
-  paused:      'En Pausa',
-  expedite:    'Expedite',
-  completed:   'Completado',
-  blocked:     'Bloqueado',
-  active:      'Activo',
-  archived:    'Archivado',
-};
-
 const PRIORITY_LABELS = {
   urgent: 'Urgente',
   high:   'Alta',
@@ -49,7 +38,7 @@ const PRIORITY_LABELS = {
 
 const formatValue = (field, value) => {
   if (value === null || value === undefined || value === '') return '(vacío)';
-  if (field === 'status')   return STATUS_LABELS[value]   || value;
+  if (field === 'status')   return getTaskStatus(value).label || getProjectStatus(value).label || value;
   if (field === 'priority') return PRIORITY_LABELS[value] || value;
   if (typeof value === 'boolean') return value ? 'Sí' : 'No';
   if (typeof value === 'object')  return JSON.stringify(value);

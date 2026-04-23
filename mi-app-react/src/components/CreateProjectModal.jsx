@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Briefcase, Save } from 'lucide-react';
 import { dbProjects } from '../lib/database';
+import { PROJECT_STATUS_DROPDOWN } from '../constants/statuses';
 
 // ============================================================================
 // ESTILOS COMPARTIDOS
@@ -88,12 +89,7 @@ const PRIORITY_OPTIONS = [
   { value: 'urgent', label: 'Urgente' },
 ];
 
-const STATUS_OPTIONS = [
-  { value: 'active',    label: 'Activo' },
-  { value: 'paused',    label: 'En Pausa' },
-  { value: 'completed', label: 'Completado' },
-  { value: 'blocked',   label: 'Bloqueado' },
-];
+const STATUS_OPTIONS = Object.entries(PROJECT_STATUS_DROPDOWN).map(([value, cfg]) => ({ value, label: cfg.label }));
 
 const AREA_OPTIONS = ['TI', 'Crédito', 'Cartera', 'Riesgo', 'Datos', 'Transversal'];
 

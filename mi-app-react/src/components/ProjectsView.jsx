@@ -11,6 +11,8 @@ import { getGlobalMetrics, getEnvironmentMetrics } from './metrics';
 import CreateProjectModal   from './CreateProjectModal';
 import CreateMilestoneModal from './CreateMilestoneModal';
 import CreateTaskModal      from './CreateTaskModal';
+import { getTaskStatus, getProjectStatus } from '../constants/statuses';
+import StatusBadge from './shared/StatusBadge';
 
 // ============================================================================
 // COLORES
@@ -21,19 +23,8 @@ const PRIORITY_COLOR = {
   medium: { bg: '#dbeafe', text: '#1e40af', label: 'Media'   },
   low:    { bg: '#f3f4f6', text: '#6b7280', label: 'Baja'    },
 };
-const STATUS_COLOR = {
-  completed:   { bg: '#d1fae5', text: '#065f46', label: 'Completado'   },
-  in_progress: { bg: '#fef3c7', text: '#92400e', label: 'En Curso'     },
-  waiting:     { bg: '#e0f2fe', text: '#0369a1', label: 'En Espera'    },
-  review:      { bg: '#e0e7ff', text: '#3730a3', label: 'En Revisión'  },
-  blocked:     { bg: '#fee2e2', text: '#991b1b', label: 'Bloqueado'    },
-  paused:      { bg: '#f3f4f6', text: '#6b7280', label: 'En Pausa'     },
-  todo:        { bg: '#f3f4f6', text: '#6b7280', label: 'Por Hacer'    },
-  pending:     { bg: '#fff7ed', text: '#9a3412', label: 'Pendiente'    },
-  active:      { bg: '#dbeafe', text: '#1e40af', label: 'Activo'       },
-};
 const pColor = (p) => PRIORITY_COLOR[p] || PRIORITY_COLOR.medium;
-const sColor = (s) => STATUS_COLOR[s]   || STATUS_COLOR.todo;
+const sColor = (s) => { const c = getProjectStatus(s) || getTaskStatus(s); return { bg: c.bg, text: c.color, label: c.label }; };
 
 const calcDays = (start, end) => {
   if (!start || !end) return '—';
