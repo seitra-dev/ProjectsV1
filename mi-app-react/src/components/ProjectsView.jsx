@@ -3,7 +3,7 @@ import {
   Briefcase, Flag, CheckSquare, GitBranch,
   ChevronRight, ChevronDown, Plus, Trash2,
   ListChecks, CheckCircle2, Clock, AlertTriangle,
-  RefreshCw, Search, Globe,
+  RefreshCw, Search, Globe, Globe2,
 } from 'lucide-react';
 import { dbUsers, dbProjects } from '../lib/database';
 import { useApp } from '../context/AppContext';
@@ -11,7 +11,7 @@ import { getGlobalMetrics, getEnvironmentMetrics } from './metrics';
 import CreateProjectModal   from './CreateProjectModal';
 import CreateMilestoneModal from './CreateMilestoneModal';
 import CreateTaskModal      from './CreateTaskModal';
-import { getTaskStatus, getProjectStatus } from '../constants/statuses';
+import { PROJECT_STATUS_DROPDOWN, getTaskStatus, getProjectStatus } from '../constants/statuses';
 import StatusBadge from './shared/StatusBadge';
 
 // ============================================================================
@@ -613,10 +613,9 @@ export default function ProjectsView({ selectedEnvironment, onRefresh: externalR
             style={{ padding: '8px 10px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, outline: 'none', fontFamily: 'inherit', background: 'white', cursor: 'pointer' }}
           >
             <option value="all">Estado: Todos</option>
-            <option value="active">Activo</option>
-            <option value="paused">En Pausa</option>
-            <option value="completed">Completado</option>
-            <option value="blocked">Bloqueado</option>
+            {Object.entries(PROJECT_STATUS_DROPDOWN).map(([k, v]) => (
+              <option key={k} value={k}>{v.label}</option>
+            ))}
           </select>
 
           <select

@@ -45,18 +45,29 @@ export const getTaskStatus = (key) =>
 // ---------------------------------------------------------------------------
 
 export const PROJECT_STATUSES = {
-  backlog:     { label: 'Backlog',      color: '#64748b', bg: '#f8fafc', border: '#e2e8f0' },
-  active:      { label: 'Activo',       color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe' },
-  in_progress: { label: 'En Curso',     color: '#6366f1', bg: '#eef2ff', border: '#c7d2fe' },
-  paused:      { label: 'En Pausa',     color: '#b45309', bg: '#fffbeb', border: '#fde68a' },
-  completed:   { label: 'Completado',   color: '#16a34a', bg: '#f0fdf4', border: '#bbf7d0' },
-  blocked:     { label: 'Bloqueado',    color: '#dc2626', bg: '#fef2f2', border: '#fecaca' },
-  archived:    { label: 'Archivado',    color: '#9ca3af', bg: '#f3f4f6', border: '#e5e7eb' },
-  cancelled:   { label: 'Cancelado',    color: '#6b7280', bg: '#f3f4f6', border: '#e5e7eb' },
+  // ── Oficiales (mostrados en dropdowns) ──
+  backlog:     { label: 'Backlog',     color: '#64748b', bg: '#f8fafc', border: '#e2e8f0' },
+  pending:     { label: 'Pendiente',   color: '#d97706', bg: '#fffbeb', border: '#fde68a' },
+  in_progress: { label: 'En Curso',   color: '#6366f1', bg: '#eef2ff', border: '#c7d2fe' },
+  paused:      { label: 'En Pausa',   color: '#b45309', bg: '#fff7ed', border: '#fed7aa' },
+  blocked:     { label: 'Bloqueado',  color: '#dc2626', bg: '#fef2f2', border: '#fecaca' },
+  completed:   { label: 'Completado', color: '#16a34a', bg: '#f0fdf4', border: '#bbf7d0' },
+  cancelled:   { label: 'Cancelado',  color: '#6b7280', bg: '#f3f4f6', border: '#e5e7eb' },
+  // ── Alias legacy (datos existentes — se muestran pero no se ofrecen en dropdowns) ──
+  active:      { label: 'En Curso',   color: '#6366f1', bg: '#eef2ff', border: '#c7d2fe' },
+  archived:    { label: 'Archivado',  color: '#9ca3af', bg: '#f3f4f6', border: '#e5e7eb' },
 };
 
-/** Official project statuses for dropdowns */
-export const PROJECT_STATUS_DROPDOWN = { ...PROJECT_STATUSES };
+/** Official project statuses for dropdowns — en el orden canónico */
+export const PROJECT_STATUS_DROPDOWN = {
+  backlog:     PROJECT_STATUSES.backlog,
+  pending:     PROJECT_STATUSES.pending,
+  in_progress: PROJECT_STATUSES.in_progress,
+  paused:      PROJECT_STATUSES.paused,
+  blocked:     PROJECT_STATUSES.blocked,
+  completed:   PROJECT_STATUSES.completed,
+  cancelled:   PROJECT_STATUSES.cancelled,
+};
 
 /** Resolve a project status key to its config (falls back gracefully) */
 export const getProjectStatus = (key) =>

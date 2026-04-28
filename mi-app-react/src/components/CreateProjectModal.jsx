@@ -95,7 +95,7 @@ const AREA_OPTIONS = ['TI', 'Crédito', 'Cartera', 'Riesgo', 'Datos', 'Transvers
 
 const EMPTY = {
   name: '', responsableId: '', area: '', workspaceId: '',
-  startDate: '', endDate: '', priority: 'medium', status: 'active', description: '',
+  startDate: '', endDate: '', priority: 'medium', status: 'backlog', description: '',
 };
 
 // ============================================================================

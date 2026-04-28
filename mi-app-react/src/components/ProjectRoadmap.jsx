@@ -159,9 +159,7 @@ const ProjectRoadmap = ({ project, tasks = [], users = [], onProjectUpdate, onTa
                 fontWeight: 600,
                 color: DESIGN_TOKENS.primary.dark
               }}>
-                {project.status === 'active' ? 'Activo' : 
-                 project.status === 'completed' ? 'Completado' : 
-                 project.status === 'paused' ? 'En Pausa' : 'Por Iniciar'}
+                {getProjectStatus(project.status).label}
               </span>
             </div>
           </div>
@@ -883,7 +881,10 @@ const PhaseDetailPanel = ({ phase, phaseIndex, phaseTasks, users, onClose }) => 
           <div>
             <div style={{ fontSize: '11px', color: '#9ca3af', fontWeight: 600, marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Responsable</div>
             <div style={{ fontSize: '13px', fontWeight: 600, color: '#374151', display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ fontSize: '18px' }}>{responsable.avatar || '👤'}</span>
+              {typeof responsable.avatar === 'string' && (responsable.avatar.startsWith('http') || responsable.avatar.startsWith('data:'))
+                ? <img src={responsable.avatar} alt="" style={{ width: 22, height: 22, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+                : <span style={{ fontSize: '18px' }}>{responsable.avatar || '👤'}</span>
+              }
               {responsable.name || responsable.email}
             </div>
           </div>
@@ -1184,7 +1185,10 @@ const PhaseCard = ({ phase, phaseTasks = [], isOpen, isCreating, projectId, user
                       fontSize: '11px', color: DESIGN_TOKENS.neutral[500],
                       display: 'flex', alignItems: 'center', gap: '4px',
                     }}>
-                      <span style={{ fontSize: '13px' }}>{resp.avatar || '👤'}</span>
+                      {typeof resp.avatar === 'string' && (resp.avatar.startsWith('http') || resp.avatar.startsWith('data:'))
+                        ? <img src={resp.avatar} alt="" style={{ width: 16, height: 16, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+                        : <span style={{ fontSize: '13px' }}>{resp.avatar || '👤'}</span>
+                      }
                       {resp.name || resp.email}
                     </span>
                   ) : null;

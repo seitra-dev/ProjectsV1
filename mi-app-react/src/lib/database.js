@@ -241,8 +241,8 @@ const toDbProject = (project) => {
   if (project.description !== undefined) db.description = project.description;
   if (project.status !== undefined) db.status = project.status;
   if (project.color !== undefined) db.color = project.color;
-  if (project.startDate !== undefined) db.start_date = project.startDate;
-  if (project.endDate !== undefined) db.end_date = project.endDate;
+  if (project.startDate !== undefined) db.start_date = project.startDate || null;
+  if (project.endDate !== undefined) db.end_date = project.endDate || null;
   if (project.progress !== undefined) db.progress = project.progress;
   if (project.leaderId !== undefined) db.owner_id = project.leaderId;
   if (project.workspaceId !== undefined) db.workspace_id = project.workspaceId;
@@ -257,6 +257,8 @@ const toDbProject = (project) => {
 
 const mapTask = (row) => {
   if (!row) return null;
+  const rawCustom = row.custom_fields != null && typeof row.custom_fields === 'object' ? row.custom_fields : {};
+  const { _checklist, ...userCustomFields } = rawCustom;
   return {
     id: row.id,
     title: row.title,
@@ -274,7 +276,8 @@ const mapTask = (row) => {
     tags: row.tags || [],
     estimatedHours: row.estimated_hours,
     roadmapPhaseId: row.roadmap_phase_id || null,
-    customFields: row.custom_fields != null && typeof row.custom_fields === 'object' ? row.custom_fields : {},
+    customFields: userCustomFields,
+    checklist: _checklist || null,
     closedAt: row.closed_at || null,
     frente: row.frente || null,
     isDeleted: row.is_deleted === true,
@@ -301,7 +304,23 @@ const toDbTask = (task) => {
   if (task.workspaceId !== undefined) db.workspace_id = task.workspaceId || null;
   if (task.environmentId !== undefined) db.environment_id = task.environmentId || null;
   if ('roadmapPhaseId' in task) db.roadmap_phase_id = task.roadmapPhaseId || null;
-  if (task.customFields !== undefined) db.custom_fields = task.customFields;
+  // Merge user-defined customFields with internal _checklist key
+  const hasChecklist = task.checklist !== undefined;
+  const hasCustomFields = task.customFields !== undefined;
+  if (hasChecklist || hasCustomFields) {
+    const userFields = task.customFields || {};
+    const merged = { ...userFields };
+    if (hasChecklist) {
+      if (task.checklist) merged._checklist = task.checklist;
+      else delete merged._checklist;
+    }
+    db.custom_fields = merged;
+  }
+  // Auto-track closed_at when status changes
+  if (task.status !== undefined) {
+    if (task.status === 'completed') db.closed_at = new Date().toISOString();
+    else db.closed_at = null;
+  }
   if (task.frente !== undefined) db.frente = task.frente || null;
   return db;
 };
@@ -325,7 +344,7 @@ const mapComment = (row) => {
     id: row.id,
     taskId: row.task_id,
     userId: row.user_id,
-    content: row.content,
+    content: row.text,
     createdAt: row.created_at,
     user: row.user ? mapUser(row.user) : null,
   };
@@ -446,8 +465,9 @@ export const dbEnvironmentMembers = {
   getByEnvironment: async (environmentId) => {
     const { data, error } = await supabase
       .from('environment_members')
-      .select(`*, users(id, name, email, avatar, system_role, role)`)
-      .eq('environment_id', environmentId);
+      .select('*')
+      .eq('environment_id', environmentId)
+      .order('joined_at', { ascending: true });
     if (error) throw error;
     return data || [];
   },
@@ -473,15 +493,12 @@ export const dbEnvironmentMembers = {
     return data !== null;
   },
   updateRole: async (environmentId, userId, newRole) => {
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('environment_members')
       .update({ role: newRole })
       .eq('environment_id', environmentId)
-      .eq('user_id', userId)
-      .select()
-      .single();
+      .eq('user_id', userId);
     if (error) throw error;
-    return data;
   },
   getMyMemberships: async (userId) => {
     const { data, error } = await supabase
@@ -694,7 +711,7 @@ export const dbComments = {
     const data = await restFetch('comments', 'POST', {
       task_id: commentData.taskId,
       user_id: commentData.userId,
-      content: commentData.content,
+      text: commentData.content,
     });
     return mapComment(Array.isArray(data) ? data[0] : data);
   },
@@ -948,25 +965,118 @@ export const dbKpiThresholds = {
 // ============================================================================
 
 export const dbPerformance = {
-  getMetrics: async ({ environmentId, frente, area, startDate, endDate } = {}) => {
-    const { data, error } = await supabase.rpc('get_performance_metrics', {
-      p_environment_id: environmentId || null,
-      p_frente:         frente        || null,
-      p_area:           area          || null,
-      p_start_date:     startDate     || null,
-      p_end_date:       endDate       || null,
-    });
+  getMetrics: async ({ workspaceId, frente, startDate, endDate } = {}) => {
+    const start = startDate || '2020-01-01';
+    const end   = endDate ? `${endDate}T23:59:59` : '2099-12-31T23:59:59';
+
+    let query = supabase
+      .from('tasks')
+      .select('id, assignee_id, closed_at, updated_at, end_date, frente, estimated_hours, assignee:users(id, name, avatar)')
+      .eq('status', 'completed')
+      .eq('is_deleted', false)
+      .or(
+        `and(closed_at.not.is.null,closed_at.gte.${start},closed_at.lte.${end}),` +
+        `and(closed_at.is.null,updated_at.gte.${start},updated_at.lte.${end})`
+      );
+
+    if (workspaceId) query = query.eq('workspace_id', workspaceId);
+    if (frente)      query = query.eq('frente', frente);
+
+    const { data, error } = await query;
     if (error) throw error;
-    return data || [];
+
+    const map = {};
+    (data || []).forEach(task => {
+      const aid           = task.assignee_id;           // null = sin asignar
+      const fk            = task.frente || '__nf__';    // group key for frente
+      const key           = `${fk}::${aid || '__na__'}`;
+      const effectiveDate = task.closed_at || task.updated_at;
+
+      if (!map[key]) {
+        map[key] = {
+          assignee_id:   aid,
+          assignee_name: aid ? (task.assignee?.name || 'Sin nombre') : 'Sin asignar',
+          avatar:        aid ? (task.assignee?.avatar || null) : null,
+          frente:        task.frente || null,
+          total_closed:  0,
+          // KPI: solo tareas con closed_at real (Fix 1)
+          _on_time:      0,
+          _late:         0,
+          _real_kpi:     0,
+          trend_data:    [],
+          _hours:        [],
+        };
+      }
+      map[key].total_closed++;
+      if (effectiveDate) map[key].trend_data.push({ t: effectiveDate, v: 1 });
+      if (task.estimated_hours != null) map[key]._hours.push(task.estimated_hours);
+      // KPI y tardías solo si closed_at existe (no usar updated_at como fallback)
+      if (task.closed_at && task.end_date) {
+        map[key]._real_kpi++;
+        if (task.closed_at.slice(0, 10) <= task.end_date) map[key]._on_time++;
+        else map[key]._late++;
+      }
+    });
+
+    return Object.values(map).map(r => {
+      const { _on_time, _late, _real_kpi, _hours, ...rest } = r;
+      return {
+        ...rest,
+        // null = sin datos reales de closed_at (no mostrar KPI)
+        kpi_pct:    (rest.assignee_id && _real_kpi >= 2)
+          ? Math.round((_on_time / _real_kpi) * 100)
+          : null,
+        late_count: _late,
+        size_dist: {
+          xs: _hours.filter(h => h < 2).length,
+          s:  _hours.filter(h => h >= 2 && h < 5).length,
+          m:  _hours.filter(h => h >= 5 && h < 10).length,
+          l:  _hours.filter(h => h >= 10).length,
+        },
+      };
+    });
   },
-  getFrenteOptions: async () => {
-    const { data, error } = await supabase
+  getFrenteOptions: async (workspaceId = null) => {
+    let query = supabase
       .from('tasks')
       .select('frente')
       .not('frente', 'is', null)
       .neq('frente', '');
+    if (workspaceId) query = query.eq('workspace_id', workspaceId);
+    const { data, error } = await query;
     if (error) throw error;
     return [...new Set((data || []).map(r => r.frente))].sort();
+  },
+
+  getTallajeDistribution: async ({ environmentId, startDate, endDate } = {}) => {
+    const eod = `${endDate || new Date().toISOString().slice(0, 10)}T23:59:59`;
+    let query = supabase
+      .from('tasks')
+      .select(environmentId
+        ? 'assignee_id, estimated_hours, projects!inner(environment_id)'
+        : 'assignee_id, estimated_hours')
+      .not('assignee_id', 'is', null)
+      .not('closed_at', 'is', null)
+      .eq('is_deleted', false)
+      .gte('closed_at', startDate || '2020-01-01')
+      .lte('closed_at', eod);
+
+    if (environmentId) query = query.eq('projects.environment_id', environmentId);
+
+    const { data, error } = await query;
+    if (error) throw error;
+    const map = {};
+    (data || []).forEach(t => {
+      const aid = String(t.assignee_id);
+      if (!map[aid]) map[aid] = { xs: 0, s: 0, m: 0, l: 0 };
+      const h = t.estimated_hours;
+      if (h == null) return;
+      if (h < 2)       map[aid].xs++;
+      else if (h < 5)  map[aid].s++;
+      else if (h < 10) map[aid].m++;
+      else             map[aid].l++;
+    });
+    return map;
   },
 };
 

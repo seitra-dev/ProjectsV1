@@ -49,12 +49,16 @@ export const AppProvider = ({ children }) => {
    * Filtra workspaces para que los privados solo sean visibles para su creador.
    * super_admin ve todos (para administración).
    */
-  const filterWorkspacesForUser = (workspaces, userId, systemRole) => {
+  const filterWorkspacesForUser = (workspaces, userId) => {
     if (!workspaces) return [];
-    if (systemRole === 'super_admin') return workspaces;
     return workspaces.filter(ws =>
-      ws.visibility !== 'specific_members' || ws.created_by === userId
+      ws.visibility !== 'specific_members' || String(ws.created_by) === String(userId)
     );
+  };
+
+  const filterListsForUser = (lists, userId) => {
+    if (!lists) return [];
+    return lists.filter(l => !l.is_private || String(l.created_by) === String(userId));
   };
 
   const setCurrentEnvironmentById = async (envId) => {
@@ -68,7 +72,7 @@ export const AppProvider = ({ children }) => {
     if (!env) return;
 
     const rawWorkspaces = env.workspaces ?? (await dbWorkspaces.getByEnvironment(envId));
-    const workspaces = filterWorkspacesForUser(rawWorkspaces, currentUser?.id, currentUser?.system_role);
+    const workspaces = filterWorkspacesForUser(rawWorkspaces, currentUser?.id);
     const envWithWorkspaces = { ...env, workspaces };
 
     setCurrentEnvironment(envWithWorkspaces);
@@ -76,6 +80,9 @@ export const AppProvider = ({ children }) => {
       prevEnvs.map((e) => (e.id === envId ? envWithWorkspaces : e))
     );
     setCurrentWorkspace(null);
+
+    const rawLists = await dbLists.getByEnvironment(envId);
+    setLists(filterListsForUser(rawLists, currentUser?.id));
   };
 
   const setCurrentWorkspaceById = (workspaceId) => {
@@ -201,13 +208,13 @@ export const AppProvider = ({ children }) => {
 
         setCurrentEnvironment(targetEnv);
         const rawWorkspaces = await dbWorkspaces.getByEnvironment(targetEnv.id);
-        const workspaces = filterWorkspacesForUser(rawWorkspaces, userId, systemRole);
+        const workspaces = filterWorkspacesForUser(rawWorkspaces, userId);
         const loadedLists = await dbLists.getByEnvironment(targetEnv.id);
         setEnvironments(prev =>
           prev.map(env => env.id === targetEnv.id ? { ...env, workspaces } : env)
         );
         setCurrentEnvironment(prev => ({ ...prev, workspaces }));
-        setLists(loadedLists);
+        setLists(filterListsForUser(loadedLists, userId));
       }
     } catch (error) {
       console.error('[AppContext] Error cargando entornos:', error);
@@ -384,13 +391,15 @@ export const AppProvider = ({ children }) => {
       }
       if (env && !env.workspaces) {
         const rawWorkspaces = await dbWorkspaces.getByEnvironment(env.id);
-        const workspaces = filterWorkspacesForUser(rawWorkspaces, currentUser?.id, currentUser?.system_role);
+        const workspaces = filterWorkspacesForUser(rawWorkspaces, currentUser?.id);
         const envWithWorkspaces = { ...env, workspaces };
         setCurrentEnvironment(envWithWorkspaces);
         setEnvironments(prev =>
           prev.map(e => e.id === env.id ? envWithWorkspaces : e)
         );
       }
+      const rawLists = await dbLists.getByEnvironment(env.id);
+      setLists(filterListsForUser(rawLists, currentUser?.id));
     } catch (error) {
       console.error('Error cargando workspaces:', error);
     }
@@ -412,7 +421,7 @@ export const AppProvider = ({ children }) => {
         created_by: currentUser?.id
       });
       const rawFreshWorkspaces = await dbWorkspaces.getByEnvironment(envId);
-      const freshWorkspaces = filterWorkspacesForUser(rawFreshWorkspaces, currentUser?.id, currentUser?.system_role);
+      const freshWorkspaces = filterWorkspacesForUser(rawFreshWorkspaces, currentUser?.id);
       setEnvironments(prev =>
         prev.map(env => env.id === envId ? { ...env, workspaces: freshWorkspaces } : env)
       );

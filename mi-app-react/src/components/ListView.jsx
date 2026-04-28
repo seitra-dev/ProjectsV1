@@ -6,11 +6,11 @@ import CustomFieldsManager from './CustomFields/CustomFieldsManager';
 import CustomFieldCell from './CustomFields/CustomFieldCell';
 import {
   ChevronRight, Flag, X, GripVertical,
-  MoreVertical, Pencil, Trash2, Plus, Clock
+  MoreVertical, Pencil, Trash2, Plus, Clock, Eye
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { DESIGN_TOKENS } from '../styles/tokens';
-import { dbTasks, hasExpediteActive } from '../lib/database';
+import { dbTasks, dbProjects, hasExpediteActive } from '../lib/database';
 import { TASK_STATUS_DROPDOWN } from '../constants/statuses';
 import {
   buildGroups, GroupBySelector, SortSelector, GenericGroup
@@ -232,6 +232,7 @@ const SortableTaskRow = ({
   canEditDates = false,
   isBlocked = false,
   isExpedite = false,
+  customFieldDefinitions = [],
 }) => {
   const {
     attributes,
@@ -497,24 +498,35 @@ const SortableTaskRow = ({
               })();
             default: {
               // CAMPOS PERSONALIZADOS — usar customFieldDefinitions (camelCase del mapper JS)
-              const customField = project?.customFieldDefinitions?.find(f => f.id === colKey);
+              const customField =
+                project?.customFieldDefinitions?.find(f => f.id === colKey) ||
+                customFieldDefinitions.find(f => f.id === colKey);
               if (!customField) return null;
 
-              const fieldValue = editedTask.custom_fields?.[colKey] ?? null;
               const roadmapPhases = project?.roadmap?.phases?.filter(ph => ph.name) || [];
+              const rawFieldValue = editedTask.customFields?.[colKey] ?? null;
+              // Para campos roadmap_sync: si no hay valor en customFields, usar roadmapPhaseId de la tarea
+              const fieldValue = (customField.type === 'roadmap_sync' && !rawFieldValue && editedTask.roadmapPhaseId)
+                ? editedTask.roadmapPhaseId
+                : rawFieldValue;
 
-              // member_select y roadmap_sync son siempre interactivos → CustomFieldCell
-              if (customField.type === 'member_select' || customField.type === 'roadmap_sync') {
+              // member_select, roadmap_sync y select → siempre usar CustomFieldCell
+              if (
+                customField.type === 'member_select' ||
+                customField.type === 'roadmap_sync' ||
+                customField.type === 'select'
+              ) {
                 return (
                   <CustomFieldCell
                     field={customField}
                     value={fieldValue}
                     onChange={(v) => setEditedTask({
                       ...editedTask,
-                      custom_fields: { ...editedTask.custom_fields, [colKey]: v },
+                      customFields: { ...editedTask.customFields, [colKey]: v },
                     })}
                     onSave={(v) => {
-                      const next = { ...editedTask, custom_fields: { ...editedTask.custom_fields, [colKey]: v } };
+                      const extra = customField.type === 'roadmap_sync' ? { roadmapPhaseId: v || null } : {};
+                      const next = { ...editedTask, ...extra, customFields: { ...editedTask.customFields, [colKey]: v } };
                       setEditedTask(next);
                       onUpdate(next);
                     }}
@@ -527,49 +539,13 @@ const SortableTaskRow = ({
               }
 
               const displayValue = fieldValue !== null ? String(fieldValue) : '—';
-              // Opciones disponibles (si es select)
-              const options = customField.options || [];
-              const selectedOption = options.find(o => o.id === fieldValue || o.label === fieldValue);
 
-              if (customField.type === 'select' && isEditing) {
-                return (
-                  <select
-                    value={fieldValue || ''}
-                    onChange={(e) => setEditedTask({
-                      ...editedTask,
-                      custom_fields: { ...editedTask.custom_fields, [colKey]: e.target.value || null }
-                    })}
-                    style={{
-                      ...dateInputStyle,
-                      background: selectedOption ? selectedOption.color + '15' : 'white',
-                      color: selectedOption ? selectedOption.color : '#6b7280',
-                      borderColor: selectedOption ? selectedOption.color : '#e5e7eb',
-                    }}
-                  >
-                    <option value="">—</option>
-                    {options.map(opt => (
-                      <option key={opt.id} value={opt.id}>{opt.label}</option>
-                    ))}
-                  </select>
-                );
-              } else if (customField.type === 'select') {
-                return (
-                  <div style={{
-                    padding: '4px 10px',
-                    background: selectedOption ? selectedOption.color + '20' : DESIGN_TOKENS.neutral[100],
-                    color: selectedOption ? selectedOption.color : DESIGN_TOKENS.neutral[600],
-                    borderRadius: '4px', fontSize: '12px',
-                    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                  }}>
-                    {selectedOption?.label || '—'}
-                  </div>
-                );
-              } else if (customField.type === 'date' && isEditing) {
+              if (customField.type === 'date' && isEditing) {
                 return canEditDates ? (
                   <input type="date" value={fieldValue || ''}
                     onChange={(e) => setEditedTask({
                       ...editedTask,
-                      custom_fields: { ...editedTask.custom_fields, [colKey]: e.target.value || null }
+                      customFields: { ...editedTask.customFields, [colKey]: e.target.value || null }
                     })}
                     style={dateInputStyle} />
                 ) : (
@@ -591,7 +567,7 @@ const SortableTaskRow = ({
                   <input type="text" value={fieldValue || ''}
                     onChange={(e) => setEditedTask({
                       ...editedTask,
-                      custom_fields: { ...editedTask.custom_fields, [colKey]: e.target.value || null }
+                      customFields: { ...editedTask.customFields, [colKey]: e.target.value || null }
                     })}
                     style={dateInputStyle} />
                 );
@@ -778,14 +754,39 @@ function ListView({
     { key: 'fecha_limite', label: 'FECHA LÍMITE', width: '120px' },
     { key: 'asignado',     label: 'ASIGNADO',     width: '140px' },
   ]);
-  const [visibleColumns, setVisibleColumns] = useState([
-    'nombre', 'proyecto', 'estado', 'prioridad', 'fecha_inicio', 'fecha_limite', 'asignado'
-  ]);
+  const lsHiddenKey = `lv_hidden_${listId || 'default'}`;
+  const [visibleColumns, setVisibleColumns] = useState(() => {
+    const allKeys = ['nombre', 'proyecto', 'estado', 'prioridad', 'fecha_inicio', 'fecha_limite', 'asignado'];
+    try {
+      const stored = JSON.parse(localStorage.getItem(lsHiddenKey) || '[]');
+      return allKeys.filter(k => !stored.includes(k));
+    } catch { return allKeys; }
+  });
+  const [showHiddenMenu, setShowHiddenMenu] = useState(false);
+  const hiddenMenuRef = useRef(null);
   const [draggedCol, setDraggedCol] = useState(null);
   const [dragOverCol, setDragOverCol] = useState(null);
   const [colMenu, setColMenu] = useState(null);
   const [showCreateFieldFlow, setShowCreateFieldFlow] = useState(false);
   const addFieldBtnRef = useRef(null);
+
+  // Persistir columnas ocultas en localStorage
+  useEffect(() => {
+    const hidden = columns.map(c => c.key).filter(k => !visibleColumns.includes(k));
+    try { localStorage.setItem(lsHiddenKey, JSON.stringify(hidden)); } catch {}
+  }, [visibleColumns, columns, lsHiddenKey]);
+
+  // Cerrar menú de columnas ocultas al hacer click fuera
+  useEffect(() => {
+    if (!showHiddenMenu) return;
+    const handler = (e) => {
+      if (hiddenMenuRef.current && !hiddenMenuRef.current.contains(e.target)) {
+        setShowHiddenMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showHiddenMenu]);
 
   const reorderColumns = (fromKey, toKey) => {
     if (!fromKey || !toKey || fromKey === toKey) return;
@@ -811,6 +812,28 @@ function ListView({
 
   const listTasks = listId != null ? tasks.filter(t => t.listId === listId) : tasks;
   const currentProject = workspaceProjects.length === 1 ? workspaceProjects[0] : workspaceProjects[0] || {};
+
+  // Sincronizar columnas de campos personalizados desde el proyecto (persisten en Supabase)
+  // Se usa una clave estable para evitar re-renders innecesarios
+  const customDefsKey = (currentProject?.customFieldDefinitions || []).map(d => d.id).join(',');
+  useEffect(() => {
+    const defs = currentProject?.customFieldDefinitions || [];
+    if (!defs.length) return;
+    setColumns(prev => {
+      const existingKeys = new Set(prev.map(c => c.key));
+      const toAdd = defs.filter(d => !existingKeys.has(d.id));
+      if (!toAdd.length) return prev;
+      return [...prev, ...toAdd.map(d => ({ key: d.id, label: d.name.toUpperCase(), width: '140px' }))];
+    });
+    setVisibleColumns(prev => {
+      let storedHidden = [];
+      try { storedHidden = JSON.parse(localStorage.getItem(lsHiddenKey) || '[]'); } catch {}
+      const toAdd = defs.map(d => d.id).filter(id => !prev.includes(id) && !storedHidden.includes(id));
+      if (!toAdd.length) return prev;
+      return [...prev, ...toAdd];
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customDefsKey]);
 
   const handleDragStart = (event) => setActiveId(event.active.id);
 
@@ -966,6 +989,82 @@ function ListView({
               onChange={(v) => { setGroupBy(v); setCollapsedGroups({}); setShowNewTaskRow(false); }}
             />
             <SortSelector direction={sortDirection} onChange={setSortDirection} />
+
+            {/* Botón columnas ocultas */}
+            {(() => {
+              const hiddenCols = columns.filter(c => !visibleColumns.includes(c.key));
+              if (hiddenCols.length === 0) return null;
+              return (
+                <div ref={hiddenMenuRef} style={{ position: 'relative' }}>
+                  <button
+                    onClick={() => setShowHiddenMenu(v => !v)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '6px',
+                      padding: '8px 12px', background: 'white',
+                      border: `1px solid ${DESIGN_TOKENS.border.color.normal}`,
+                      borderRadius: '8px', cursor: 'pointer',
+                      fontSize: '12px', fontWeight: 600,
+                      color: DESIGN_TOKENS.neutral[600],
+                    }}
+                    title="Columnas ocultas"
+                  >
+                    <Eye size={14} />
+                    {hiddenCols.length} oculta{hiddenCols.length > 1 ? 's' : ''}
+                  </button>
+                  {showHiddenMenu && (
+                    <div style={{
+                      position: 'absolute', top: 'calc(100% + 6px)', left: 0,
+                      background: 'white', border: `1px solid ${DESIGN_TOKENS.border.color.subtle}`,
+                      borderRadius: '8px', boxShadow: DESIGN_TOKENS.shadows.lg,
+                      padding: '6px', minWidth: '200px', zIndex: 200,
+                    }}>
+                      <div style={{ padding: '6px 10px 4px', fontSize: '11px', fontWeight: 700, color: DESIGN_TOKENS.neutral[400], textTransform: 'uppercase', letterSpacing: '1px' }}>
+                        Columnas ocultas
+                      </div>
+                      {hiddenCols.map(col => (
+                        <button
+                          key={col.key}
+                          onClick={() => {
+                            setVisibleColumns(prev => [...prev, col.key]);
+                            setShowHiddenMenu(false);
+                          }}
+                          style={{
+                            width: '100%', display: 'flex', alignItems: 'center', gap: '8px',
+                            padding: '8px 10px', background: 'none', border: 'none',
+                            borderRadius: '6px', cursor: 'pointer',
+                            fontSize: '13px', fontWeight: 500, color: DESIGN_TOKENS.neutral[700],
+                            textAlign: 'left',
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.background = DESIGN_TOKENS.neutral[50]}
+                          onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                        >
+                          <Eye size={13} style={{ color: DESIGN_TOKENS.neutral[400] }} />
+                          {col.label}
+                        </button>
+                      ))}
+                      <div style={{ height: 1, background: DESIGN_TOKENS.border.color.subtle, margin: '4px 0' }} />
+                      <button
+                        onClick={() => {
+                          setVisibleColumns(columns.map(c => c.key));
+                          setShowHiddenMenu(false);
+                        }}
+                        style={{
+                          width: '100%', display: 'flex', alignItems: 'center', gap: '8px',
+                          padding: '8px 10px', background: 'none', border: 'none',
+                          borderRadius: '6px', cursor: 'pointer',
+                          fontSize: '13px', fontWeight: 600, color: DESIGN_TOKENS.primary.base,
+                          textAlign: 'left',
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.background = DESIGN_TOKENS.neutral[50]}
+                        onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                      >
+                        Mostrar todas
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             <div style={{ position: 'relative' }}>
               <button
@@ -1196,6 +1295,7 @@ function ListView({
                         isExpedite={task.status === 'expedite'}
                         isBlocked={hasActiveExpedite && task.status !== 'expedite'}
                         onTaskClick={onTaskClick}
+                        customFieldDefinitions={currentProject?.customFieldDefinitions || []}
                         onUpdate={async (updated) => {
                           const assigneeIdValue = typeof updated.assigneeId === 'object' ? updated.assigneeId?.id : updated.assigneeId;
                           const dbPayload = {
@@ -1206,6 +1306,9 @@ function ListView({
                             assigneeId: assigneeIdValue || null,
                             startDate: updated.startDate || null,
                             dueDate: updated.endDate || null,
+                            customFields: updated.customFields ?? {},
+                            // Preservar checklist al actualizar (se guarda dentro de custom_fields)
+                            ...(updated.checklist !== undefined ? { checklist: updated.checklist } : {}),
                           };
                           const prevTasks = tasks;
                           // Optimistic: reflect change immediately
@@ -1322,11 +1425,21 @@ function ListView({
           }}
           setGroupBy={setGroupBy}
           onClose={() => setColMenu(null)}
-          onCustomFieldDelete={(field) => {
-            // Eliminar la columna personalizada
+          onCustomFieldDelete={async (field) => {
+            // 1. Quitar del estado local inmediatamente
             setColumns(prev => prev.filter(c => c.key !== field.id));
             setVisibleColumns(prev => prev.filter(k => k !== field.id));
             setColMenu(null);
+            // 2. Persistir en Supabase eliminando la definición del proyecto
+            if (currentProject?.id) {
+              const updatedDefs = (currentProject.customFieldDefinitions || []).filter(d => d.id !== field.id);
+              try {
+                const updated = await dbProjects.update(currentProject.id, { customFieldDefinitions: updatedDefs });
+                onProjectUpdate(updated);
+              } catch (e) {
+                console.error('[ListView] Error eliminando campo personalizado:', e);
+              }
+            }
           }}
         />
       );

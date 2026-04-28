@@ -12,7 +12,7 @@ import {
   MessageSquare, Copy, FileText, Star, StarOff,
   ChevronLeft, Send, TrendingUp, Target,
   AlertTriangle, Info, CheckCircle, Loader, Moon, Sun,
-  Keyboard, Layout, BarChart,
+  Keyboard, Layout, BarChart, CheckSquare, Pencil,
 } from 'lucide-react';
 
 import Sidebar from './components/Sidebar';
@@ -34,7 +34,7 @@ import CreateListModal from './components/Enviroments/CreateListModal';
 import UserSettingsDrawer from './components/UserSettingsDrawer';
 import SelectEnvironmentPrompt from './components/SelectEnvironmentPrompt';
 import EditProjectModal from './components/EditProjectModal';
-import { TASK_STATUSES, TASK_STATUS_DROPDOWN, getTaskStatus, getProjectStatus } from './constants/statuses';
+import { TASK_STATUSES, TASK_STATUS_DROPDOWN, PROJECT_STATUS_DROPDOWN, getTaskStatus, getProjectStatus } from './constants/statuses';
 import StatusBadge from './components/shared/StatusBadge';
 
 
@@ -237,6 +237,15 @@ const parseDate = (dateStr) => {
 const formatDate = (dateStr, options = { day: 'numeric', month: 'short', year: 'numeric' }) => {
   const d = parseDate(dateStr);
   return d ? d.toLocaleDateString('es-ES', options) : '—';
+};
+
+const calcTaskProgress = (task) => {
+  if (task.status === 'completed' || task.status === 'done') return 100;
+  try {
+    const items = JSON.parse(task.checklist || '[]');
+    if (items.length > 0) return Math.round((items.filter(i => i.done).length / items.length) * 100);
+  } catch {}
+  return task.progress || 0;
 };
 
 // ============================================================================
@@ -2912,14 +2921,9 @@ function ProjectsView({ projects, createProject, deleteProject, updateProject, u
           style={selectStyle}
         >
           <option value="all">Todos los estados</option>
-          <option value="active">Activos</option>
-          <option value="in_progress">En Curso</option>
-          <option value="waiting">En Espera</option>
-          <option value="review">En Revisión</option>
-          <option value="paused">En Pausa</option>
-          <option value="blocked">Bloqueados</option>
-          <option value="completed">Completados</option>
-          <option value="archived">Archivados</option>
+          {Object.entries(PROJECT_STATUS_DROPDOWN).map(([k, v]) => (
+            <option key={k} value={k}>{v.label}</option>
+          ))}
         </select>
 
         <select
@@ -3040,7 +3044,7 @@ function ProjectsView({ projects, createProject, deleteProject, updateProject, u
                 ...project,
                 workspaceId: currentWorkspace?.id || null,
                 environmentId: currentEnvironment?.id || null,
-                status: project.status || 'active',
+                status: project.status || 'backlog',
                 favorite: false,
                 roadmap: project.roadmap || { phases: [], userStories: [], risks: [], meetings: [] }
               });
@@ -3551,6 +3555,41 @@ function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTask
   const [headerCollapsed, setHeaderCollapsed] = useState(false);
   const [pendingDeleteTask, setPendingDeleteTask] = useState(null);
   const [deletingTask, setDeletingTask] = useState(false);
+
+  // ── Edición inline del proyecto ──────────────────────────────────────────
+  const [editingProject, setEditingProject] = useState(false);
+  const [editForm, setEditForm] = useState({});
+  const [savingProject, setSavingProject] = useState(false);
+
+  const startEditProject = () => {
+    setEditForm({
+      name:        project.name        || '',
+      description: project.description || '',
+      status:      project.status      || 'backlog',
+      priority:    project.priority    || 'medium',
+      startDate:   project.startDate   || '',
+      endDate:     project.endDate     || '',
+      color:       project.color       || '#6366f1',
+      leaderId:    project.leaderId    || '',
+    });
+    setHeaderCollapsed(false);
+    setEditingProject(true);
+  };
+
+  const cancelEditProject = () => setEditingProject(false);
+
+  const saveEditProject = async () => {
+    if (!editForm.name?.trim()) return;
+    setSavingProject(true);
+    try {
+      await onProjectUpdate({ ...project, ...editForm, name: editForm.name.trim() });
+      setEditingProject(false);
+    } catch (e) {
+      // error ya manejado en onProjectUpdate
+    } finally {
+      setSavingProject(false);
+    }
+  };
   const [liveTasks, setLiveTasks] = useState(null);
 
   // Sync liveTasks with global tasks when they change externally (e.g. modal updates)
@@ -3679,7 +3718,7 @@ function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTask
   };
 
   const projectProgress = projectTasks.length > 0
-    ? Math.round(projectTasks.reduce((sum, t) => sum + (t.progress || 0), 0) / projectTasks.length)
+    ? Math.round(projectTasks.filter(t => t.status === 'completed').length / projectTasks.length * 100)
     : 0;
 
   return (
@@ -3735,60 +3774,197 @@ function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTask
           </div>
         )}
 
-        {/* Botón minimizar — visible solo cuando está expandido */}
+        {/* Botones de acción — visibles solo cuando está expandido */}
         {!headerCollapsed && (
-          <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '1rem 1.5rem 0' }}>
-            <button
-              onClick={() => setHeaderCollapsed(true)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '5px',
-                background: 'none', border: 'none', cursor: 'pointer',
-                fontSize: '0.78rem', fontWeight: 600,
-                color: 'var(--text-subtle, #94a3b8)',
-                padding: '2px 6px', borderRadius: '6px',
-                transition: 'color 0.2s',
-              }}
-              onMouseEnter={e => e.currentTarget.style.color = 'var(--text-muted, #64748b)'}
-              onMouseLeave={e => e.currentTarget.style.color = 'var(--text-subtle, #94a3b8)'}
-            >
-              <ChevronUp size={13} /> Minimizar
-            </button>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', padding: '1rem 1.5rem 0' }}>
+            {!editingProject && (
+              <button
+                onClick={startEditProject}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '5px',
+                  background: 'none', border: '1px solid #e2e8f0', cursor: 'pointer',
+                  fontSize: '0.78rem', fontWeight: 600, color: '#475569',
+                  padding: '4px 10px', borderRadius: '6px', transition: 'all 0.2s',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.borderColor = '#6366f1'; e.currentTarget.style.color = '#6366f1'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.color = '#475569'; }}
+              >
+                <Pencil size={12} /> Editar
+              </button>
+            )}
+            {!editingProject && (
+              <button
+                onClick={() => setHeaderCollapsed(true)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '5px',
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  fontSize: '0.78rem', fontWeight: 600,
+                  color: 'var(--text-subtle, #94a3b8)',
+                  padding: '4px 6px', borderRadius: '6px', transition: 'color 0.2s',
+                }}
+                onMouseEnter={e => e.currentTarget.style.color = 'var(--text-muted, #64748b)'}
+                onMouseLeave={e => e.currentTarget.style.color = 'var(--text-subtle, #94a3b8)'}
+              >
+                <ChevronUp size={13} /> Minimizar
+              </button>
+            )}
           </div>
         )}
 
         {/* Contenido colapsable */}
         <div style={{
-          maxHeight: headerCollapsed ? '0' : '300px',
+          maxHeight: headerCollapsed ? '0' : editingProject ? '600px' : '300px',
           opacity: headerCollapsed ? 0 : 1,
           overflow: 'hidden',
           transition: 'max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease',
           padding: headerCollapsed ? '0 2rem' : '1rem 2rem 2rem',
         }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '1rem' }}>
-            <div>
-              <h2 style={{ fontSize: '1.75rem', fontWeight: 800, margin: '0 0 0.5rem', color: 'var(--text-primary, #1e293b)' }}>
-                {project.name}
-              </h2>
-              <p style={{ color: 'var(--text-muted, #64748b)', margin: 0 }}>
-                {project.description}
-              </p>
-            </div>
-            <div style={{ textAlign: 'right', flexShrink: 0 }}>
-              <div style={{ fontSize: '2rem', fontWeight: 800, color: project.color }}>
-                {projectProgress}%
-              </div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-subtle, #94a3b8)' }}>
-                Progreso total
-              </div>
-            </div>
-          </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', marginTop: '1rem' }}>
-            <InfoItem label="Fecha inicio" value={formatDate(project.startDate)} />
-            <InfoItem label="Fecha fin" value={formatDate(project.endDate)} />
-            <InfoItem label="Tareas totales" value={projectTasks.length} />
-            <InfoItem label="Completadas" value={projectTasks.filter(t => t.status === 'completed').length} />
-          </div>
+          {/* ── MODO EDICIÓN ── */}
+          {editingProject ? (() => {
+            const STATUS_OPTS = Object.entries(PROJECT_STATUS_DROPDOWN).map(([value, cfg]) => ({ value, label: cfg.label }));
+            const PRIO_OPTS = [
+              { value: 'low',    label: 'Baja' },
+              { value: 'medium', label: 'Media' },
+              { value: 'high',   label: 'Alta' },
+              { value: 'urgent', label: 'Urgente' },
+            ];
+            const fld = (field, value) => setEditForm(prev => ({ ...prev, [field]: value }));
+            const inputStyle = {
+              width: '100%', padding: '8px 11px', border: '1.5px solid #e2e8f0',
+              borderRadius: '8px', fontSize: '0.875rem', fontFamily: 'inherit',
+              color: '#1e293b', outline: 'none', boxSizing: 'border-box',
+              transition: 'border-color 0.2s',
+            };
+            const labelStyle = { display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.04em' };
+            return (
+              <div>
+                {/* Fila 1: Nombre + Color */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '12px', marginBottom: '14px', alignItems: 'end' }}>
+                  <div>
+                    <label style={labelStyle}>Nombre del proyecto</label>
+                    <input
+                      style={inputStyle}
+                      value={editForm.name}
+                      onChange={e => fld('name', e.target.value)}
+                      onFocus={e => e.target.style.borderColor = '#6366f1'}
+                      onBlur={e => e.target.style.borderColor = '#e2e8f0'}
+                      autoFocus
+                    />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Color</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <input
+                        type="color"
+                        value={editForm.color || '#6366f1'}
+                        onChange={e => fld('color', e.target.value)}
+                        style={{ width: 40, height: 36, border: '1.5px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', padding: 2 }}
+                      />
+                      <span style={{ fontSize: '0.78rem', color: '#94a3b8', fontFamily: 'monospace' }}>{editForm.color}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Fila 2: Estado + Prioridad + Responsable */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '14px' }}>
+                  <div>
+                    <label style={labelStyle}>Estado</label>
+                    <select style={{ ...inputStyle, background: 'white', cursor: 'pointer' }} value={editForm.status} onChange={e => fld('status', e.target.value)}>
+                      {STATUS_OPTS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Prioridad</label>
+                    <select style={{ ...inputStyle, background: 'white', cursor: 'pointer' }} value={editForm.priority} onChange={e => fld('priority', e.target.value)}>
+                      {PRIO_OPTS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Responsable</label>
+                    <select style={{ ...inputStyle, background: 'white', cursor: 'pointer' }} value={editForm.leaderId || ''} onChange={e => fld('leaderId', e.target.value)}>
+                      <option value="">— Sin asignar</option>
+                      {users.map(u => <option key={u.id} value={u.id}>{u.name || u.email}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Fila 3: Fechas */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '14px' }}>
+                  <div>
+                    <label style={labelStyle}>Fecha inicio</label>
+                    <input type="date" style={inputStyle} value={editForm.startDate || ''} onChange={e => fld('startDate', e.target.value)}
+                      onFocus={e => e.target.style.borderColor = '#6366f1'} onBlur={e => e.target.style.borderColor = '#e2e8f0'} />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Fecha fin</label>
+                    <input type="date" style={inputStyle} value={editForm.endDate || ''} onChange={e => fld('endDate', e.target.value)}
+                      onFocus={e => e.target.style.borderColor = '#6366f1'} onBlur={e => e.target.style.borderColor = '#e2e8f0'} />
+                  </div>
+                </div>
+
+                {/* Fila 4: Descripción */}
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={labelStyle}>Descripción</label>
+                  <textarea
+                    style={{ ...inputStyle, resize: 'vertical', minHeight: '68px' }}
+                    value={editForm.description}
+                    onChange={e => fld('description', e.target.value)}
+                    onFocus={e => e.target.style.borderColor = '#6366f1'}
+                    onBlur={e => e.target.style.borderColor = '#e2e8f0'}
+                    placeholder="Describe el objetivo del proyecto..."
+                  />
+                </div>
+
+                {/* Botones */}
+                <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                  <button
+                    onClick={cancelEditProject}
+                    style={{ padding: '8px 18px', background: 'white', border: '1.5px solid #e2e8f0', borderRadius: '8px', fontSize: '0.875rem', fontWeight: 600, color: '#64748b', cursor: 'pointer', fontFamily: 'inherit' }}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={saveEditProject}
+                    disabled={savingProject || !editForm.name?.trim()}
+                    style={{ padding: '8px 20px', background: savingProject ? '#94a3b8' : '#6366f1', border: 'none', borderRadius: '8px', fontSize: '0.875rem', fontWeight: 600, color: 'white', cursor: savingProject ? 'wait' : 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: '6px' }}
+                  >
+                    <Save size={14} />
+                    {savingProject ? 'Guardando…' : 'Guardar cambios'}
+                  </button>
+                </div>
+              </div>
+            );
+          })() : (
+            /* ── MODO LECTURA ── */
+            <>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '1rem' }}>
+                <div>
+                  <h2 style={{ fontSize: '1.75rem', fontWeight: 800, margin: '0 0 0.5rem', color: 'var(--text-primary, #1e293b)' }}>
+                    {project.name}
+                  </h2>
+                  <p style={{ color: 'var(--text-muted, #64748b)', margin: 0 }}>
+                    {project.description}
+                  </p>
+                </div>
+                <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                  <div style={{ fontSize: '2rem', fontWeight: 800, color: project.color }}>
+                    {projectProgress}%
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-subtle, #94a3b8)' }}>
+                    Progreso total
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', marginTop: '1rem' }}>
+                <InfoItem label="Fecha inicio" value={formatDate(project.startDate)} />
+                <InfoItem label="Fecha fin" value={formatDate(project.endDate)} />
+                <InfoItem label="Tareas totales" value={projectTasks.length} />
+                <InfoItem label="Completadas" value={projectTasks.filter(t => t.status === 'completed').length} />
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -4480,14 +4656,14 @@ function TableView({ tasks = [], users = [], onEdit, onTaskClick }) {
                   <td style={tdStyle}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: '120px' }}>
                       <div style={{ flex: 1, height: '6px', background: DESIGN_TOKENS.neutral[100], borderRadius: '10px', overflow: 'hidden' }}>
-                        <div style={{ 
-                          width: `${task.progress || 0}%`, 
-                          height: '100%', 
+                        <div style={{
+                          width: `${calcTaskProgress(task)}%`,
+                          height: '100%',
                           background: DESIGN_TOKENS.primary.base,
                           borderRadius: '10px'
                         }} />
                       </div>
-                      <span style={{ fontSize: '11px', fontWeight: 700, color: DESIGN_TOKENS.neutral[600] }}>{task.progress || 0}%</span>
+                      <span style={{ fontSize: '11px', fontWeight: 700, color: DESIGN_TOKENS.neutral[600] }}>{calcTaskProgress(task)}%</span>
                     </div>
                   </td>
 
@@ -4631,6 +4807,25 @@ function GanttView({ tasks, project, users = [], onTaskClick }) {
 
   const projectColor = project?.color || '#6366f1';
 
+  // Progreso real basado en estado, no en el slider manual
+  const taskProgress = (task) => {
+    if (task.status === 'completed' || task.status === 'done') return 100;
+    if (task.status === 'pending' || task.status === 'todo') return 0;
+    return task.progress || 0;
+  };
+
+  // Color de la barra según estado
+  const barColor = (task) => {
+    switch (task.status) {
+      case 'completed': case 'done':    return '#10b981';
+      case 'blocked':                   return '#ef4444';
+      case 'expedite':                  return '#e11d48';
+      case 'paused':                    return '#f59e0b';
+      case 'waiting':                   return '#0ea5e9';
+      default:                          return projectColor;
+    }
+  };
+
   const getBar = (task) => {
     const start = parseDate(task.startDate);
     const end = parseDate(task.dueDate) || parseDate(task.endDate);
@@ -4667,7 +4862,12 @@ function GanttView({ tasks, project, users = [], onTaskClick }) {
   const renderRow = (task, idx, noDates = false) => {
     const bar = noDates ? null : getBar(task);
     const assignee = getUser(task.assigneeId);
-    const rowBg = idx % 2 === 0 ? 'white' : '#f8faff';
+    const isCompleted = task.status === 'completed' || task.status === 'done';
+    const rowBg = isCompleted
+      ? (idx % 2 === 0 ? '#f0fdf4' : '#ecfdf5')
+      : (idx % 2 === 0 ? 'white' : '#f8faff');
+    const color = noDates ? '#d1d5db' : barColor(task);
+    const pct = taskProgress(task);
 
     return (
       <div key={task.id} style={{ display: 'flex', minHeight: `${ROW_H}px`, background: rowBg, borderBottom: '1px solid #f0f2f7' }}>
@@ -4683,11 +4883,13 @@ function GanttView({ tasks, project, users = [], onTaskClick }) {
         }}>
           <div style={{
             width: '8px', height: '8px', borderRadius: '50%', flexShrink: 0,
-            background: noDates ? '#d1d5db' : (projectColor),
+            background: color,
           }} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{
-              fontSize: '13px', fontWeight: 600, color: '#111',
+              fontSize: '13px', fontWeight: 600,
+              color: isCompleted ? '#6b7280' : '#111',
+              textDecoration: isCompleted ? 'line-through' : 'none',
               whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
             }}>{task.title}</div>
             {!noDates && (task.startDate || task.dueDate) && (
@@ -4754,9 +4956,9 @@ function GanttView({ tasks, project, users = [], onTaskClick }) {
                 left: `${bar.leftPct}%`,
                 width: `${bar.widthPct}%`,
                 height: '28px',
-                background: bar.dashed ? 'transparent' : `${projectColor}30`,
+                background: bar.dashed ? 'transparent' : `${color}22`,
                 borderRadius: '6px',
-                border: bar.dashed ? `2px dashed ${projectColor}90` : `1.5px solid ${projectColor}60`,
+                border: bar.dashed ? `2px dashed ${color}90` : `1.5px solid ${color}60`,
                 cursor: onTaskClick ? 'pointer' : 'default',
                 overflow: 'hidden',
                 zIndex: 1,
@@ -4766,10 +4968,11 @@ function GanttView({ tasks, project, users = [], onTaskClick }) {
               {!bar.dashed && (
                 <div style={{
                   position: 'absolute', inset: 0,
-                  width: `${task.progress || 0}%`,
-                  background: projectColor,
+                  width: `${pct}%`,
+                  background: color,
                   borderRadius: '5px',
                   transition: 'width 0.3s',
+                  opacity: isCompleted ? 0.85 : 1,
                 }} />
               )}
               {/* Label: task name + progress */}
@@ -4779,15 +4982,15 @@ function GanttView({ tasks, project, users = [], onTaskClick }) {
                 paddingLeft: '8px', paddingRight: '4px',
                 gap: '4px',
                 fontSize: '11px', fontWeight: 700,
-                color: (task.progress || 0) > 45 ? 'white' : projectColor,
+                color: pct > 45 ? 'white' : color,
                 whiteSpace: 'nowrap', overflow: 'hidden',
                 zIndex: 1,
               }}>
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>
                   {bar.widthPct > 4 ? task.title : ''}
                 </span>
-                {!bar.dashed && task.progress > 0 && bar.widthPct > 8 && (
-                  <span style={{ flexShrink: 0, opacity: 0.85 }}>{task.progress}%</span>
+                {!bar.dashed && bar.widthPct > 8 && (
+                  <span style={{ flexShrink: 0, opacity: 0.85 }}>{pct}%</span>
                 )}
               </div>
             </div>
@@ -4876,20 +5079,35 @@ function GanttView({ tasks, project, users = [], onTaskClick }) {
       {tooltip && (() => {
         const t = tooltip.task;
         const assignee = getUser(t.assigneeId);
+        const tPct = taskProgress(t);
+        const tColor = barColor(t);
+        const statusCfg = getTaskStatus(t.status);
         return (
           <div style={{
             position: 'fixed', zIndex: 9999,
             left: tooltip.x, top: tooltip.y,
             transform: 'translateX(-50%) translateY(-100%)',
-            background: 'white', border: '1px solid #e5e7eb',
+            background: 'white', border: `1px solid ${tColor}40`,
             borderRadius: '10px', padding: '10px 14px',
             boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
-            pointerEvents: 'none', minWidth: '180px',
+            pointerEvents: 'none', minWidth: '200px',
           }}>
             <div style={{ fontWeight: 700, fontSize: '13px', color: '#111', marginBottom: '6px' }}>{t.title}</div>
-            <div style={{ fontSize: '12px', color: '#6b7280', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+            <div style={{ fontSize: '12px', color: '#6b7280', display: 'flex', flexDirection: 'column', gap: '4px' }}>
               <span>📅 {formatDate(t.startDate)} → {formatDate(t.dueDate || t.endDate)}</span>
-              <span>⏳ Progreso: <b style={{ color: projectColor }}>{t.progress || 0}%</b></span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span>⏳ Progreso:</span>
+                <b style={{ color: tColor }}>{tPct}%</b>
+                <div style={{ flex: 1, height: 4, background: '#e5e7eb', borderRadius: 2, overflow: 'hidden' }}>
+                  <div style={{ width: `${tPct}%`, height: '100%', background: tColor, borderRadius: 2, transition: 'width 0.3s' }} />
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <span>🏷</span>
+                <span style={{ padding: '2px 7px', borderRadius: 20, background: statusCfg.bg, color: statusCfg.color, fontSize: '11px', fontWeight: 700 }}>
+                  {statusCfg.label}
+                </span>
+              </div>
               {assignee && <span>👤 {assignee.name}</span>}
             </div>
           </div>
@@ -5121,7 +5339,7 @@ function ProjectPillDropdown({ projects, value, onChange }) {
 
 
 function AllTasksView({ tasks, projects, users, currentUser, onTaskClick }) {
-  const [filterStatus, setFilterStatus] = useState('all');
+  const [filterStatus, setFilterStatus] = useState('in_progress');
   const [filterPriority, setFilterPriority] = useState('all');
   const [filterProject, setFilterProject] = useState('all');
   const [sortBy, setSortBy] = useState('recent');
@@ -5673,6 +5891,7 @@ function TaskDetailModal({ task, project, projects = [], users, comments, onClos
   });
   const [newCheckItem, setNewCheckItem] = useState('');
   const [addingCheckItem, setAddingCheckItem] = useState(false);
+  const [showCompletePrompt, setShowCompletePrompt] = useState(false);
   const { addToast } = useToast();
   const { canEditTaskDates } = useApp();
 
@@ -5701,6 +5920,9 @@ function TaskDetailModal({ task, project, projects = [], users, comments, onClos
   const saveChecklist = (list) => {
     setChecklist(list);
     onUpdate({ ...form, checklist: JSON.stringify(list) }).catch(() => {});
+    if (list.length > 0 && list.every(i => i.done) && form.status !== 'completed') {
+      setShowCompletePrompt(true);
+    }
   };
 
   const handleAddComment = async () => {
@@ -5728,6 +5950,11 @@ function TaskDetailModal({ task, project, projects = [], users, comments, onClos
   const assignee = users.find(u => u.id === form.assigneeId);
   const canEditDates = canEditTaskDates();
   const checkDone = checklist.filter(i => i.done).length;
+  const displayProgress = (form.status === 'completed' || form.status === 'done')
+    ? 100
+    : checklist.length > 0
+      ? Math.round((checkDone / checklist.length) * 100)
+      : (form.progress || 0);
 
   if (!task) return null;
 
@@ -5926,13 +6153,14 @@ function TaskDetailModal({ task, project, projects = [], users, comments, onClos
               {/* Progreso */}
               <div>
                 <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 5 }}>
-                  Progreso — <span style={{ color: DESIGN_TOKENS.primary.base }}>{form.progress || 0}%</span>
+                  Progreso — <span style={{ color: DESIGN_TOKENS.primary.base }}>{displayProgress}%</span>
                 </label>
                 <input
-                  type="range" min="0" max="100" value={form.progress || 0}
+                  type="range" min="0" max="100" value={displayProgress}
                   onChange={e => set('progress', Number(e.target.value))}
                   onMouseUp={e => saveField({ progress: Number(e.target.value) })}
-                  style={{ width: '100%', accentColor: DESIGN_TOKENS.primary.base, cursor: 'pointer' }}
+                  disabled={form.status === 'completed' || form.status === 'done' || checklist.length > 0}
+                  style={{ width: '100%', accentColor: DESIGN_TOKENS.primary.base, cursor: (form.status === 'completed' || form.status === 'done' || checklist.length > 0) ? 'default' : 'pointer', opacity: (form.status === 'completed' || form.status === 'done' || checklist.length > 0) ? 0.5 : 1 }}
                 />
               </div>
 
@@ -6038,6 +6266,16 @@ function TaskDetailModal({ task, project, projects = [], users, comments, onClos
           {/* ── TAB: CHECKLIST ── */}
           {activeTab === 'checklist' && (
             <div>
+              {/* Auto-complete prompt */}
+              {showCompletePrompt && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: '#f0fdf4', borderRadius: 10, border: '1px solid #bbf7d0', marginBottom: 14 }}>
+                  <CheckSquare size={16} style={{ color: '#16a34a', flexShrink: 0 }} />
+                  <span style={{ fontSize: '0.82rem', color: '#166534', fontWeight: 600, flex: 1 }}>¡Todos los ítems completados! ¿Marcar la tarea como Completada?</span>
+                  <button onClick={() => { saveField({ status: 'completed' }); setShowCompletePrompt(false); }} style={{ padding: '5px 14px', background: '#16a34a', color: 'white', border: 'none', borderRadius: 7, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8rem' }}>Sí, completar</button>
+                  <button onClick={() => setShowCompletePrompt(false)} style={{ padding: '5px 12px', background: 'white', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: 7, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8rem' }}>No</button>
+                </div>
+              )}
+
               {/* Progress bar */}
               {checklist.length > 0 && (
                 <div style={{ marginBottom: 16 }}>
