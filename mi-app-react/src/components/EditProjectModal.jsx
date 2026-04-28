@@ -98,7 +98,7 @@ export default function EditProjectModal({ project, onClose, users = [], current
   const [form, setForm] = useState({
     name:          project.name        || '',
     description:   project.description || '',
-    status:        project.status      || 'active',
+    status:        project.status      || 'backlog',
     priority:      project.priority    || 'medium',
     startDate:     project.startDate   || '',
     endDate:       project.endDate     || '',

@@ -4,7 +4,7 @@ import {
   BarChart2, Calendar, ChevronLeft, ChevronRight, Settings, X,
   Map, Flag, CheckSquare, User,
 } from 'lucide-react';
-import { getTaskStatus, getProjectStatus } from '../constants/statuses';
+import { TASK_STATUSES, PROJECT_STATUSES, getTaskStatus, getProjectStatus } from '../constants/statuses';
 import StatusBadge from './shared/StatusBadge';
 import { DESIGN_TOKENS } from '../styles/tokens';
 import { useApp } from '../context/AppContext';
@@ -410,16 +410,23 @@ const RM_PRI_CFG = {
   medium: { label: 'Media',   bg: '#ede9fe', color: '#5b21b6' },
   low:    { label: 'Baja',    bg: '#f0fdf4', color: '#166534' },
 };
-const RM_STATUS_CFG = {
-  completed:   { label: 'Completado',  bg: '#d1fae5', color: '#065f46' },
-  done:        { label: 'Hecho',       bg: '#d1fae5', color: '#065f46' },
-  in_progress: { label: 'En Progreso', bg: '#dbeafe', color: '#1e40af' },
-  blocked:     { label: 'Bloqueado',   bg: '#fee2e2', color: '#991b1b' },
-  pending:     { label: 'Pendiente',   bg: '#fff7ed', color: '#9a3412' },
-  todo:        { label: 'Por Hacer',   bg: '#f3f4f6', color: '#374151' },
-  active:      { label: 'Activo',      bg: '#dbeafe', color: '#1e40af' },
-  paused:      { label: 'En Pausa',    bg: '#eceff1', color: '#37474f' },
-  review:      { label: 'En Revisión', bg: '#ffe4e6', color: '#be123c' },
+const RM_STATUS_CFG = Object.fromEntries(
+  Object.entries({ ...TASK_STATUSES, ...PROJECT_STATUSES })
+    .map(([k, v]) => [k, { label: v.label, bg: v.bg, color: v.color }])
+);
+
+// Versión pastel/suave de los estados para las tarjetas del roadmap
+const RM_STATUS_SOFT = {
+  completed:   { bg: '#f0fdf4', color: '#15803d' },
+  done:        { bg: '#f0fdf4', color: '#15803d' },
+  in_progress: { bg: '#eff6ff', color: '#2563eb' },
+  active:      { bg: '#eff6ff', color: '#2563eb' },
+  pending:     { bg: '#f8fafc', color: '#64748b' },
+  todo:        { bg: '#f8fafc', color: '#64748b' },
+  blocked:     { bg: '#fff7ed', color: '#c2410c' },
+  paused:      { bg: '#faf5ff', color: '#7c3aed' },
+  waiting:     { bg: '#f0f9ff', color: '#0369a1' },
+  cancelled:   { bg: '#f9fafb', color: '#9ca3af' },
 };
 
 const rmDaysUntil = (dateStr) => {
@@ -432,16 +439,16 @@ const rmDaysUntil = (dateStr) => {
 function RMDaysChip({ days }) {
   if (days === null) return null;
   const cfg = days < 0
-    ? { bg: '#fee2e2', color: '#991b1b', label: `${Math.abs(days)}d vencido` }
+    ? { bg: '#fff3e0', color: '#b45309', label: `${Math.abs(days)}d vencido` }
     : days === 0
-    ? { bg: '#fef9c3', color: '#713f12', label: '¡Hoy!' }
+    ? { bg: '#fef9c3', color: '#854d0e', label: '¡Hoy!' }
     : days <= 3
     ? { bg: '#fef3c7', color: '#92400e', label: `${days}d` }
     : days <= 7
     ? { bg: '#fff7ed', color: '#9a3412', label: `${days}d` }
-    : { bg: '#f0fdf4', color: '#166534', label: `${days}d` };
+    : { bg: '#f0fdf4', color: '#15803d', label: `${days}d` };
   return (
-    <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 5,
+    <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 5,
       background: cfg.bg, color: cfg.color, whiteSpace: 'nowrap' }}>
       {cfg.label}
     </span>
@@ -451,7 +458,8 @@ function RMDaysChip({ days }) {
 function RMCard({ item, compact = false }) {
   const typeCfg  = RM_TYPE_CFG[item.type]    || RM_TYPE_CFG.task;
   const priCfg   = RM_PRI_CFG[item.priority] || RM_PRI_CFG.medium;
-  const stCfg    = RM_STATUS_CFG[item.status] || RM_STATUS_CFG.todo;
+  const stCfg    = RM_STATUS_SOFT[item.status] || { bg: '#f8fafc', color: '#64748b', label: RM_STATUS_CFG[item.status]?.label || item.status };
+  const stLabel  = RM_STATUS_CFG[item.status]?.label || item.status;
   const days     = rmDaysUntil(item.endDate);
   const TypeIcon = typeCfg.Icon;
 
@@ -464,35 +472,35 @@ function RMCard({ item, compact = false }) {
     <div style={{
       background: 'white',
       borderRadius: 12,
-      borderTop: '1px solid #e8edf3',
-      borderRight: '1px solid #e8edf3',
-      borderBottom: '1px solid #e8edf3',
+      borderTop: '1px solid #edf0f4',
+      borderRight: '1px solid #edf0f4',
+      borderBottom: '1px solid #edf0f4',
       borderLeft: `4px solid ${priCfg.color}`,
-      padding: compact ? '7px 10px' : '11px 14px',
+      padding: compact ? '12px 13px' : '14px 18px',
       display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: 0,
-      width: compact ? 210 : 265,
+      width: compact ? 218 : 272,
       flexShrink: 0, alignSelf: 'stretch',
-      boxShadow: '0 1px 4px rgba(0,0,0,0.07), 0 4px 12px rgba(0,0,0,0.04)',
+      boxShadow: '0 1px 3px rgba(0,0,0,0.05), 0 2px 8px rgba(0,0,0,0.03)',
     }}>
 
       {/* ── Bloque superior: badges + título + proyecto ── */}
       <div>
         {/* Fila 1: tipo + días */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
             <span style={{
               display: 'inline-flex', alignItems: 'center', gap: 3,
-              fontSize: 9, fontWeight: 700, padding: '3px 6px', borderRadius: 5,
-              background: typeCfg.bg, color: typeCfg.color, letterSpacing: '0.05em',
+              fontSize: 9, fontWeight: 600, padding: '3px 6px', borderRadius: 5,
+              background: typeCfg.bg, color: typeCfg.color, letterSpacing: '0.04em',
             }}>
               <TypeIcon size={9} style={{ flexShrink: 0 }} />
               {typeCfg.label}
             </span>
             <span style={{
-              fontSize: 9, fontWeight: 700, padding: '3px 6px', borderRadius: 5,
+              fontSize: 9, fontWeight: 600, padding: '3px 6px', borderRadius: 5,
               background: priCfg.bg, color: priCfg.color,
             }}>
-              {priCfg.label.toUpperCase()}
+              {priCfg.label}
             </span>
           </div>
           <RMDaysChip days={days} />
@@ -500,9 +508,9 @@ function RMCard({ item, compact = false }) {
 
         {/* Fila 2: título — reserva siempre 2 líneas */}
         <div style={{
-          fontSize: compact ? 11 : 13, fontWeight: 700, color: '#0f172a',
-          lineHeight: 1.3, marginBottom: compact ? 4 : 6,
-          minHeight: compact ? '2.2em' : '2.5em',
+          fontSize: 12, fontWeight: 700, color: '#1e293b',
+          lineHeight: 1.35, marginBottom: 7,
+          minHeight: '2.5em',
           overflow: 'hidden', display: '-webkit-box',
           WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
         }}>
@@ -511,17 +519,17 @@ function RMCard({ item, compact = false }) {
 
         {/* Fila 3: proyecto padre — siempre ocupa espacio para alineación */}
         <div style={{
-          display: 'flex', alignItems: 'center', gap: 4, minWidth: 0,
-          marginBottom: compact ? 5 : 7, paddingBottom: compact ? 5 : 7, minHeight: compact ? 17 : 20,
+          display: 'flex', alignItems: 'center', gap: 5, minWidth: 0,
+          marginBottom: 8, paddingBottom: 8, minHeight: 18,
           borderBottom: '1px solid #f1f5f9',
           visibility: item.type !== 'project' && item.projectName ? 'visible' : 'hidden',
         }}>
           <span style={{
-            width: compact ? 6 : 7, height: compact ? 6 : 7, borderRadius: '50%',
+            width: 6, height: 6, borderRadius: '50%',
             background: item.projectColor || '#6366f1', flexShrink: 0,
           }} />
           <span style={{
-            fontSize: compact ? 10 : 11, color: '#475569', fontWeight: 500,
+            fontSize: 11, color: '#64748b', fontWeight: 500,
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           }}>
             {item.projectName || ''}
@@ -530,23 +538,23 @@ function RMCard({ item, compact = false }) {
       </div>
 
       {/* ── Fila 4: fecha · asignado · estado ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: compact ? 5 : 8, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
         {dateStr && (
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: compact ? 10 : 11, color: '#94a3b8' }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, color: '#94a3b8' }}>
             <Calendar size={9} />{dateStr}
           </span>
         )}
         {item.assigneeName && (
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: compact ? 10 : 11, color: '#64748b', fontWeight: 500 }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, color: '#64748b', fontWeight: 500 }}>
             <User size={9} />{item.assigneeName.split(' ')[0]}
           </span>
         )}
         <div style={{ flex: 1 }} />
         <span style={{
-          fontSize: compact ? 9 : 10, fontWeight: 700, padding: compact ? '2px 6px' : '3px 8px', borderRadius: 20,
+          fontSize: 10, fontWeight: 500, padding: '3px 8px', borderRadius: 20,
           background: stCfg.bg, color: stCfg.color, whiteSpace: 'nowrap',
         }}>
-          {stCfg.label}
+          {stLabel}
         </span>
       </div>
     </div>
@@ -557,7 +565,7 @@ function ManagementRoadmap({ selectedEnv = 'all' }) {
   const [rangePreset, setRangePreset] = useState('2026');
   const [customStart, setCustomStart] = useState({ year: 2026, month: 0 });
   const [customEnd,   setCustomEnd]   = useState({ year: 2026, month: 11 });
-  const [filterType,     setFilterType]     = useState('all');
+  const [filterType,     setFilterType]     = useState('projects');
   const [filterPriority, setFilterPriority] = useState('all');
   const [filterStatus,   setFilterStatus]   = useState('all');
   const [projects, setProjects] = useState([]);
@@ -790,7 +798,7 @@ function ManagementRoadmap({ selectedEnv = 'all' }) {
         </select>
         <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={selStyle}>
           <option value="all">Todos los estados</option>
-          {Object.entries(RM_STATUS_CFG).filter(([k]) => k !== 'done').map(([k, v]) => (
+          {Object.entries(RM_STATUS_CFG).filter(([k]) => !['todo','done','review','active'].includes(k)).map(([k, v]) => (
             <option key={k} value={k}>{v.label}</option>
           ))}
         </select>
@@ -865,15 +873,20 @@ function ManagementRoadmap({ selectedEnv = 'all' }) {
         </div>
         <div style={{ overflowX: 'auto', paddingBottom: 12, scrollbarWidth: 'thin' }}>
           <div style={{ display: 'flex', minWidth: 'max-content', gap: 0 }}>
-            {months.map(({ year, month }) => {
+            {months.map(({ year, month }, colIdx) => {
               const colItems = itemsByMonth[`${year}-${month}`] || [];
               const isToday = new Date().getFullYear() === year && new Date().getMonth() === month;
+              const altBg = colIdx % 2 === 1 ? '#f9fafb' : 'transparent';
               return (
-                <div key={`${year}-${month}`} style={{ width: 226, flexShrink: 0, padding: '0 6px' }}>
+                <div key={`${year}-${month}`} style={{
+                  width: 234, flexShrink: 0, padding: '10px 8px 14px',
+                  background: altBg,
+                  borderRadius: 10,
+                }}>
                   {/* Header de mes */}
                   <div style={{
-                    padding: '7px 10px', background: isToday ? '#1e293b' : 'white',
-                    borderRadius: 8, marginBottom: 8, textAlign: 'center',
+                    padding: '7px 12px', background: isToday ? '#1e293b' : 'white',
+                    borderRadius: 8, marginBottom: 10, textAlign: 'center',
                     border: `1px solid ${isToday ? '#1e293b' : '#e2e8f0'}`,
                     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
                   }}>
@@ -881,11 +894,11 @@ function ManagementRoadmap({ selectedEnv = 'all' }) {
                       color: isToday ? 'white' : '#334155' }}>
                       {MONTHS_FULL[month]}
                     </span>
-                    <span style={{ fontSize: 11, fontWeight: 500,
+                    <span style={{ fontSize: 11, fontWeight: 400,
                       color: isToday ? '#94a3b8' : '#94a3b8' }}>{year}</span>
                     {colItems.length > 0 && (
                       <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px',
-                        borderRadius: 8, background: isToday ? 'rgba(255,255,255,0.2)' : '#6366f1',
+                        borderRadius: 8, background: isToday ? 'rgba(255,255,255,0.18)' : '#6366f1',
                         color: 'white' }}>
                         {colItems.length}
                       </span>
@@ -893,12 +906,12 @@ function ManagementRoadmap({ selectedEnv = 'all' }) {
                   </div>
                   {/* Cards del mes */}
                   {colItems.length === 0 ? (
-                    <div style={{ height: 70, border: '1px dashed #e2e8f0', borderRadius: 10,
+                    <div style={{ height: 64, border: '1px dashed #e8edf3', borderRadius: 10,
                       display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <span style={{ fontSize: 12, color: '#e2e8f0' }}>—</span>
+                      <span style={{ fontSize: 12, color: '#d1d5db' }}>—</span>
                     </div>
                   ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                       {colItems.map(item => <RMCard key={item.id} item={item} compact />)}
                     </div>
                   )}
@@ -932,8 +945,10 @@ export default function ManagementView() {
   const [metrics,     setMetrics]     = useState(null);
   const [weeklyTasks, setWeeklyTasks] = useState([]);
   const [loading,     setLoading]     = useState(true);
+  const [refreshing,  setRefreshing]  = useState(false); // refresco silencioso (ya hay datos)
   const [error,       setError]       = useState('');
   const [lastUpdated, setLastUpdated] = useState(null);
+  const hasDataRef    = React.useRef(false); // true en cuanto se carga por primera vez
 
   // ── Navegación de semana ──────────────────────────────────────────────────
   const [weekOffset, setWeekOffset] = useState(0); // 0 = semana actual
@@ -961,7 +976,9 @@ export default function ManagementView() {
   // ── Carga de datos ────────────────────────────────────────────────────────
   const loadData = useCallback(async () => {
     if (!currentUser?.id) return;
-    setLoading(true);
+    // Si ya hay datos, refresco silencioso (stale-while-revalidate)
+    if (hasDataRef.current) setRefreshing(true);
+    else setLoading(true);
     setError('');
     try {
       const [metricsData, weekly] = await Promise.all([
@@ -973,11 +990,13 @@ export default function ManagementView() {
       setMetrics(metricsData);
       setWeeklyTasks(weekly || []);
       setLastUpdated(new Date());
+      hasDataRef.current = true;
     } catch (err) {
       console.error('[ManagementView] Error:', err);
       setError(err.message || 'No se pudieron cargar los datos');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, [currentUser?.id, currentUser?.system_role, selectedEnv, weekStart]);
 
@@ -1107,9 +1126,9 @@ export default function ManagementView() {
           </div>
 
           {/* Botón refrescar */}
-          <button onClick={loadData} disabled={loading} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 11px', border: '1px solid #e2e8f0', borderRadius: 8, background: 'white', cursor: loading ? 'wait' : 'pointer', fontSize: 12, fontWeight: 600, color: '#475569', fontFamily: 'inherit' }}>
-            <RefreshCw size={12} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
-            {loading ? 'Cargando…' : 'Actualizar'}
+          <button onClick={loadData} disabled={loading || refreshing} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 11px', border: '1px solid #e2e8f0', borderRadius: 8, background: 'white', cursor: (loading || refreshing) ? 'wait' : 'pointer', fontSize: 12, fontWeight: 600, color: '#475569', fontFamily: 'inherit' }}>
+            <RefreshCw size={12} style={{ animation: (loading || refreshing) ? 'spin 1s linear infinite' : 'none' }} />
+            {loading ? 'Cargando…' : refreshing ? 'Actualizando…' : 'Actualizar'}
           </button>
         </div>
       </div>

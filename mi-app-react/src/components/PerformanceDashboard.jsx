@@ -1,80 +1,147 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   AreaChart, Area, XAxis, Tooltip as RechartTooltip,
+  BarChart, Bar, Cell,
+  LineChart, Line, CartesianGrid, ReferenceLine, ResponsiveContainer, YAxis,
 } from 'recharts';
 import {
-  ChevronDown, ChevronRight, TrendingUp, Filter, X, RefreshCw, AlertTriangle,
+  TrendingUp, Filter, X, RefreshCw, AlertTriangle,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { dbKpiThresholds, dbPerformance } from '../lib/database';
+import { getGlobalMetrics, computeAreaKpisFromData } from './metrics';
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
-const AREA_OPTIONS = ['TI', 'Crédito', 'Cartera', 'Riesgo', 'Datos', 'Transversal'];
-
-const MONTH_ABBR = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
-
-const ENV_COLORS = [
+const PERSON_COLORS = [
   '#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
   '#06b6d4', '#f97316', '#84cc16', '#ec4899', '#14b8a6',
 ];
 
+const TALLAJE_COLORS = ['#c7d2fe', '#818cf8', '#4f46e5', '#312e81'];
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const aggregateTrend = (items) => {
+const getIsoWeekKey = (dateStr) => {
+  const d = new Date((typeof dateStr === 'string' ? dateStr : new Date(dateStr).toISOString()).slice(0, 10));
+  const thu = new Date(d);
+  thu.setDate(d.getDate() - ((d.getDay() + 6) % 7) + 3);
+  const year = thu.getFullYear();
+  const jan4 = new Date(year, 0, 4);
+  const w = 1 + Math.round((thu - jan4) / (7 * 24 * 3600 * 1000));
+  return `${year}-W${String(w).padStart(2, '0')}`;
+};
+
+const getWeekLabel = (weekKey) => {
+  const [yr, wStr] = weekKey.split('-');
+  const w = parseInt(wStr.slice(1), 10);
+  const jan4 = new Date(parseInt(yr, 10), 0, 4);
+  const monday = new Date(jan4);
+  monday.setDate(jan4.getDate() - ((jan4.getDay() + 6) % 7) + (w - 1) * 7);
+  return `${String(monday.getDate()).padStart(2, '0')}/${String(monday.getMonth() + 1).padStart(2, '0')}`;
+};
+
+const getLast8Weeks = () => {
+  const now = new Date();
+  const seen = new Set();
+  const weeks = [];
+  for (let i = 7; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i * 7);
+    const k = getIsoWeekKey(d.toISOString().slice(0, 10));
+    if (!seen.has(k)) { seen.add(k); weeks.push(k); }
+  }
+  return weeks;
+};
+
+const aggregateTrendWeekly = (items) => {
   if (!items?.length) return [];
   const map = {};
-  items.forEach(({ t, v }) => {
-    const iso = typeof t === 'string' ? t : new Date(t).toISOString();
-    const key = iso.slice(0, 7); // YYYY-MM — agrupa por mes
-    map[key] = (map[key] || 0) + (v || 1);
+  items.forEach(({ t }) => {
+    const key = getIsoWeekKey(t);
+    map[key] = (map[key] || 0) + 1;
   });
   return Object.entries(map)
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([key, v]) => ({
-      t: key,
-      v,
-      label: MONTH_ABBR[parseInt(key.slice(5, 7), 10) - 1],
-    }));
+    .slice(-13)
+    .map(([key, v]) => ({ t: key, v, label: getWeekLabel(key) }));
 };
 
-const mergeTrends = (rows) => aggregateTrend(rows.flatMap(r => r.trend_data || []));
-
-const sumClosed = (rows) => rows.reduce((s, r) => s + (r.total_closed || 0), 0);
-
-const calcAvgKpi = (rows) => {
-  const valid = rows.filter(r => r.avg_kpi != null);
-  if (!valid.length) return null;
-  return Math.round(valid.reduce((s, r) => s + Number(r.avg_kpi), 0) / valid.length * 10) / 10;
+const weeksInPeriod = (startDate, endDate) => {
+  const s = new Date(startDate || firstOfYear());
+  const e = new Date(endDate   || today());
+  return Math.max(1, Math.ceil((e - s) / (7 * 24 * 3600 * 1000)));
 };
 
-const calcAvgCapacity = (rows) => {
-  const valid = rows.filter(r => r.capacity != null);
-  if (!valid.length) return null;
-  return Math.round(valid.reduce((s, r) => s + Number(r.capacity), 0) / valid.length * 100) / 100;
-};
-
-const today = () => new Date().toISOString().slice(0, 10);
+const today      = () => new Date().toISOString().slice(0, 10);
 const firstOfYear = () => `${new Date().getFullYear()}-01-01`;
 
 // ─── Micro componentes ────────────────────────────────────────────────────────
 
-const KpiBadge = ({ value, thresholds }) => {
-  if (value == null) return <span style={{ color: '#94a3b8', fontSize: 12 }}>—</span>;
-  const pct = Math.round(value);
-  const cfg = pct >= thresholds.good
-    ? { label: 'Bueno', bg: '#d1fae5', color: '#065f46' }
-    : pct >= thresholds.leve
-      ? { label: 'Leve',  bg: '#fef3c7', color: '#92400e' }
-      : { label: 'Bajo',  bg: '#fee2e2', color: '#991b1b' };
+const SHIMMER_STYLE = `
+  @keyframes pd-shimmer {
+    0%   { background-position: -400px 0; }
+    100% { background-position:  400px 0; }
+  }
+  .pd-skel {
+    background: linear-gradient(90deg, #f1f5f9 25%, #e8edf3 50%, #f1f5f9 75%);
+    background-size: 800px 100%;
+    animation: pd-shimmer 1.5s infinite linear;
+    border-radius: 4px;
+  }
+`;
+
+const KpiBadge = ({ pct }) => {
+  if (pct == null) return <span style={{ color: '#94a3b8', fontSize: 12 }}>—</span>;
+  const cfg = pct >= 100
+    ? { label: 'En Tiempo', bg: '#dcfce7', color: '#15803d' }
+    : pct >= 85
+      ? { label: 'Leve',     bg: '#d1fae5', color: '#065f46' }
+      : pct >= 70
+        ? { label: 'Moderado', bg: '#fef3c7', color: '#92400e' }
+        : { label: 'Crítico',  bg: '#fee2e2', color: '#b91c1c' };
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-      <span style={{ fontWeight: 700, fontSize: 13, color: cfg.color }}>{pct}%</span>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+      <span style={{ fontWeight: 600, fontSize: 13, color: '#0f172a' }}>{pct}%</span>
       <span style={{
-        padding: '2px 7px', borderRadius: 20, fontSize: 10, fontWeight: 700,
+        padding: '2px 8px', borderRadius: 999, fontSize: 10, fontWeight: 500,
         background: cfg.bg, color: cfg.color,
       }}>{cfg.label}</span>
     </div>
+  );
+};
+
+const Avatar = ({ name, src, size = 30 }) => {
+  if (src) {
+    return <img src={src} alt={name} style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />;
+  }
+  const initials = (name || '?').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
+  const colors = ['#6366f1','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#f97316'];
+  const bg = colors[(name || '').charCodeAt(0) % colors.length] || '#6366f1';
+  return (
+    <div style={{ width: size, height: size, borderRadius: '50%', background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.38, fontWeight: 700, color: 'white', flexShrink: 0 }}>
+      {initials}
+    </div>
+  );
+};
+
+const SizingChart = ({ dist }) => {
+  if (!dist) return <span style={{ color: '#cbd5e1', fontSize: 11 }}>—</span>;
+  const data = [
+    { name: 'XS', v: dist.xs },
+    { name: 'S',  v: dist.s  },
+    { name: 'M',  v: dist.m  },
+    { name: 'L',  v: dist.l  },
+  ];
+  if (data.reduce((s, d) => s + d.v, 0) === 0) return <span style={{ color: '#cbd5e1', fontSize: 11 }}>—</span>;
+  return (
+    <BarChart width={72} height={46} data={data} margin={{ top: 2, right: 0, bottom: 14, left: 0 }}>
+      <XAxis dataKey="name" tick={{ fontSize: 8, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+      <RechartTooltip contentStyle={{ fontSize: 10, padding: '2px 8px', borderRadius: 6 }} formatter={(v, n) => [v, n]} />
+      <Bar dataKey="v" radius={[2, 2, 0, 0]}>
+        {data.map((_, i) => <Cell key={i} fill={TALLAJE_COLORS[i]} />)}
+      </Bar>
+    </BarChart>
   );
 };
 
@@ -82,71 +149,116 @@ const Sparkline = ({ data, color = '#6366f1' }) => {
   if (!data?.length) return <span style={{ color: '#cbd5e1', fontSize: 11 }}>—</span>;
   const gradId = `sg${color.replace(/[^a-z0-9]/gi, '')}`;
   return (
-    <AreaChart width={148} height={58} data={data} margin={{ top: 4, right: 4, bottom: 0, left: 4 }}>
+    <AreaChart width={144} height={46} data={data} margin={{ top: 4, right: 4, bottom: 0, left: 4 }}>
       <defs>
         <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="5%"  stopColor={color} stopOpacity={0.25} />
+          <stop offset="5%"  stopColor={color} stopOpacity={0.2} />
           <stop offset="95%" stopColor={color} stopOpacity={0} />
         </linearGradient>
       </defs>
-      <XAxis
-        dataKey="label"
-        tick={{ fontSize: 9, fill: '#94a3b8' }}
-        axisLine={false}
-        tickLine={false}
-        interval="preserveStartEnd"
-      />
-      <Area
-        type="monotone"
-        dataKey="v"
-        stroke={color}
-        strokeWidth={2}
-        fill={`url(#${gradId})`}
-        dot={data.length <= 6 ? { r: 2.5, fill: color, strokeWidth: 0 } : false}
+      <XAxis dataKey="label" tick={{ fontSize: 8, fill: '#94a3b8' }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+      <Area type="monotone" dataKey="v" stroke={color} strokeWidth={1.5} fill={`url(#${gradId})`}
+        dot={data.length <= 6 ? { r: 2, fill: color, strokeWidth: 0 } : false}
         activeDot={{ r: 3, fill: color }}
       />
-      <RechartTooltip
-        contentStyle={{ fontSize: 10, padding: '2px 8px', borderRadius: 6 }}
-        formatter={(v) => [v, 'Cerradas']}
-        labelFormatter={(l) => l}
-      />
+      <RechartTooltip contentStyle={{ fontSize: 10, padding: '2px 8px', borderRadius: 6 }}
+        formatter={(v) => [v, 'Cerradas']} labelFormatter={(l) => `Sem. ${l}`} />
     </AreaChart>
   );
 };
 
-const NameCell = ({ name, subtitle, indent = 0, expandable, expanded, onToggle, dot }) => (
-  <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingLeft: indent * 18 }}>
-    {expandable ? (
-      <button onClick={(e) => { e.stopPropagation(); onToggle(); }} style={{
-        border: 'none', background: 'none', cursor: 'pointer', padding: 2, flexShrink: 0,
-        color: '#6366f1', display: 'flex', alignItems: 'center',
-      }}>
-        {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-      </button>
-    ) : (
-      <span style={{ width: 20, flexShrink: 0 }} />
-    )}
-    {dot && (
-      <span style={{ width: 8, height: 8, borderRadius: '50%', background: dot, flexShrink: 0 }} />
-    )}
-    <div style={{ minWidth: 0 }}>
-      <div style={{ fontWeight: 700, fontSize: 13, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        {name}
+// ─── Gráfico de líneas semanal ────────────────────────────────────────────────
+
+const WeeklyChart = ({ rows, capacities, chartPerson, setChartPerson }) => {
+  const last8 = useMemo(() => getLast8Weeks(), []);
+
+  const visibleRows = useMemo(() =>
+    chartPerson === 'all' ? rows : rows.filter(r => String(r.assignee_id) === chartPerson),
+  [rows, chartPerson]);
+
+  const chartData = useMemo(() =>
+    last8.map(wk => {
+      const point = { week: getWeekLabel(wk) };
+      visibleRows.forEach(r => {
+        point[r.assignee_name] = (r.trend_data || []).filter(({ t }) => getIsoWeekKey(t) === wk).length;
+      });
+      return point;
+    }),
+  [last8, visibleRows]);
+
+  const selectedRow = chartPerson !== 'all' ? visibleRows[0] : null;
+  const refCap      = selectedRow ? (capacities[String(selectedRow.assignee_id)] || null) : null;
+
+  if (!rows.length) return null;
+
+  return (
+    <div style={{
+      background: 'white', borderRadius: 12, border: '1px solid #e2e8f0',
+      padding: '20px 24px', marginTop: 16,
+      boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+        <div>
+          <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a' }}>Completadas por semana</div>
+          <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>Últimas 8 semanas</div>
+        </div>
+        <select
+          value={chartPerson}
+          onChange={e => setChartPerson(e.target.value)}
+          style={{ padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 12, color: '#334155', background: 'white', cursor: 'pointer', outline: 'none' }}
+        >
+          <option value="all">Todas las personas</option>
+          {rows.map(r => <option key={r.assignee_id} value={String(r.assignee_id)}>{r.assignee_name}</option>)}
+        </select>
       </div>
-      {subtitle && (
-        <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 1 }}>{subtitle}</div>
+
+      <ResponsiveContainer width="100%" height={220}>
+        <LineChart data={chartData} margin={{ top: 8, right: 32, bottom: 0, left: -10 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+          <XAxis dataKey="week" tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+          <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} allowDecimals={false} width={28} />
+          <RechartTooltip
+            contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid #e2e8f0', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+          />
+          {visibleRows.map((r, i) => (
+            <Line
+              key={r.assignee_id}
+              type="monotone"
+              dataKey={r.assignee_name}
+              stroke={PERSON_COLORS[i % PERSON_COLORS.length]}
+              strokeWidth={2}
+              dot={{ r: 3, fill: PERSON_COLORS[i % PERSON_COLORS.length], strokeWidth: 0 }}
+              activeDot={{ r: 5 }}
+            />
+          ))}
+          {refCap && (
+            <ReferenceLine
+              y={refCap}
+              stroke="#94a3b8"
+              strokeDasharray="4 2"
+              label={{ value: `Cap. ${refCap}`, position: 'insideTopRight', fontSize: 10, fill: '#94a3b8', dy: -6 }}
+            />
+          )}
+        </LineChart>
+      </ResponsiveContainer>
+
+      {refCap && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 10, fontSize: 11, color: '#94a3b8' }}>
+          <div style={{ width: 20, borderTop: '2px dashed #94a3b8' }} />
+          Capacity configurada: {refCap} tareas/sem
+        </div>
       )}
     </div>
-  </div>
-);
+  );
+};
 
 // ─── Celdas de tabla ──────────────────────────────────────────────────────────
 
 const TH = ({ children, width, align = 'left' }) => (
   <th style={{
-    padding: '10px 14px', textAlign: align, fontWeight: 700, fontSize: 11,
+    padding: '10px 14px', textAlign: align, fontWeight: 600, fontSize: 11,
     color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px',
-    borderBottom: '2px solid #e8edf3', background: '#f8fafc',
+    borderBottom: '1px solid #e2e8f0', background: '#f8fafc',
     whiteSpace: 'nowrap', width,
   }}>
     {children}
@@ -154,132 +266,81 @@ const TH = ({ children, width, align = 'left' }) => (
 );
 
 const TD = ({ children, style }) => (
-  <td style={{ padding: '9px 14px', borderBottom: '1px solid #f1f5f9', verticalAlign: 'middle', ...style }}>
+  <td style={{ padding: '10px 14px', borderBottom: '1px solid #f1f5f9', verticalAlign: 'middle', ...style }}>
     {children}
   </td>
 );
 
-// ─── Fila colaborador (Nivel 3) ───────────────────────────────────────────────
+// ─── Skeleton ─────────────────────────────────────────────────────────────────
 
-const CollaboratorRow = ({ row, thresholds }) => {
-  const trend = useMemo(() => aggregateTrend(row.trend_data), [row.trend_data]);
+const SkeletonRow = () => (
+  <tr style={{ background: 'white' }}>
+    <TD>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div className="pd-skel" style={{ width: 30, height: 30, borderRadius: '50%', flexShrink: 0 }} />
+        <div>
+          <div className="pd-skel" style={{ height: 11, width: 100, marginBottom: 5 }} />
+          <div className="pd-skel" style={{ height: 9, width: 64 }} />
+        </div>
+      </div>
+    </TD>
+    <TD style={{ textAlign: 'center' }}><div className="pd-skel" style={{ height: 14, width: 24, margin: '0 auto' }} /></TD>
+    <TD><div className="pd-skel" style={{ width: 72, height: 46, borderRadius: 4 }} /></TD>
+    <TD><div className="pd-skel" style={{ width: 144, height: 46, borderRadius: 4 }} /></TD>
+    <TD><div className="pd-skel" style={{ width: 100, height: 22, borderRadius: 999 }} /></TD>
+    <TD><div className="pd-skel" style={{ width: 60, height: 30, borderRadius: 4 }} /></TD>
+  </tr>
+);
+
+// ─── Fila de persona ──────────────────────────────────────────────────────────
+
+const PersonRow = ({ row, applied, capacities, color }) => {
+  const trend   = useMemo(() => aggregateTrendWeekly(row.trend_data), [row.trend_data]);
+  const capTarget = capacities[String(row.assignee_id)] || null;
+  const weeks     = weeksInPeriod(applied.startDate, applied.endDate);
+  const capReal   = row.total_closed > 0 ? Math.round((row.total_closed / weeks) * 10) / 10 : 0;
+
   return (
     <tr style={{ background: 'white' }}>
-      <TD style={{ maxWidth: 260 }}>
-        <NameCell name={row.assignee_name} subtitle={row.environment_name} indent={2} dot="#cbd5e1" />
+      <TD style={{ maxWidth: 240 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+          <Avatar name={row.assignee_name} src={row.avatar} size={30} />
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontWeight: 600, fontSize: 13, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {row.assignee_name}
+            </div>
+            {row.frente && (
+              <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 1 }}>{row.frente}</div>
+            )}
+          </div>
+        </div>
       </TD>
+
       <TD style={{ textAlign: 'center' }}>
-        <span style={{ fontWeight: 700, fontSize: 14, color: '#0f172a' }}>{row.total_closed ?? 0}</span>
+        <span style={{ fontWeight: 700, fontSize: 15, color: '#0f172a' }}>{row.total_closed}</span>
+        {row.late_count > 0 && (
+          <div style={{ fontSize: 10, color: '#f97316', marginTop: 1 }}>
+            {row.late_count} tarde{row.late_count !== 1 ? 's' : ''}
+          </div>
+        )}
       </TD>
-      <TD><Sparkline data={trend} color="#6366f1" /></TD>
-      <TD><KpiBadge value={row.avg_kpi} thresholds={thresholds} /></TD>
+
+      <TD><SizingChart dist={row.size_dist} /></TD>
+      <TD><Sparkline data={trend} color={color} /></TD>
+      <TD><KpiBadge pct={row.kpi_pct} /></TD>
+
       <TD style={{ textAlign: 'center' }}>
-        {row.capacity != null
-          ? <span style={{ fontWeight: 600, fontSize: 13, color: '#1e293b' }}>{row.capacity}</span>
-          : <span style={{ color: '#94a3b8', fontSize: 12 }}>—</span>}
+        <div style={{ fontWeight: 600, fontSize: 14, color: '#0f172a' }}>
+          {capReal}
+          <span style={{ fontSize: 10, fontWeight: 400, color: '#94a3b8', marginLeft: 2 }}>/sem</span>
+        </div>
+        {capTarget && (
+          <div style={{ fontSize: 10, marginTop: 2, color: capReal >= capTarget ? '#16a34a' : '#f97316' }}>
+            meta {capTarget}
+          </div>
+        )}
       </TD>
     </tr>
-  );
-};
-
-// ─── Fila entorno (Nivel 2) ───────────────────────────────────────────────────
-
-const EnvironmentSection = ({ envName, color, rows, thresholds }) => {
-  const [expanded, setExpanded] = useState(false);
-  const trend    = useMemo(() => mergeTrends(rows), [rows]);
-  const closed   = useMemo(() => sumClosed(rows), [rows]);
-  const kpi      = useMemo(() => calcAvgKpi(rows), [rows]);
-  const capacity = useMemo(() => calcAvgCapacity(rows), [rows]);
-
-  return (
-    <>
-      <tr
-        style={{ background: '#fafafa', cursor: 'pointer' }}
-        onClick={() => setExpanded(e => !e)}
-      >
-        <TD style={{ maxWidth: 260 }}>
-          <NameCell
-            name={envName} subtitle="Squad"
-            indent={1} dot={color}
-            expandable expanded={expanded}
-            onToggle={() => setExpanded(e => !e)}
-          />
-        </TD>
-        <TD style={{ textAlign: 'center' }}>
-          <span style={{ fontWeight: 700, fontSize: 14, color: '#0f172a' }}>{closed}</span>
-        </TD>
-        <TD><Sparkline data={trend} color={color} /></TD>
-        <TD><KpiBadge value={kpi} thresholds={thresholds} /></TD>
-        <TD style={{ textAlign: 'center' }}>
-          {capacity != null
-            ? <span style={{ fontWeight: 600, fontSize: 13, color: '#1e293b' }}>{capacity}</span>
-            : <span style={{ color: '#94a3b8', fontSize: 12 }}>—</span>}
-        </TD>
-      </tr>
-      {expanded && rows.map(r => (
-        <CollaboratorRow key={`${r.assignee_id}-${r.environment_id}`} row={r} thresholds={thresholds} />
-      ))}
-    </>
-  );
-};
-
-// ─── Fila general (Nivel 1) ───────────────────────────────────────────────────
-
-const GeneralSection = ({ rows, thresholds, envColorMap }) => {
-  const [expanded, setExpanded] = useState(true);
-  const trend    = useMemo(() => mergeTrends(rows), [rows]);
-  const closed   = useMemo(() => sumClosed(rows), [rows]);
-  const kpi      = useMemo(() => calcAvgKpi(rows), [rows]);
-  const capacity = useMemo(() => calcAvgCapacity(rows), [rows]);
-
-  const byEnv = useMemo(() => {
-    const map = {};
-    rows.forEach(r => {
-      if (!map[r.environment_id]) {
-        map[r.environment_id] = { envName: r.environment_name, rows: [] };
-      }
-      map[r.environment_id].rows.push(r);
-    });
-    return Object.entries(map).map(([envId, v]) => ({
-      envId, envName: v.envName, color: envColorMap[envId] || '#6366f1', rows: v.rows,
-    }));
-  }, [rows, envColorMap]);
-
-  return (
-    <>
-      <tr
-        style={{ background: '#f1f5f9', cursor: 'pointer' }}
-        onClick={() => setExpanded(e => !e)}
-      >
-        <TD style={{ maxWidth: 260 }}>
-          <NameCell
-            name="Resumen General" subtitle="Todos los Squads"
-            indent={0}
-            expandable expanded={expanded}
-            onToggle={() => setExpanded(e => !e)}
-          />
-        </TD>
-        <TD style={{ textAlign: 'center' }}>
-          <span style={{ fontWeight: 800, fontSize: 15, color: '#0f172a' }}>{closed}</span>
-        </TD>
-        <TD><Sparkline data={trend} color="#0f172a" /></TD>
-        <TD><KpiBadge value={kpi} thresholds={thresholds} /></TD>
-        <TD style={{ textAlign: 'center' }}>
-          {capacity != null
-            ? <span style={{ fontWeight: 700, fontSize: 13, color: '#1e293b' }}>{capacity}</span>
-            : <span style={{ color: '#94a3b8', fontSize: 12 }}>—</span>}
-        </TD>
-      </tr>
-      {expanded && byEnv.map(env => (
-        <EnvironmentSection
-          key={env.envId}
-          envName={env.envName}
-          color={env.color}
-          rows={env.rows}
-          thresholds={thresholds}
-        />
-      ))}
-    </>
   );
 };
 
@@ -309,44 +370,43 @@ const FilterField = ({ label, children }) => (
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 export default function PerformanceDashboard() {
-  const { currentUser, environments } = useApp();
+  const { currentUser, currentWorkspace } = useApp();
 
   const canAccess = ['admin', 'super_admin'].includes(currentUser?.role);
 
-  const defaultFilters = { envId: '', frente: '', area: '', startDate: firstOfYear(), endDate: today() };
-  const [filters,  setFilters]  = useState(defaultFilters);
-  const [applied,  setApplied]  = useState(defaultFilters);
-  const [rows,     setRows]     = useState([]);
-  const [thresholds, setThresholds] = useState({ good: 90, leve: 80 });
+  const defaultFilters = { frente: '', startDate: firstOfYear(), endDate: today() };
+  const [filters,    setFilters]    = useState(defaultFilters);
+  const [applied,    setApplied]    = useState(defaultFilters);
+  const [rows,       setRows]       = useState([]);
   const [frenteOpts, setFrenteOpts] = useState([]);
-  const [loading,  setLoading]  = useState(false);
-  const [error,    setError]    = useState('');
+  const [loading,    setLoading]    = useState(false);
+  const [error,      setError]      = useState('');
+  const [chartPerson, setChartPerson] = useState('all');
 
-  // Mapa envId → color estable
-  const envColorMap = useMemo(() => {
-    const map = {};
-    (environments || []).forEach((e, i) => { map[e.id] = ENV_COLORS[i % ENV_COLORS.length]; });
-    return map;
-  }, [environments]);
+  const [areaKpis,    setAreaKpis]    = useState(null);
+  const [kpisLoading, setKpisLoading] = useState(true);
+
+  const capacities = useMemo(() => {
+    try { return JSON.parse(localStorage.getItem('seitra_capacities') || '{}'); }
+    catch { return {}; }
+  }, []);
 
   const loadAll = async () => {
     if (!canAccess) return;
     setLoading(true);
     setError('');
     try {
-      const [metricsRows, thresh, frentes] = await Promise.all([
+      const wsId = currentWorkspace?.id || null;
+      const [metricsRows, frentes] = await Promise.all([
         dbPerformance.getMetrics({
-          environmentId: applied.envId   || null,
-          frente:        applied.frente  || null,
-          area:          applied.area    || null,
-          startDate:     applied.startDate || null,
-          endDate:       applied.endDate   || null,
+          workspaceId: wsId,
+          frente:      applied.frente    || null,
+          startDate:   applied.startDate || null,
+          endDate:     applied.endDate   || null,
         }),
-        dbKpiThresholds.get(applied.envId || null),
-        dbPerformance.getFrenteOptions(),
+        dbPerformance.getFrenteOptions(wsId),
       ]);
       setRows(metricsRows);
-      setThresholds({ good: thresh.threshold_good, leve: thresh.threshold_leve });
       setFrenteOpts(frentes);
     } catch (e) {
       console.error('[PerformanceDashboard]', e);
@@ -356,7 +416,24 @@ export default function PerformanceDashboard() {
     }
   };
 
-  useEffect(() => { loadAll(); }, [applied]);
+  useEffect(() => { loadAll(); }, [applied, currentWorkspace?.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      setKpisLoading(true);
+      try {
+        const base = await getGlobalMetrics(currentUser?.id, currentUser?.system_role);
+        if (!cancelled) setAreaKpis(computeAreaKpisFromData(base.projects || [], base.tasks || []));
+      } catch (e) {
+        console.error('[PerformanceDashboard] KPIs error:', e);
+      } finally {
+        if (!cancelled) setKpisLoading(false);
+      }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, [currentUser?.id]);
 
   const handleApply = () => setApplied({ ...filters });
   const handleClear = () => { setFilters(defaultFilters); setApplied(defaultFilters); };
@@ -366,6 +443,7 @@ export default function PerformanceDashboard() {
 
   return (
     <div style={{ padding: '20px 24px', fontFamily: 'inherit', maxWidth: 1400, margin: '0 auto' }}>
+      <style>{SHIMMER_STYLE}</style>
 
       {/* ── Header ── */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 8 }}>
@@ -376,7 +454,9 @@ export default function PerformanceDashboard() {
               Desempeño por Colaborador
             </h2>
             <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 1 }}>
-              {rows.length} colaborador{rows.length !== 1 ? 'es' : ''} · {applied.startDate} → {applied.endDate}
+              {currentWorkspace?.name
+                ? `Workspace: ${currentWorkspace.name} · `
+                : ''}{rows.length} colaborador{rows.length !== 1 ? 'es' : ''} · {applied.startDate} → {applied.endDate}
             </div>
           </div>
         </div>
@@ -385,20 +465,74 @@ export default function PerformanceDashboard() {
         </button>
       </div>
 
+      {/* ── KPIs del área ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: 12, marginBottom: 20 }}>
+        <div style={{ background: 'white', borderRadius: 12, padding: '16px 20px', border: '1px solid #f1f5f9', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8 }}>Progreso del área</div>
+          <div style={{ fontSize: 28, fontWeight: 800, color: '#0f172a', lineHeight: 1, marginBottom: 6 }}>
+            {kpisLoading ? '—' : `${areaKpis?.weightedProgress ?? 0}%`}
+          </div>
+          <div style={{ height: 5, background: '#e2e8f0', borderRadius: 3, overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${kpisLoading ? 0 : Math.min(100, areaKpis?.weightedProgress ?? 0)}%`, background: '#6366f1', borderRadius: 3, transition: 'width 0.5s' }} />
+          </div>
+          <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 5 }}>
+            {kpisLoading ? '' : `${areaKpis?.activeProjectsCount ?? 0} proyecto${areaKpis?.activeProjectsCount !== 1 ? 's' : ''} activo${areaKpis?.activeProjectsCount !== 1 ? 's' : ''}`}
+          </div>
+        </div>
+
+        {(() => {
+          const v = areaKpis?.weeklyVelocity;
+          const icon  = !v ? '→' : v.trend === 'up' ? '↑' : v.trend === 'down' ? '↓' : '→';
+          const color = !v ? '#94a3b8' : v.trend === 'up' ? '#16a34a' : v.trend === 'down' ? '#dc2626' : '#64748b';
+          return (
+            <div style={{ background: 'white', borderRadius: 12, padding: '16px 20px', border: '1px solid #f1f5f9', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8 }}>Velocidad semanal</div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                <span style={{ fontSize: 28, fontWeight: 800, color: '#0f172a', lineHeight: 1 }}>{kpisLoading ? '—' : (v?.current ?? 0)}</span>
+                {!kpisLoading && <span style={{ fontSize: 20, fontWeight: 800, color }}>{icon}</span>}
+              </div>
+              <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 5 }}>
+                {kpisLoading ? '' : `Esta semana · anterior: ${v?.previous ?? 0}`}
+              </div>
+            </div>
+          );
+        })()}
+
+        <div style={{ background: 'white', borderRadius: 12, padding: '16px 20px', border: '1px solid #f1f5f9', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8 }}>Cumplimiento de fechas</div>
+          <div style={{ fontSize: 28, fontWeight: 800, lineHeight: 1, marginBottom: 4, color: kpisLoading ? '#94a3b8' : (areaKpis?.onTimeRate == null ? '#94a3b8' : areaKpis.onTimeRate >= 70 ? '#16a34a' : areaKpis.onTimeRate >= 50 ? '#f59e0b' : '#dc2626') }}>
+            {kpisLoading ? '—' : (areaKpis?.onTimeRate == null ? '—' : `${areaKpis.onTimeRate}%`)}
+          </div>
+          <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
+            {kpisLoading ? '' : (areaKpis?.onTimeRate == null ? 'Sin datos suficientes' : 'A tiempo · últimos 30 días')}
+          </div>
+        </div>
+
+        {(() => {
+          const blocked  = areaKpis?.blockedActive ?? 0;
+          const hasAlert = !kpisLoading && blocked > 0;
+          return (
+            <div style={{ background: hasAlert ? '#fff7ed' : 'white', borderRadius: 12, padding: '16px 20px', border: `1px solid ${hasAlert ? '#fed7aa' : '#f1f5f9'}`, boxShadow: '0 1px 3px rgba(0,0,0,0.06)', transition: 'background 0.3s' }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: hasAlert ? '#c2410c' : '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8 }}>Tareas bloqueadas</div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                <span style={{ fontSize: 28, fontWeight: 800, color: hasAlert ? '#ea580c' : '#0f172a', lineHeight: 1 }}>{kpisLoading ? '—' : blocked}</span>
+                {hasAlert && <AlertTriangle size={18} color="#f97316" />}
+              </div>
+              <div style={{ fontSize: 11, color: hasAlert ? '#c2410c' : '#94a3b8', marginTop: 5 }}>
+                {kpisLoading ? '' : hasAlert ? 'Requieren atención' : 'En proyectos activos'}
+              </div>
+            </div>
+          );
+        })()}
+      </div>
+
       {/* ── Filtros ── */}
       <div style={{
         display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap',
         background: 'white', padding: '14px 16px', borderRadius: 12,
-        border: '1px solid #e8edf3', marginBottom: 20,
+        border: '1px solid #e2e8f0', marginBottom: 20,
         boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
       }}>
-        <FilterField label="Squad">
-          <select value={filters.envId} onChange={e => set('envId', e.target.value)} style={SEL}>
-            <option value="">Todos</option>
-            {(environments || []).map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
-          </select>
-        </FilterField>
-
         <FilterField label="Frente">
           <select value={filters.frente} onChange={e => set('frente', e.target.value)} style={SEL}>
             <option value="">Todos</option>
@@ -406,18 +540,11 @@ export default function PerformanceDashboard() {
           </select>
         </FilterField>
 
-        <FilterField label="Área">
-          <select value={filters.area} onChange={e => set('area', e.target.value)} style={SEL}>
-            <option value="">Todas</option>
-            {AREA_OPTIONS.map(a => <option key={a} value={a}>{a}</option>)}
-          </select>
-        </FilterField>
-
-        <FilterField label="Ini. Teo.">
+        <FilterField label="Ini.">
           <input type="date" value={filters.startDate} onChange={e => set('startDate', e.target.value)} style={SEL} />
         </FilterField>
 
-        <FilterField label="Fin. Teo.">
+        <FilterField label="Fin">
           <input type="date" value={filters.endDate} onChange={e => set('endDate', e.target.value)} style={SEL} />
         </FilterField>
 
@@ -433,40 +560,61 @@ export default function PerformanceDashboard() {
 
       {/* ── Tabla ── */}
       <div style={{
-        background: 'white', borderRadius: 12, border: '1px solid #e8edf3',
+        background: 'white', borderRadius: 12, border: '1px solid #e2e8f0',
         overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
       }}>
-        {loading ? (
-          <div style={{ padding: '60px', textAlign: 'center', color: '#94a3b8', fontSize: 14 }}>
-            Cargando métricas…
-          </div>
-        ) : error ? (
+        {error ? (
           <div style={{ padding: '40px', textAlign: 'center', color: '#ef4444', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
             <AlertTriangle size={16} /> {error}
           </div>
-        ) : rows.length === 0 ? (
-          <div style={{ padding: '60px', textAlign: 'center', color: '#94a3b8', fontSize: 14 }}>
-            Sin datos para el rango y filtros seleccionados.
-          </div>
         ) : (
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 680 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 720 }}>
               <thead>
                 <tr>
-                  <TH width="260px">Colaborador</TH>
-                  <TH width="80px"  align="center">FIN.</TH>
-                  <TH width="160px">Tendencia</TH>
-                  <TH width="150px">KPI FIN.</TH>
-                  <TH width="100px" align="center">Capacity</TH>
+                  <TH width="220px">Colaborador</TH>
+                  <TH width="70px" align="center">FIN.</TH>
+                  <TH width="90px">Tallaje</TH>
+                  <TH width="156px">Tendencia</TH>
+                  <TH width="140px">KPI Cumpl.</TH>
+                  <TH width="100px" align="center">Cap. Real</TH>
                 </tr>
               </thead>
               <tbody>
-                <GeneralSection rows={rows} thresholds={thresholds} envColorMap={envColorMap} />
+                {loading ? (
+                  [1,2,3,4,5].map(i => <SkeletonRow key={i} />)
+                ) : rows.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} style={{ padding: '60px', textAlign: 'center', color: '#94a3b8', fontSize: 14 }}>
+                      Sin datos para el período seleccionado.
+                    </td>
+                  </tr>
+                ) : (
+                  rows.map((row, i) => (
+                    <PersonRow
+                      key={row.assignee_id}
+                      row={row}
+                      applied={applied}
+                      capacities={capacities}
+                      color={PERSON_COLORS[i % PERSON_COLORS.length]}
+                    />
+                  ))
+                )}
               </tbody>
             </table>
           </div>
         )}
       </div>
+
+      {/* ── Gráfico de líneas ── */}
+      {!loading && !error && rows.length > 0 && (
+        <WeeklyChart
+          rows={rows}
+          capacities={capacities}
+          chartPerson={chartPerson}
+          setChartPerson={setChartPerson}
+        />
+      )}
     </div>
   );
 }

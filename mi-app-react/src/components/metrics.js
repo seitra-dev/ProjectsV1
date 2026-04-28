@@ -286,6 +286,106 @@ export const getWeeklyTasks = async (environmentId = null, weekStart = null) => 
 };
 
 // ============================================================================
+// KPIs DEL ÁREA — función pura (sin llamadas a DB)
+// Recibe proyectos y tareas ya cargados y devuelve los 4 KPIs.
+// ============================================================================
+export const computeAreaKpisFromData = (projects = [], tasks = []) => {
+  // ── KPI A: Progreso ponderado del área ──────────────────────────────────
+  const activeProjects = projects.filter(p => ['active', 'in_progress', 'pending'].includes(p.status));
+  let weightedProgress = 0;
+  if (activeProjects.length > 0) {
+    const sum = activeProjects.reduce((acc, proj) => {
+      const projTasks = tasks.filter(t => t.project_id === proj.id && !t.parent_id);
+      const completed = projTasks.filter(t => t.status === 'completed').length;
+      const pct       = projTasks.length > 0 ? (completed / projTasks.length) * 100 : 0;
+      return acc + pct;
+    }, 0);
+    weightedProgress = Math.round(sum / activeProjects.length);
+  }
+
+  // ── KPI B: Velocidad semanal ─────────────────────────────────────────────
+  const now         = new Date();
+  const ms7         = 7 * 24 * 3600 * 1000;
+  const cutCurrent  = new Date(now - ms7);
+  const cutPrevious = new Date(now - 2 * ms7);
+
+  const isCompletedIn = (t, from, to) => {
+    if (t.status !== 'completed') return false;
+    const stamp = t.closed_at || t.updated_at;
+    if (!stamp) return false;
+    const d = new Date(stamp);
+    return d >= from && d < to;
+  };
+
+  const currentWeekCompleted  = tasks.filter(t => isCompletedIn(t, cutCurrent, now)).length;
+  const previousWeekCompleted = tasks.filter(t => isCompletedIn(t, cutPrevious, cutCurrent)).length;
+
+  let velocityTrend = 'equal';
+  if (previousWeekCompleted === 0) {
+    velocityTrend = currentWeekCompleted > 0 ? 'up' : 'equal';
+  } else {
+    const ratio = currentWeekCompleted / previousWeekCompleted;
+    if (ratio > 1.1) velocityTrend = 'up';
+    else if (ratio < 0.9) velocityTrend = 'down';
+  }
+
+  // ── KPI C: Tasa de cumplimiento de fechas ───────────────────────────────
+  const cut30 = new Date(now - 30 * 24 * 3600 * 1000);
+  const recentCompleted = tasks.filter(t => {
+    if (t.status !== 'completed') return false;
+    if (!t.end_date) return false;
+    const stamp = t.closed_at || t.updated_at;
+    if (!stamp) return false;
+    return new Date(stamp) >= cut30;
+  });
+
+  let onTimeRate = null;
+  if (recentCompleted.length >= 5) {
+    const onTime = recentCompleted.filter(t => {
+      const closedDate = new Date(t.closed_at || t.updated_at);
+      const dueDate    = new Date(t.end_date);
+      return closedDate <= dueDate;
+    }).length;
+    onTimeRate = Math.round((onTime / recentCompleted.length) * 100);
+  }
+
+  // ── KPI D: Tareas bloqueadas en proyectos activos ───────────────────────
+  const activeProjectIds = new Set(activeProjects.map(p => p.id));
+  const blockedActive = tasks.filter(
+    t => t.status === 'blocked' && activeProjectIds.has(t.project_id)
+  ).length;
+
+  return {
+    weightedProgress,
+    weeklyVelocity: { current: currentWeekCompleted, previous: previousWeekCompleted, trend: velocityTrend },
+    onTimeRate,
+    blockedActive,
+    activeProjectsCount: activeProjects.length,
+  };
+};
+
+// ============================================================================
+// KPIs DEL ÁREA — wrapper async (mantiene compatibilidad con otras llamadas)
+// ============================================================================
+export const getAreaKpis = async (envId = null, userId = null, userRole = null) => {
+  try {
+    const base = envId && envId !== 'all'
+      ? await getEnvironmentMetrics(envId)
+      : await getGlobalMetrics(userId, userRole);
+    return computeAreaKpisFromData(base.projects || [], base.tasks || []);
+  } catch (err) {
+    console.error('[getAreaKpis] Error:', err);
+    return {
+      weightedProgress:    0,
+      weeklyVelocity:      { current: 0, previous: 0, trend: 'equal' },
+      onTimeRate:          null,
+      blockedActive:       0,
+      activeProjectsCount: 0,
+    };
+  }
+};
+
+// ============================================================================
 // PERSONAS SOBRECARGADAS (>10 tareas activas)
 // ============================================================================
 export const getOverloadedPeople = async (environmentId = null) => {

@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { X, CheckSquare, Save } from 'lucide-react';
 import { dbTasks } from '../lib/database';
+import { TASK_STATUS_DROPDOWN } from '../constants/statuses';
 
 // ============================================================================
 // ESTILOS
@@ -65,20 +66,11 @@ const PRIORITY_OPTIONS = [
   { value: 'urgent', label: 'Urgente' },
 ];
 
-const STATUS_OPTIONS = [
-  { value: 'todo',        label: 'Por Hacer' },
-  { value: 'pending',     label: 'Pendiente' },
-  { value: 'in_progress', label: 'En Curso' },
-  { value: 'waiting',     label: 'En Espera' },
-  { value: 'paused',      label: 'En Pausa' },
-  { value: 'review',      label: 'En Revisión' },
-  { value: 'completed',   label: 'Completado' },
-  { value: 'blocked',     label: 'Bloqueado' },
-];
+const STATUS_OPTIONS = Object.entries(TASK_STATUS_DROPDOWN).map(([value, cfg]) => ({ value, label: cfg.label }));
 
 const EMPTY = {
   name: '', projectId: '', milestoneId: '', responsableId: '',
-  startDate: '', endDate: '', priority: 'medium', status: 'todo', description: '',
+  startDate: '', endDate: '', priority: 'medium', status: 'pending', description: '',
 };
 
 // ============================================================================

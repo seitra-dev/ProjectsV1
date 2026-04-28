@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { ChevronDown, Lock } from 'lucide-react';
 
 function CustomFieldCell({
@@ -15,6 +15,28 @@ function CustomFieldCell({
 }) {
   const originalValueRef = useRef(value);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [dropPos, setDropPos] = useState({ top: 0, left: 0, width: 0 });
+  const triggerRef = useRef(null);
+
+  // Cierra el dropdown al hacer click fuera
+  useEffect(() => {
+    if (!dropdownOpen) return;
+    const handler = (e) => {
+      if (triggerRef.current && !triggerRef.current.contains(e.target)) {
+        setDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [dropdownOpen]);
+
+  const openDropdown = () => {
+    if (triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      setDropPos({ top: rect.bottom + 4, left: rect.left, width: Math.max(rect.width, 160) });
+    }
+    setDropdownOpen(true);
+  };
 
   const handleBlur = (e) => {
     if (onSave && originalValueRef.current !== e.target.value) {
@@ -40,112 +62,84 @@ function CustomFieldCell({
   // TIPO: select (con colores)
   // ========================================================================
   if (field.type === 'select' && field.options && Array.isArray(field.options)) {
-    const selectedOption = field.options.find(
-      (opt) => opt.id === safeValue || opt.label === safeValue
+    // Normaliza: soporta strings simples Y objetos {id, color, label}
+    const FALLBACK_COLORS = ['#6366f1','#10b981','#f59e0b','#ef4444','#3b82f6','#8b5cf6','#ec4899','#14b8a6'];
+    const options = field.options.map((opt, i) =>
+      typeof opt === 'string'
+        ? { id: opt, label: opt, color: FALLBACK_COLORS[i % FALLBACK_COLORS.length] }
+        : opt
     );
 
+    const selectedOption = options.find(opt => opt.id === safeValue || opt.label === safeValue);
+
     return (
-      <div style={{ position: 'relative' }}>
+      <div ref={triggerRef} style={{ position: 'relative' }}>
         <button
-          onClick={() => setDropdownOpen(!dropdownOpen)}
+          onClick={openDropdown}
           style={{
             ...inputStyle,
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
+            display: 'flex', alignItems: 'center', gap: '8px',
             cursor: 'pointer',
-            background: selectedOption
-              ? selectedOption.color + '15'
-              : '#fff',
+            background: selectedOption ? selectedOption.color + '15' : '#fff',
             border: `1px solid ${selectedOption ? selectedOption.color : '#e5e7eb'}`,
             color: selectedOption ? selectedOption.color : '#6b7280',
             fontWeight: selectedOption ? 500 : 400,
           }}
         >
           {selectedOption && (
-            <span
-              style={{
-                width: '10px',
-                height: '10px',
-                borderRadius: '50%',
-                background: selectedOption.color,
-                flexShrink: 0,
-              }}
-            />
+            <span style={{ width: 10, height: 10, borderRadius: '50%', background: selectedOption.color, flexShrink: 0 }} />
           )}
-          <span style={{ flex: 1, textAlign: 'left' }}>
+          <span style={{ flex: 1, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {selectedOption?.label || 'Seleccionar...'}
           </span>
-          <ChevronDown size={14} />
+          <ChevronDown size={14} style={{ flexShrink: 0 }} />
         </button>
 
         {dropdownOpen && (
-          <div
-            style={{
-              position: 'absolute',
-              top: '100%',
-              left: 0,
-              right: 0,
-              marginTop: '4px',
-              background: 'white',
-              border: '1px solid #e5e7eb',
-              borderRadius: '6px',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-              zIndex: 1000,
-              minWidth: '160px',
-            }}
-          >
-            {field.options.map((option) => (
-              <button
-                key={option.id}
-                onClick={() => {
-                  onChange(option.id || option.label);
-                  onSave?.(option.id || option.label);
-                  setDropdownOpen(false);
-                }}
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  border: 'none',
-                  background:
-                    option.id === safeValue || option.label === safeValue
-                      ? option.color + '20'
-                      : 'transparent',
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  fontSize: '13px',
-                  color: option.color,
-                  fontWeight:
-                    option.id === safeValue || option.label === safeValue
-                      ? 600
-                      : 400,
-                }}
-                onMouseEnter={(e) => {
-                  if (option.id !== safeValue && option.label !== safeValue) {
-                    e.currentTarget.style.background = '#f3f4f6';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background =
-                    option.id === safeValue || option.label === safeValue
-                      ? option.color + '20'
-                      : 'transparent';
-                }}
-              >
-                <span
+          <div style={{
+            position: 'fixed',
+            top: dropPos.top,
+            left: dropPos.left,
+            minWidth: dropPos.width,
+            background: 'white',
+            border: '1px solid #e5e7eb',
+            borderRadius: '8px',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+            zIndex: 9999,
+            overflow: 'hidden',
+          }}>
+            <button
+              onClick={() => { onChange(null); onSave?.(null); setDropdownOpen(false); }}
+              style={{
+                width: '100%', padding: '9px 12px', border: 'none',
+                background: !safeValue ? '#f0f4ff' : 'transparent',
+                cursor: 'pointer', textAlign: 'left',
+                fontSize: '12px', color: '#9ca3af',
+              }}
+            >
+              — Sin valor
+            </button>
+            {options.map((option) => {
+              const isSelected = option.id === safeValue || option.label === safeValue;
+              return (
+                <button
+                  key={option.id}
+                  onClick={() => { onChange(option.label); onSave?.(option.label); setDropdownOpen(false); }}
                   style={{
-                    width: '8px',
-                    height: '8px',
-                    borderRadius: '50%',
-                    background: option.color,
+                    width: '100%', padding: '9px 12px', border: 'none',
+                    background: isSelected ? option.color + '20' : 'transparent',
+                    cursor: 'pointer', textAlign: 'left', display: 'flex',
+                    alignItems: 'center', gap: '8px', fontSize: '13px',
+                    color: option.color, fontWeight: isSelected ? 600 : 400,
                   }}
-                />
-                {option.label}
-              </button>
-            ))}
+                  onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = '#f9fafb'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = isSelected ? option.color + '20' : 'transparent'; }}
+                >
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: option.color, flexShrink: 0 }} />
+                  {option.label}
+                </button>
+              );
+            })}
           </div>
         )}
       </div>
@@ -166,9 +160,9 @@ function CustomFieldCell({
     const selectedMember = projectMembers.find((m) => m.id === safeValue);
 
     return (
-      <div style={{ position: 'relative' }}>
+      <div ref={triggerRef} style={{ position: 'relative' }}>
         <button
-          onClick={() => setDropdownOpen(!dropdownOpen)}
+          onClick={openDropdown}
           style={{
             ...inputStyle,
             display: 'flex',
@@ -185,31 +179,30 @@ function CustomFieldCell({
               ) : (
                 <span style={{ fontSize: '14px' }}>{selectedMember.avatar || '👤'}</span>
               )}
-              <span style={{ flex: 1, textAlign: 'left', fontSize: '12px' }}>
+              <span style={{ flex: 1, textAlign: 'left', fontSize: '12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {selectedMember.name || selectedMember.email}
               </span>
             </>
           )}
           {!selectedMember && (
-            <span style={{ color: '#9ca3af' }}>Asignar...</span>
+            <span style={{ color: '#9ca3af', flex: 1 }}>Asignar...</span>
           )}
-          <ChevronDown size={14} />
+          <ChevronDown size={14} style={{ flexShrink: 0 }} />
         </button>
 
         {dropdownOpen && (
           <div
             style={{
-              position: 'absolute',
-              top: '100%',
-              left: 0,
-              right: 0,
-              marginTop: '4px',
+              position: 'fixed',
+              top: dropPos.top,
+              left: dropPos.left,
+              minWidth: dropPos.width,
               background: 'white',
               border: '1px solid #e5e7eb',
-              borderRadius: '6px',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-              zIndex: 1000,
-              maxHeight: '200px',
+              borderRadius: '8px',
+              boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+              zIndex: 9999,
+              maxHeight: '220px',
               overflowY: 'auto',
             }}
           >
@@ -276,9 +269,9 @@ function CustomFieldCell({
     const selectedPhase = roadmapPhases.find((p) => p.id === safeValue);
 
     return (
-      <div style={{ position: 'relative' }}>
+      <div ref={triggerRef} style={{ position: 'relative' }}>
         <button
-          onClick={() => setDropdownOpen(!dropdownOpen)}
+          onClick={openDropdown}
           style={{
             ...inputStyle,
             display: 'flex',
@@ -312,16 +305,17 @@ function CustomFieldCell({
         {dropdownOpen && (
           <div
             style={{
-              position: 'absolute',
-              top: '100%',
-              left: 0,
-              right: 0,
-              marginTop: '4px',
+              position: 'fixed',
+              top: dropPos.top,
+              left: dropPos.left,
+              minWidth: dropPos.width,
               background: 'white',
               border: '1px solid #e5e7eb',
-              borderRadius: '6px',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-              zIndex: 1000,
+              borderRadius: '8px',
+              boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+              zIndex: 9999,
+              maxHeight: '240px',
+              overflowY: 'auto',
             }}
           >
             {roadmapPhases.map((phase) => (

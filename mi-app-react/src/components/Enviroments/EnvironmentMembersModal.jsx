@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { X, Users, UserPlus, Trash2, Crown, ShieldCheck, User, Eye, Search, ChevronDown, Loader } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { X, Users, UserPlus, Trash2, Crown, ShieldCheck, User, Eye, Search, ChevronDown, Loader, ArrowRightLeft } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { dbEnvironmentMembers, dbUsers } from '../../lib/database';
 
@@ -48,12 +48,15 @@ function Avatar({ user, size = 36 }) {
 // ============================================================================
 
 const EnvironmentMembersModal = ({ isOpen, onClose }) => {
-  const { currentEnvironment, currentUser, getUserRoleInEnv, canManageMembers } = useApp();
+  const { currentEnvironment, currentUser, getUserRoleInEnv, canManageMembers, environments } = useApp();
   const [activeTab, setActiveTab] = useState('members');
+  const [movingMemberId, setMovingMemberId] = useState(null);
+  const moveRef = useRef(null);
 
   // — Tab Miembros —
   const [members, setMembers] = useState([]);
   const [loadingMembers, setLoadingMembers] = useState(false);
+  const [membersError, setMembersError] = useState('');
 
   // — Tab Invitar —
   const [allUsers, setAllUsers] = useState([]);
@@ -67,8 +70,8 @@ const EnvironmentMembersModal = ({ isOpen, onClose }) => {
   const envId = currentEnvironment?.id;
   const myRole = getUserRoleInEnv(envId);
   const isOwner = myRole === 'owner';
-  // canManage: owner, admin (env) o super_admin del sistema
   const canManage = canManageMembers(envId);
+  const otherEnvironments = (environments || []).filter(e => e.id !== envId);
 
   // Cargar miembros al abrir
   useEffect(() => {
@@ -76,17 +79,33 @@ const EnvironmentMembersModal = ({ isOpen, onClose }) => {
     setActiveTab('members');
     setInviteSuccess('');
     setInviteError('');
+    setMembersError('');
+    setMovingMemberId(null);
     loadMembers();
     loadAllUsers();
   }, [isOpen, envId]);
 
+  // Cerrar dropdown de mover al hacer clic fuera
+  useEffect(() => {
+    if (!movingMemberId) return;
+    const handler = (e) => {
+      if (moveRef.current && !moveRef.current.contains(e.target)) {
+        setMovingMemberId(null);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [movingMemberId]);
+
   const loadMembers = async () => {
     setLoadingMembers(true);
+    setMembersError('');
     try {
       const data = await dbEnvironmentMembers.getByEnvironment(envId);
       setMembers(data);
     } catch (e) {
       console.error('[MembersModal] Error cargando miembros:', e);
+      setMembersError('No se pudieron cargar los miembros. Verifica los permisos de la tabla.');
     } finally {
       setLoadingMembers(false);
     }
@@ -121,6 +140,23 @@ const EnvironmentMembersModal = ({ isOpen, onClose }) => {
       ));
     } catch (e) {
       alert('Error al cambiar rol: ' + e.message);
+    }
+  };
+
+  const handleMoveMember = async (userId, userName, targetEnvId) => {
+    if (!canManage) { alert('No tienes permisos para mover miembros.'); return; }
+    const targetEnv = (environments || []).find(e => e.id === targetEnvId);
+    if (!window.confirm(`¿Mover a "${userName}" al entorno "${targetEnv?.name || targetEnvId}"?`)) return;
+    try {
+      const member = members.find(m => m.user_id === userId);
+      const role = member?.role || 'member';
+      await dbEnvironmentMembers.add(targetEnvId, userId, role === 'owner' ? 'member' : role, currentUser?.id);
+      await dbEnvironmentMembers.remove(envId, userId);
+      setMembers(prev => prev.filter(m => m.user_id !== userId));
+    } catch (e) {
+      alert('Error al mover miembro: ' + e.message);
+    } finally {
+      setMovingMemberId(null);
     }
   };
 
@@ -247,6 +283,10 @@ const EnvironmentMembersModal = ({ isOpen, onClose }) => {
                   <Loader size={20} style={{ animation: 'spin 1s linear infinite' }} />
                   <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
                 </div>
+              ) : membersError ? (
+                <div style={{ padding: '12px 16px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', color: '#dc2626', fontSize: '0.85rem' }}>
+                  {membersError}
+                </div>
               ) : members.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8', fontSize: '0.875rem' }}>
                   No hay miembros en este equipo.
@@ -254,7 +294,7 @@ const EnvironmentMembersModal = ({ isOpen, onClose }) => {
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   {members.map(member => {
-                    const user = member.users || {};
+                    const user = allUsers.find(u => String(u.id) === String(member.user_id)) || {};
                     const isMe = member.user_id === currentUser?.id;
                     const isThisOwner = member.role === 'owner';
                     return (
@@ -296,6 +336,52 @@ const EnvironmentMembersModal = ({ isOpen, onClose }) => {
                           </select>
                         ) : (
                           <RoleBadge role={member.role} />
+                        )}
+
+                        {/* Botón mover a otro entorno */}
+                        {canManage && !isThisOwner && !isMe && otherEnvironments.length > 0 && (
+                          <div style={{ position: 'relative' }} ref={movingMemberId === member.user_id ? moveRef : null}>
+                            <button
+                              onClick={() => setMovingMemberId(movingMemberId === member.user_id ? null : member.user_id)}
+                              style={{
+                                background: 'none', border: 'none', color: '#cbd5e1',
+                                cursor: 'pointer', padding: '4px', display: 'flex', borderRadius: '6px',
+                                transition: 'color 0.15s',
+                              }}
+                              onMouseEnter={e => e.currentTarget.style.color = '#6366f1'}
+                              onMouseLeave={e => e.currentTarget.style.color = movingMemberId === member.user_id ? '#6366f1' : '#cbd5e1'}
+                              title="Mover a otro entorno"
+                            >
+                              <ArrowRightLeft size={16} />
+                            </button>
+                            {movingMemberId === member.user_id && (
+                              <div style={{
+                                position: 'absolute', right: 0, top: '110%', zIndex: 100,
+                                background: 'white', borderRadius: '10px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+                                border: '1px solid #e2e8f0', minWidth: '180px', overflow: 'hidden',
+                              }}>
+                                <div style={{ padding: '8px 12px', fontSize: '0.72rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                  Mover a entorno
+                                </div>
+                                {otherEnvironments.map(env => (
+                                  <button
+                                    key={env.id}
+                                    onClick={() => handleMoveMember(member.user_id, user.name || user.email, env.id)}
+                                    style={{
+                                      width: '100%', display: 'flex', alignItems: 'center', gap: '8px',
+                                      padding: '8px 12px', background: 'transparent', border: 'none',
+                                      cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit', fontSize: '0.85rem', color: '#1e293b',
+                                    }}
+                                    onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
+                                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                  >
+                                    <span style={{ fontSize: '16px' }}>{env.icon || '📁'}</span>
+                                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{env.name}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
                         )}
 
                         {/* Botón eliminar */}
