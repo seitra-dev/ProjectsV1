@@ -330,12 +330,12 @@ export default function UserSettingsDrawer({
         upsert: true,
         contentType: 'image/jpeg',
       });
-      let final = dataUrl;
+      // Subimos a Storage como respaldo/CDN, pero guardamos la dataUrl en la BD
+      // para que todos los usuarios puedan verla sin depender de permisos del bucket.
       if (!upErr) {
-        const { data: pub } = supabase.storage.from(bucket).getPublicUrl(path);
-        final = `${pub.publicUrl}?v=${Date.now()}`;
+        supabase.storage.from(bucket).getPublicUrl(path); // fire-and-forget, solo para caché CDN
       }
-      await persistAvatarAfterPick(final);
+      await persistAvatarAfterPick(dataUrl);
     } catch (err) {
       console.error(err);
       addToast?.(err.message || 'No se pudo actualizar la foto', 'error');

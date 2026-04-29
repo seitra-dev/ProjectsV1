@@ -480,6 +480,35 @@ function CustomFieldCell({
   }
 
   // ========================================================================
+  // TIPO: dependency (bloqueo / dependencia externa)
+  // ========================================================================
+  if (field.type === 'dependency') {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+        <input
+          type="text"
+          value={safeValue}
+          onChange={(e) => onChange(e.target.value)}
+          onFocus={() => { originalValueRef.current = safeValue; }}
+          onBlur={handleBlur}
+          placeholder="Describir dependencia..."
+          style={{ ...inputStyle, flex: 1 }}
+        />
+        {safeValue && (
+          <span style={{
+            flexShrink: 0, padding: '2px 6px', borderRadius: '4px',
+            fontSize: '10px', fontWeight: 700,
+            background: '#fef3c7', color: '#92400e',
+            whiteSpace: 'nowrap',
+          }}>
+            EN PAUSA
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  // ========================================================================
   // DEFAULT: tipo no soportado
   // ========================================================================
   return (

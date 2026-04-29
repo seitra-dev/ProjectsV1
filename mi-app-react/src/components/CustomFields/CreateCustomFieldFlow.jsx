@@ -6,6 +6,7 @@ import {
   Hash,
   CheckSquare,
   Link2,
+  GitBranch,
   ArrowLeft,
   Trash2,
   X,
@@ -14,12 +15,13 @@ import { DESIGN_TOKENS } from '../../styles/tokens';
 import { dbProjects } from '../../lib/database';
 
 const FIELD_TYPES = [
-  { id: 'select', label: 'Lista desplegable', Icon: ListChecks },
-  { id: 'text', label: 'Texto', Icon: TextCursorInput },
-  { id: 'date', label: 'Fecha', Icon: CalendarDays },
-  { id: 'number', label: 'Número', Icon: Hash },
-  { id: 'checkbox', label: 'Casilla', Icon: CheckSquare },
-  { id: 'url', label: 'URL', Icon: Link2 },
+  { id: 'select',     label: 'Lista desplegable', Icon: ListChecks },
+  { id: 'text',       label: 'Texto',             Icon: TextCursorInput },
+  { id: 'date',       label: 'Fecha',             Icon: CalendarDays },
+  { id: 'number',     label: 'Número',            Icon: Hash },
+  { id: 'checkbox',   label: 'Casilla',           Icon: CheckSquare },
+  { id: 'url',        label: 'URL',               Icon: Link2 },
+  { id: 'dependency', label: 'Dependencia',       Icon: GitBranch },
 ];
 
 const CLICKUP_OPTION_COLORS = [
