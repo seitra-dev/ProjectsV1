@@ -629,7 +629,7 @@ export default function LandingPage({ onGetStarted }) {
           <div className="lp-reveal-right lp-d1" style={{ marginTop: 40 }}>
             <div style={{ background: '#fff', border: '1px solid #e8e8f0', borderRadius: 20, overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,.08), 0 2px 6px rgba(0,0,0,.04)' }}>
               <div style={{ background: '#f4f4f8', borderBottom: '1px solid #e8e8f0', padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: '#0a0a0f' }}>Proyecto Plataforma Core — Q2 2025</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#0a0a0f' }}>Proyecto Plataforma Core — Q2 2026</div>
                 <div style={{ fontSize: 11, fontFamily: "'Geist Mono', monospace", color: '#5a5a72' }}>Abr — Sep</div>
               </div>
               {/* Month headers */}

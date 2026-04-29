@@ -184,6 +184,20 @@ export const auth = {
   },
 
   // ========================================
+// ESPERAR SESIÓN DE RECOVERY
+// ========================================
+waitForRecoverySession: () => {
+  return new Promise((resolve) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        subscription.unsubscribe();
+        resolve(session);
+      }
+    });
+  });
+},
+
+  // ========================================
   // UPDATE PASSWORD
   // ========================================
   updatePassword: async (newPassword) => {
