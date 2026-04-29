@@ -1158,15 +1158,22 @@ function ResetPasswordScreen({ onDone }) {
   const [success, setSuccess] = useState(false);
   const [sessionReady, setSessionReady] = useState(false); // NUEVO
 
-  // NUEVO: esperar el evento PASSWORD_RECOVERY de Supabase
+  
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'PASSWORD_RECOVERY' && session) {
-        setSessionReady(true);
-      }
-    });
-    return () => subscription.unsubscribe();
-  }, []);
+  supabase.auth.getSession().then(({ data: { session } }) => {
+    if (session) {
+      setSessionReady(true);
+      return;
+    }
+  
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+          if ((event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN') && session) {
+            setSessionReady(true);
+            subscription.unsubscribe();
+          }
+        });
+      });
+    }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
