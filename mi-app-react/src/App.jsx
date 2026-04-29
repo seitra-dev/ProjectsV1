@@ -1161,7 +1161,21 @@ function ResetPasswordScreen({ onDone }) {
 
   
   useEffect(() => {
-  setSessionReady(true);
+  const code = new URLSearchParams(window.location.search).get('code');
+  if (code) {
+    supabase.auth.exchangeCodeForSession(code).then(({ data, error }) => {
+      if (error) {
+        setError('El enlace expiró o ya fue usado. Solicita uno nuevo.');
+      } else if (data?.session) {
+        setSessionReady(true);
+      }
+    });
+  } else {
+    // fallback para links viejos con hash
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) setSessionReady(true);
+    });
+  }
 }, []);
 
   const handleSubmit = async (e) => {
