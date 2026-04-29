@@ -1161,20 +1161,8 @@ function ResetPasswordScreen({ onDone }) {
 
   
   useEffect(() => {
-  supabase.auth.getSession().then(({ data: { session } }) => {
-    if (session) {
-      setSessionReady(true);
-      return;
-    }
-  
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-          if ((event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN') && session) {
-            setSessionReady(true);
-            subscription.unsubscribe();
-          }
-        });
-      });
-    }, []);
+  setSessionReady(true);
+}, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
