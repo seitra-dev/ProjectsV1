@@ -456,7 +456,7 @@ if (isTransitioning) {
           }}>
             <Layout size={38} color="#0a0f1e" strokeWidth={2.5} />
           </div>
-          <h1 style={{ fontSize: '2.2rem', fontWeight: 900, color: 'white', margin: 0 }}>SEITRA</h1>
+          <h1 style={{ fontSize: '2.2rem', fontWeight: 900, color: 'white', margin: 0 }}>Seitra</h1>
         </div>
 
         {/* MENSAJE DE ESTADO */}
@@ -849,7 +849,7 @@ function LoginScreen({ onLogin, onShowLanding }) {
                 <div key={i} style={{ background: 'rgba(255,255,255,0.85)', borderRadius: 2 }} />
               ))}
             </div>
-            <span style={{ fontWeight: 800, fontSize: '1.05rem', color: '#1e293b', letterSpacing: '-0.02em' }}>SEITRA</span>
+            <span style={{ fontWeight: 800, fontSize: '1.05rem', color: '#1e293b', letterSpacing: '-0.02em' }}>Seitra</span>
           </div>
 
           {/* Title */}
@@ -1156,10 +1156,25 @@ function ResetPasswordScreen({ onDone }) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [sessionReady, setSessionReady] = useState(false); // NUEVO
+
+  // NUEVO: esperar el evento PASSWORD_RECOVERY de Supabase
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY' && session) {
+        setSessionReady(true);
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    if (!sessionReady) {
+      setError('El enlace de recuperación no es válido o ya expiró. Solicita uno nuevo.');
+      return;
+    }
     if (newPassword.length < 6) {
       setError('La contraseña debe tener al menos 6 caracteres.');
       return;
@@ -1201,7 +1216,7 @@ function ResetPasswordScreen({ onDone }) {
           <div style={{ width: 36, height: 36, borderRadius: '10px', background: 'linear-gradient(135deg, #667eea, #764ba2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Zap size={18} color="white" strokeWidth={2.5} />
           </div>
-          <span style={{ fontSize: '1.1rem', fontWeight: 800, color: '#1e293b', letterSpacing: '-0.02em' }}>SEITRA</span>
+          <span style={{ fontSize: '1.1rem', fontWeight: 800, color: '#1e293b', letterSpacing: '-0.02em' }}>Seitra</span>
         </div>
 
         {success ? (

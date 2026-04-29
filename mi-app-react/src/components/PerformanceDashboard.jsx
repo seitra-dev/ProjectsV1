@@ -1,7 +1,6 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   AreaChart, Area, XAxis, Tooltip as RechartTooltip,
-  BarChart, Bar, Cell,
   LineChart, Line, CartesianGrid, ReferenceLine, ResponsiveContainer, YAxis,
 } from 'recharts';
 import {
@@ -10,7 +9,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { dbPerformance } from '../lib/database';
-import { getGlobalMetrics, computeAreaKpisFromData } from './metrics';
+import { supabase } from '../lib/supabase';
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
@@ -18,12 +17,22 @@ const PERSON_COLORS = [
   '#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
   '#06b6d4', '#f97316', '#84cc16', '#ec4899', '#14b8a6',
 ];
-const TALLAJE_COLORS = ['#c7d2fe', '#818cf8', '#4f46e5', '#312e81'];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const today       = () => new Date().toISOString().slice(0, 10);
 const firstOfYear = () => `${new Date().getFullYear()}-01-01`;
+
+const daysBetween = (s, e) => Math.round((new Date(e) - new Date(s)) / (24 * 3600 * 1000));
+const getGranularity = (s, e) => {
+  const d = daysBetween(s || firstOfYear(), e || today());
+  if (d <= 14) return 'day';
+  if (d <= 90) return 'week';
+  return 'month';
+};
+
+const getDayKey   = (t) => (typeof t === 'string' ? t : new Date(t).toISOString()).slice(0, 10);
+const getDayLabel = (k) => { const [, m, d] = k.split('-'); return `${d}/${m}`; };
 
 const getIsoWeekKey = (dateStr) => {
   const d = new Date((typeof dateStr === 'string' ? dateStr : new Date(dateStr).toISOString()).slice(0, 10));
@@ -44,6 +53,16 @@ const getWeekLabel = (wk) => {
   return `${String(mon.getDate()).padStart(2,'0')}/${String(mon.getMonth()+1).padStart(2,'0')}`;
 };
 
+const getMonthKey   = (t) => (typeof t === 'string' ? t : new Date(t).toISOString()).slice(0, 7);
+const MONTH_NAMES   = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+const getMonthLabel = (k) => { const [yr, m] = k.split('-'); return `${MONTH_NAMES[parseInt(m,10)-1]} ${yr.slice(2)}`; };
+
+const getDaysInRange = (startDate, endDate) => {
+  const days = []; const cur = new Date(startDate || firstOfYear()); const end = new Date(endDate || today());
+  while (cur <= end) { days.push(cur.toISOString().slice(0,10)); cur.setDate(cur.getDate()+1); }
+  return days;
+};
+
 // Genera todas las semanas ISO entre startDate y endDate (inclusive)
 const getWeeksInRange = (startDate, endDate) => {
   const seen = new Set(); const weeks = [];
@@ -61,20 +80,35 @@ const getWeeksInRange = (startDate, endDate) => {
   return weeks;
 };
 
-// Agrega trend_data en puntos semanales, filtrando por el rango de fechas
-const aggregateTrendWeekly = (items, startDate = null, endDate = null) => {
+const getMonthsInRange = (startDate, endDate) => {
+  const months = []; const seen = new Set();
+  const end = new Date(endDate || today());
+  const endM = new Date(end.getFullYear(), end.getMonth(), 1);
+  const cur  = new Date((startDate || firstOfYear()).slice(0, 7) + '-01');
+  while (cur <= endM) {
+    const k = `${cur.getFullYear()}-${String(cur.getMonth()+1).padStart(2,'0')}`;
+    if (!seen.has(k)) { seen.add(k); months.push(k); }
+    cur.setMonth(cur.getMonth() + 1);
+  }
+  return months;
+};
+
+// Agrega trend_data con granularidad dinámica según el rango de fechas
+const aggregateTrend = (items, startDate = null, endDate = null) => {
   if (!items?.length) return [];
+  const g = getGranularity(startDate, endDate);
   const map = {};
   items.forEach(({ t }) => {
-    const d = t.slice(0, 10);
+    const d = (typeof t === 'string' ? t : new Date(t).toISOString()).slice(0, 10);
     if (startDate && d < startDate) return;
     if (endDate   && d > endDate)   return;
-    const k = getIsoWeekKey(t);
+    const k = g === 'day' ? getDayKey(t) : g === 'week' ? getIsoWeekKey(t) : getMonthKey(t);
     map[k] = (map[k] || 0) + 1;
   });
-  return Object.entries(map)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([k, v]) => ({ t: k, v, label: getWeekLabel(k) }));
+  return Object.entries(map).sort(([a],[b]) => a.localeCompare(b)).map(([k, v]) => ({
+    t: k, v,
+    label: g === 'day' ? getDayLabel(k) : g === 'week' ? getWeekLabel(k) : getMonthLabel(k),
+  }));
 };
 
 const weeksInPeriod = (s, e) => {
@@ -90,11 +124,7 @@ const agg = (rows, weeks) => {
   const kpi   = valid.length ? Math.round(valid.reduce((s, r) => s + r.kpi_pct, 0) / valid.length) : null;
   const capR  = weeks > 0 ? Math.round((total / weeks) * 10) / 10 : 0;
   const trend = rows.flatMap(r => r.trend_data || []);
-  const sz    = rows.reduce((a, r) => ({
-    xs: a.xs + (r.size_dist?.xs || 0), s: a.s + (r.size_dist?.s || 0),
-    m:  a.m  + (r.size_dist?.m  || 0), l: a.l + (r.size_dist?.l  || 0),
-  }), { xs: 0, s: 0, m: 0, l: 0 });
-  return { total, late, kpi, capR, trend, sz };
+  return { total, late, kpi, capR, trend };
 };
 
 // Color estable por assignee_id
@@ -136,18 +166,6 @@ const AvatarCell = ({ name, src, size = 26 }) => {
   return <div style={{ width: size, height: size, borderRadius: '50%', background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.38, fontWeight: 700, color: 'white', flexShrink: 0 }}>{init}</div>;
 };
 
-const SizingChart = ({ dist }) => {
-  if (!dist) return <span style={{ color: '#cbd5e1', fontSize: 11 }}>—</span>;
-  const data = [{ name: 'XS', v: dist.xs }, { name: 'S', v: dist.s }, { name: 'M', v: dist.m }, { name: 'L', v: dist.l }];
-  if (data.every(d => d.v === 0)) return <span style={{ color: '#cbd5e1', fontSize: 11 }}>—</span>;
-  return (
-    <BarChart width={72} height={46} data={data} margin={{ top: 2, right: 0, bottom: 14, left: 0 }}>
-      <XAxis dataKey="name" tick={{ fontSize: 8, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-      <RechartTooltip contentStyle={{ fontSize: 10, padding: '2px 8px', borderRadius: 6 }} formatter={(v, n) => [v, n]} />
-      <Bar dataKey="v" radius={[2, 2, 0, 0]}>{data.map((_, i) => <Cell key={i} fill={TALLAJE_COLORS[i]} />)}</Bar>
-    </BarChart>
-  );
-};
 
 const Sparkline = ({ data, color = '#6366f1' }) => {
   if (!data?.length) return <span style={{ color: '#cbd5e1', fontSize: 11 }}>—</span>;
@@ -169,10 +187,28 @@ const Sparkline = ({ data, color = '#6366f1' }) => {
   );
 };
 
-// ─── Gráfico de tendencia semanal (respeta el rango de fechas del filtro) ─────
+// ─── Gráfico de tendencia (granularidad dinámica según rango) ─────────────────
 
 const WeeklyChart = ({ rows, capacities, chartPerson, setChartPerson, startDate, endDate }) => {
-  const rangeWeeks = useMemo(() => getWeeksInRange(startDate, endDate), [startDate, endDate]);
+  const granularity = useMemo(() => getGranularity(startDate, endDate), [startDate, endDate]);
+
+  const rangePoints = useMemo(() => {
+    if (granularity === 'day')  return getDaysInRange(startDate, endDate);
+    if (granularity === 'week') return getWeeksInRange(startDate, endDate);
+    return getMonthsInRange(startDate, endDate);
+  }, [granularity, startDate, endDate]);
+
+  const getPointLabel = useCallback((k) => {
+    if (granularity === 'day')  return getDayLabel(k);
+    if (granularity === 'week') return getWeekLabel(k);
+    return getMonthLabel(k);
+  }, [granularity]);
+
+  const getPointKey = useCallback((t) => {
+    if (granularity === 'day')  return getDayKey(t);
+    if (granularity === 'week') return getIsoWeekKey(t);
+    return getMonthKey(t);
+  }, [granularity]);
 
   const persons = useMemo(() => {
     const map = {};
@@ -187,18 +223,16 @@ const WeeklyChart = ({ rows, capacities, chartPerson, setChartPerson, startDate,
 
   const visible = chartPerson === 'all' ? persons : persons.filter(r => String(r.assignee_id) === chartPerson);
 
-  const chartData = useMemo(() => rangeWeeks.map(wk => {
-    const pt = { week: getWeekLabel(wk) };
+  const chartData = useMemo(() => rangePoints.map(pt => {
+    const point = { week: getPointLabel(pt) };
     visible.forEach(r => {
-      pt[r.assignee_name] = (r.trend_data || []).filter(({ t }) => {
-        const d = t.slice(0, 10);
-        return getIsoWeekKey(t) === wk
-          && (!startDate || d >= startDate)
-          && (!endDate   || d <= endDate);
+      point[r.assignee_name] = (r.trend_data || []).filter(({ t }) => {
+        const d = (typeof t === 'string' ? t : new Date(t).toISOString()).slice(0, 10);
+        return getPointKey(t) === pt && (!startDate || d >= startDate) && (!endDate || d <= endDate);
       }).length;
     });
-    return pt;
-  }), [rangeWeeks, visible, startDate, endDate]);
+    return point;
+  }), [rangePoints, visible, startDate, endDate, getPointLabel, getPointKey]);
 
   const selRow = chartPerson !== 'all' ? visible[0] : null;
   const refCap = selRow ? (capacities[String(selRow.assignee_id)] || null) : null;
@@ -206,13 +240,16 @@ const WeeklyChart = ({ rows, capacities, chartPerson, setChartPerson, startDate,
   if (!persons.length) return null;
 
   const periodLabel = startDate && endDate ? `${startDate} → ${endDate}` : 'Período seleccionado';
+  const periodTitle = granularity === 'day' ? 'Completadas por día'
+    : granularity === 'week' ? 'Completadas por semana' : 'Completadas por mes';
+  const periodUnit = granularity === 'day' ? 'día' : granularity === 'week' ? 'semana' : 'mes';
 
   return (
     <div style={{ background: 'white', borderRadius: 12, border: '1px solid #e2e8f0', padding: '20px 24px', marginTop: 16, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
         <div>
-          <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a' }}>Completadas por semana</div>
-          <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{periodLabel} · {rangeWeeks.length} semana{rangeWeeks.length !== 1 ? 's' : ''}</div>
+          <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a' }}>{periodTitle}</div>
+          <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{periodLabel} · {rangePoints.length} {periodUnit}{rangePoints.length !== 1 ? 's' : ''}</div>
         </div>
         <select value={chartPerson} onChange={e => setChartPerson(e.target.value)}
           style={{ padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 12, color: '#334155', background: 'white', cursor: 'pointer', outline: 'none' }}>
@@ -223,7 +260,7 @@ const WeeklyChart = ({ rows, capacities, chartPerson, setChartPerson, startDate,
       <ResponsiveContainer width="100%" height={220}>
         <LineChart data={chartData} margin={{ top: 8, right: 40, bottom: 0, left: -10 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-          <XAxis dataKey="week" tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} interval={rangeWeeks.length > 16 ? Math.floor(rangeWeeks.length / 12) : 0} />
+          <XAxis dataKey="week" tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} interval={rangePoints.length > 16 ? Math.floor(rangePoints.length / 12) : 0} />
           <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} allowDecimals={false} width={28} />
           <RechartTooltip contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid #e2e8f0', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }} />
           {visible.map((r, i) => (
@@ -271,7 +308,6 @@ const SkeletonRow = ({ bg = 'white', pl = 0 }) => (
       </div>
     </TD>
     <TD style={{ textAlign: 'center' }}><div className="pd-skel" style={{ height: 12, width: 22, margin: '0 auto' }} /></TD>
-    <TD><div className="pd-skel" style={{ width: 72, height: 46, borderRadius: 4 }} /></TD>
     <TD><div className="pd-skel" style={{ width: 136, height: 46, borderRadius: 4 }} /></TD>
     <TD><div className="pd-skel" style={{ width: 96, height: 22, borderRadius: 999 }} /></TD>
     <TD><div className="pd-skel" style={{ width: 56, height: 28, borderRadius: 4, margin: '0 auto' }} /></TD>
@@ -281,7 +317,7 @@ const SkeletonRow = ({ bg = 'white', pl = 0 }) => (
 // ─── Nivel 3: Colaborador ─────────────────────────────────────────────────────
 
 const PersonRow = ({ row, weeks, capacities, startDate, endDate }) => {
-  const trend      = useMemo(() => aggregateTrendWeekly(row.trend_data, startDate, endDate), [row.trend_data, startDate, endDate]);
+  const trend      = useMemo(() => aggregateTrend(row.trend_data, startDate, endDate), [row.trend_data, startDate, endDate]);
   const isUnassign = !row.assignee_id;
   const capTarget  = isUnassign ? null : (capacities[String(row.assignee_id)] || null);
   const capReal    = Math.round((row.total_closed / weeks) * 10) / 10;
@@ -305,7 +341,6 @@ const PersonRow = ({ row, weeks, capacities, startDate, endDate }) => {
           <div style={{ fontSize: 10, color: '#f97316', marginTop: 1 }}>{row.late_count} tarde</div>
         )}
       </TD>
-      <TD><SizingChart dist={row.size_dist} /></TD>
       <TD><Sparkline data={trend} color={color} /></TD>
       <TD>{isUnassign ? <span style={{ color: '#94a3b8', fontSize: 12 }}>—</span> : <KpiBadge pct={row.kpi_pct} />}</TD>
       <TD style={{ textAlign: 'center' }}>
@@ -330,7 +365,7 @@ const PersonRow = ({ row, weeks, capacities, startDate, endDate }) => {
 const FrenteSection = ({ label, rows, isNoFrente, weeks, capacities, startDate, endDate }) => {
   const [expanded, setExpanded] = useState(true);
   const a     = useMemo(() => agg(rows, weeks), [rows, weeks]);
-  const trend = useMemo(() => aggregateTrendWeekly(a.trend, startDate, endDate), [a.trend, startDate, endDate]);
+  const trend = useMemo(() => aggregateTrend(a.trend, startDate, endDate), [a.trend, startDate, endDate]);
   const hasNoAssignee = rows.every(r => !r.assignee_id);
 
   return (
@@ -350,7 +385,6 @@ const FrenteSection = ({ label, rows, isNoFrente, weeks, capacities, startDate, 
           <span style={{ fontWeight: 700, fontSize: 13, color: '#0f172a' }}>{a.total}</span>
           {a.late > 0 && <div style={{ fontSize: 10, color: '#f97316', marginTop: 1 }}>{a.late} tarde</div>}
         </TD>
-        <TD><SizingChart dist={a.sz} /></TD>
         <TD><Sparkline data={trend} color="#64748b" /></TD>
         <TD>{hasNoAssignee ? <span style={{ color: '#94a3b8', fontSize: 12 }}>—</span> : <KpiBadge pct={a.kpi} />}</TD>
         <TD style={{ textAlign: 'center' }}>
@@ -375,7 +409,7 @@ const EnvironmentSection = ({ env, weeks, capacities, startDate, endDate }) => {
   const [expanded, setExpanded] = useState(true);
   const allRows = useMemo(() => env.frentes.flatMap(f => f.rows), [env.frentes]);
   const a     = useMemo(() => agg(allRows, weeks), [allRows, weeks]);
-  const trend = useMemo(() => aggregateTrendWeekly(a.trend, startDate, endDate), [a.trend, startDate, endDate]);
+  const trend = useMemo(() => aggregateTrend(a.trend, startDate, endDate), [a.trend, startDate, endDate]);
   const color = env.environment_color || '#6366f1';
 
   return (
@@ -396,7 +430,6 @@ const EnvironmentSection = ({ env, weeks, capacities, startDate, endDate }) => {
           <span style={{ fontWeight: 800, fontSize: 14, color: '#0f172a' }}>{a.total}</span>
           {a.late > 0 && <div style={{ fontSize: 10, color: '#f97316', marginTop: 1 }}>{a.late} tarde</div>}
         </TD>
-        <TD><SizingChart dist={a.sz} /></TD>
         <TD><Sparkline data={trend} color={color} /></TD>
         <TD><KpiBadge pct={a.kpi} /></TD>
         <TD style={{ textAlign: 'center' }}>
@@ -425,7 +458,7 @@ const EnvironmentSection = ({ env, weeks, capacities, startDate, endDate }) => {
 const SummaryRow = ({ rows, weeks, byEnv, capacities, startDate, endDate }) => {
   const [expanded, setExpanded] = useState(true);
   const a     = useMemo(() => agg(rows, weeks), [rows, weeks]);
-  const trend = useMemo(() => aggregateTrendWeekly(a.trend, startDate, endDate), [a.trend, startDate, endDate]);
+  const trend = useMemo(() => aggregateTrend(a.trend, startDate, endDate), [a.trend, startDate, endDate]);
 
   return (
     <>
@@ -444,7 +477,6 @@ const SummaryRow = ({ rows, weeks, byEnv, capacities, startDate, endDate }) => {
           <span style={{ fontWeight: 800, fontSize: 15, color: '#0f172a' }}>{a.total}</span>
           {a.late > 0 && <div style={{ fontSize: 10, color: '#f97316', marginTop: 1 }}>{a.late} tarde</div>}
         </TD>
-        <TD><SizingChart dist={a.sz} /></TD>
         <TD><Sparkline data={trend} color="#0f172a" /></TD>
         <TD><KpiBadge pct={a.kpi} /></TD>
         <TD style={{ textAlign: 'center' }}>
@@ -483,15 +515,14 @@ export default function PerformanceDashboard() {
   const { currentUser, currentWorkspace } = useApp();
   const canAccess = ['admin', 'super_admin'].includes(currentUser?.system_role);
 
-  const def = { frente: '', equipo: '', startDate: firstOfYear(), endDate: today() };
+  const def = { equipo: '', startDate: firstOfYear(), endDate: today() };
   const [filters,     setFilters]     = useState(def);
   const [applied,     setApplied]     = useState(def);
   const [rows,        setRows]        = useState([]);
-  const [frenteOpts,  setFrenteOpts]  = useState([]);
   const [loading,     setLoading]     = useState(false);
   const [error,       setError]       = useState('');
   const [chartPerson, setChartPerson] = useState('all');
-  const [areaKpis,    setAreaKpis]    = useState(null);
+  const [rangeKpis,   setRangeKpis]   = useState(null);
   const [kpisLoading, setKpisLoading] = useState(true);
 
   const capacities = useMemo(() => {
@@ -511,11 +542,21 @@ export default function PerformanceDashboard() {
     return Object.values(seen).sort((a, b) => a.name.localeCompare(b.name));
   }, [rows]);
 
-  // Filtro de equipo aplicado client-side (environment_id no llega a Supabase)
   const filteredRows = useMemo(() => {
     if (!applied.equipo) return rows;
     return rows.filter(r => String(r.environment_id) === String(applied.equipo));
   }, [rows, applied.equipo]);
+
+  const velocityPerWeek = useMemo(() => {
+    const total = filteredRows.reduce((s, r) => s + r.total_closed, 0);
+    return weeks > 0 ? Math.round((total / weeks) * 10) / 10 : 0;
+  }, [filteredRows, weeks]);
+
+  const onTimeRate = useMemo(() => {
+    const valid = filteredRows.filter(r => r.kpi_pct != null);
+    if (valid.length < 3) return null;
+    return Math.round(valid.reduce((s, r) => s + r.kpi_pct, 0) / valid.length);
+  }, [filteredRows]);
 
   // Jerarquía: Entorno → Frente → Colaborador (sobre filteredRows)
   const byEnv = useMemo(() => {
@@ -555,43 +596,63 @@ export default function PerformanceDashboard() {
 
   const loadAll = async () => {
     if (!canAccess) return;
-    setLoading(true); setError('');
+    setLoading(true); setKpisLoading(true); setError('');
     try {
-      const wsId = currentWorkspace?.id || null;
-      const [metricsRows, frentes] = await Promise.all([
-        dbPerformance.getMetrics({ workspaceId: wsId, frente: applied.frente || null, startDate: applied.startDate || null, endDate: applied.endDate || null }),
-        dbPerformance.getFrenteOptions(wsId),
-      ]);
+      const wsId  = currentWorkspace?.id || null;
+      const start = applied.startDate || firstOfYear();
+      const end   = applied.endDate   || today();
+
+      // Proyectos activos y bloqueadas (workspace-level)
+      const pq = supabase.from('projects').select('id, end_date')
+        .not('status', 'in', '(completed,cancelled,archived)');
+      if (wsId) pq.eq('workspace_id', wsId);
+
+      const bq = supabase.from('tasks').select('id', { count: 'exact', head: true })
+        .eq('status', 'blocked');
+      if (wsId) bq.eq('workspace_id', wsId);
+
+      const now = new Date();
+      const dow = now.getDay();
+      const mon = new Date(now);
+      mon.setDate(now.getDate() - (dow === 0 ? 6 : dow - 1));
+      const thisWeekStart = mon.toISOString().slice(0, 10);
+      const twq = supabase.from('tasks').select('id', { count: 'exact', head: true })
+        .eq('status', 'completed').gte('closed_at', thisWeekStart).lte('closed_at', today());
+      if (wsId) twq.eq('workspace_id', wsId);
+
+      const [metricsRows, { data: activeProjects }, { count: blockedCount }, { count: thisWeekCount }] =
+        await Promise.all([
+          dbPerformance.getMetrics({ workspaceId: wsId, startDate: start, endDate: end }),
+          pq, bq, twq,
+        ]);
+
       setRows(metricsRows);
-      setFrenteOpts(frentes);
+      const completedInRange = (activeProjects || []).filter(
+        p => p.end_date && p.end_date >= start && p.end_date <= end
+      ).length;
+      setRangeKpis({
+        totalActiveProjects: (activeProjects || []).length,
+        completedInRange,
+        blockedCount: blockedCount || 0,
+        thisWeekCount: thisWeekCount || 0,
+      });
     } catch (e) {
       console.error('[PerformanceDashboard]', e);
       setError(e.message || 'Error cargando métricas');
     } finally {
-      setLoading(false);
+      setLoading(false); setKpisLoading(false);
     }
   };
 
-  useEffect(() => { loadAll(); }, [applied.frente, applied.startDate, applied.endDate, currentWorkspace?.id]);
-
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      setKpisLoading(true);
-      try {
-        const base = await getGlobalMetrics(currentUser?.id, currentUser?.system_role);
-        if (!cancelled) setAreaKpis(computeAreaKpisFromData(base.projects || [], base.tasks || []));
-      } catch (e) { console.error('[PerformanceDashboard] KPIs', e); }
-      finally { if (!cancelled) setKpisLoading(false); }
-    };
-    load(); return () => { cancelled = true; };
-  }, [currentUser?.id]);
+  useEffect(() => { loadAll(); }, [applied.startDate, applied.endDate, currentWorkspace?.id]);
 
   const set = (k, v) => setFilters(f => ({ ...f, [k]: v }));
 
   if (!canAccess) return null;
 
   const totalColabs = filteredRows.length;
+  const progresoPercent = rangeKpis && rangeKpis.totalActiveProjects > 0
+    ? Math.round(rangeKpis.completedInRange / rangeKpis.totalActiveProjects * 100) : 0;
 
   return (
     <div style={{ padding: '20px 24px', fontFamily: 'inherit', maxWidth: 1400, margin: '0 auto' }}>
@@ -616,43 +677,40 @@ export default function PerformanceDashboard() {
 
       {/* ── KPIs del área ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(210px,1fr))', gap: 12, marginBottom: 20 }}>
+        {/* Progreso */}
         <div style={{ background: 'white', borderRadius: 12, padding: '16px 20px', border: '1px solid #f1f5f9', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8 }}>Progreso del área</div>
-          <div style={{ fontSize: 28, fontWeight: 800, color: '#0f172a', lineHeight: 1, marginBottom: 6 }}>{kpisLoading ? '—' : `${areaKpis?.weightedProgress ?? 0}%`}</div>
+          <div style={{ fontSize: 28, fontWeight: 800, color: '#0f172a', lineHeight: 1, marginBottom: 6 }}>{kpisLoading ? '—' : `${progresoPercent}%`}</div>
           <div style={{ height: 5, background: '#e2e8f0', borderRadius: 3, overflow: 'hidden' }}>
-            <div style={{ height: '100%', width: `${kpisLoading ? 0 : Math.min(100, areaKpis?.weightedProgress ?? 0)}%`, background: '#6366f1', borderRadius: 3, transition: 'width 0.5s' }} />
+            <div style={{ height: '100%', width: `${kpisLoading ? 0 : Math.min(100, progresoPercent)}%`, background: '#6366f1', borderRadius: 3, transition: 'width 0.5s' }} />
           </div>
           <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 5 }}>
-            {kpisLoading ? '' : `${areaKpis?.activeProjectsCount ?? 0} proyecto${areaKpis?.activeProjectsCount !== 1 ? 's' : ''} activo${areaKpis?.activeProjectsCount !== 1 ? 's' : ''}`}
+            {kpisLoading ? '' : `${rangeKpis?.completedInRange ?? 0} de ${rangeKpis?.totalActiveProjects ?? 0} proyecto${rangeKpis?.totalActiveProjects !== 1 ? 's' : ''}`}
           </div>
         </div>
 
-        {(() => {
-          const v = areaKpis?.weeklyVelocity;
-          const icon = !v ? '→' : v.trend === 'up' ? '↑' : v.trend === 'down' ? '↓' : '→';
-          const col  = !v ? '#94a3b8' : v.trend === 'up' ? '#16a34a' : v.trend === 'down' ? '#dc2626' : '#64748b';
-          return (
-            <div style={{ background: 'white', borderRadius: 12, padding: '16px 20px', border: '1px solid #f1f5f9', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8 }}>Velocidad semanal</div>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                <span style={{ fontSize: 28, fontWeight: 800, color: '#0f172a', lineHeight: 1 }}>{kpisLoading ? '—' : (v?.current ?? 0)}</span>
-                {!kpisLoading && <span style={{ fontSize: 20, fontWeight: 800, color: col }}>{icon}</span>}
-              </div>
-              <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 5 }}>{kpisLoading ? '' : `Esta semana · anterior: ${v?.previous ?? 0}`}</div>
-            </div>
-          );
-        })()}
+        {/* Velocidad semanal */}
+        <div style={{ background: 'white', borderRadius: 12, padding: '16px 20px', border: '1px solid #f1f5f9', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8 }}>Velocidad semanal</div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+            <span style={{ fontSize: 28, fontWeight: 800, color: '#0f172a', lineHeight: 1 }}>{kpisLoading ? '—' : velocityPerWeek}</span>
+            {!kpisLoading && <span style={{ fontSize: 12, color: '#94a3b8' }}>/sem</span>}
+          </div>
+          <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 5 }}>{kpisLoading ? '' : `Esta semana: ${rangeKpis?.thisWeekCount ?? 0}`}</div>
+        </div>
 
+        {/* Cumplimiento */}
         <div style={{ background: 'white', borderRadius: 12, padding: '16px 20px', border: '1px solid #f1f5f9', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8 }}>Cumplimiento de fechas</div>
-          <div style={{ fontSize: 28, fontWeight: 800, lineHeight: 1, marginBottom: 4, color: kpisLoading ? '#94a3b8' : (areaKpis?.onTimeRate == null ? '#94a3b8' : areaKpis.onTimeRate >= 70 ? '#16a34a' : areaKpis.onTimeRate >= 50 ? '#f59e0b' : '#dc2626') }}>
-            {kpisLoading ? '—' : (areaKpis?.onTimeRate == null ? '—' : `${areaKpis.onTimeRate}%`)}
+          <div style={{ fontSize: 28, fontWeight: 800, lineHeight: 1, marginBottom: 4, color: kpisLoading ? '#94a3b8' : (onTimeRate == null ? '#94a3b8' : onTimeRate >= 70 ? '#16a34a' : onTimeRate >= 50 ? '#f59e0b' : '#dc2626') }}>
+            {kpisLoading ? '—' : (onTimeRate == null ? '—' : `${onTimeRate}%`)}
           </div>
-          <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{kpisLoading ? '' : (areaKpis?.onTimeRate == null ? 'Sin datos suficientes' : 'A tiempo · últimos 30 días')}</div>
+          <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{kpisLoading ? '' : (onTimeRate == null ? 'Sin datos suficientes' : 'A tiempo en el período')}</div>
         </div>
 
+        {/* Bloqueadas */}
         {(() => {
-          const blocked = areaKpis?.blockedActive ?? 0;
+          const blocked = rangeKpis?.blockedCount ?? 0;
           const alert = !kpisLoading && blocked > 0;
           return (
             <div style={{ background: alert ? '#fff7ed' : 'white', borderRadius: 12, padding: '16px 20px', border: `1px solid ${alert ? '#fed7aa' : '#f1f5f9'}`, boxShadow: '0 1px 3px rgba(0,0,0,0.06)', transition: 'background 0.3s' }}>
@@ -675,12 +733,6 @@ export default function PerformanceDashboard() {
             {equipoOpts.map(e => <option key={e.id} value={String(e.id)}>{e.name}</option>)}
           </select>
         </FF>
-        <FF label="Frente">
-          <select value={filters.frente} onChange={e => set('frente', e.target.value)} style={SEL}>
-            <option value="">Todos</option>
-            {frenteOpts.map(f => <option key={f} value={f}>{f}</option>)}
-          </select>
-        </FF>
         <FF label="Ini.">
           <input type="date" value={filters.startDate} onChange={e => set('startDate', e.target.value)} style={SEL} />
         </FF>
@@ -701,12 +753,11 @@ export default function PerformanceDashboard() {
           </div>
         ) : (
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 720 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 620 }}>
               <thead>
                 <tr>
                   <TH width="220px">Colaborador</TH>
                   <TH width="70px" align="center">FIN.</TH>
-                  <TH width="90px">Tallaje</TH>
                   <TH width="148px">Tendencia</TH>
                   <TH width="140px">KPI Cumpl.</TH>
                   <TH width="100px" align="center">Cap. Real</TH>
@@ -724,7 +775,7 @@ export default function PerformanceDashboard() {
                     <SkeletonRow bg="white"   pl={48} />
                   </>
                 ) : filteredRows.length === 0 ? (
-                  <tr><td colSpan={6} style={{ padding: '60px', textAlign: 'center', color: '#94a3b8', fontSize: 14 }}>Sin datos para el período seleccionado.</td></tr>
+                  <tr><td colSpan={5} style={{ padding: '60px', textAlign: 'center', color: '#94a3b8', fontSize: 14 }}>Sin datos para el período seleccionado.</td></tr>
                 ) : (
                   <SummaryRow
                     rows={filteredRows}
