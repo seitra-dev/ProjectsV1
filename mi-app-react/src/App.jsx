@@ -1156,7 +1156,8 @@ function ResetPasswordScreen({ onDone }) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
-  const [sessionReady, setSessionReady] = useState(false); // NUEVO
+  const [sessionReady, setSessionReady] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
 
   
   useEffect(() => {
@@ -1177,6 +1178,7 @@ function ResetPasswordScreen({ onDone }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setSubmitted(true);
     setError('');
     if (!sessionReady) {
       setError('El enlace de recuperación no es válido o ya expiró. Solicita uno nuevo.');
