@@ -36,6 +36,7 @@ import SelectEnvironmentPrompt from './components/SelectEnvironmentPrompt';
 import EditProjectModal from './components/EditProjectModal';
 import { TASK_STATUSES, TASK_STATUS_DROPDOWN, PROJECT_STATUS_DROPDOWN, getTaskStatus, getProjectStatus } from './constants/statuses';
 import StatusBadge from './components/shared/StatusBadge';
+import { supabase } from '../supabaseClient';
 
 
 // ============================================================================
@@ -496,7 +497,7 @@ if (isTransitioning) {
   );
 }
 
-  if (isRecoveryMode) return <ResetPasswordScreen onDone={() => { setIsRecoveryMode(false); window.location.hash = ''; }} />;
+  if (isRecoveryMode) return <ResetPasswordScreen onDone={() => { setIsRecoveryMode(false); window.history.replaceState({}, '', window.location.origin); }} />;
   if (showLanding) return <LandingPage onGetStarted={handleGetStarted} />;
   if (!currentUser) return <LoginScreen onLogin={handleLogin} onShowLanding={() => setShowLanding(true)} />;
   return (
@@ -1161,22 +1162,30 @@ function ResetPasswordScreen({ onDone }) {
 
   
   useEffect(() => {
-  const code = new URLSearchParams(window.location.search).get('code');
-  if (code) {
-    supabase.auth.exchangeCodeForSession(code).then(({ data, error }) => {
-      if (error) {
-        setError('El enlace expiró o ya fue usado. Solicita uno nuevo.');
-      } else if (data?.session) {
+    let cancelled = false;
+
+    // En PKCE, el SDK intercambia el ?code= automáticamente al inicializar
+    // (detectSessionInUrl: true por defecto). Llamarlo de nuevo consumiría un
+    // código ya usado y devolvería error de "expirado". Nos limitamos a leer
+    // la sesión que el SDK ya estableció, o esperar el evento si aún está en curso.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, sess) => {
+      if (cancelled) return;
+      if ((event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN') && sess) {
         setSessionReady(true);
+        setError('');
       }
     });
-  } else {
-    // fallback para links viejos con hash
+
     supabase.auth.getSession().then(({ data: { session } }) => {
+      if (cancelled) return;
       if (session) setSessionReady(true);
     });
-  }
-}, []);
+
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
