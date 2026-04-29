@@ -240,6 +240,7 @@ const toDbProject = (project) => {
   if (project.name !== undefined) db.name = project.name;
   if (project.description !== undefined) db.description = project.description;
   if (project.status !== undefined) db.status = project.status;
+  if (project.priority !== undefined) db.priority = project.priority;
   if (project.color !== undefined) db.color = project.color;
   if (project.startDate !== undefined) db.start_date = project.startDate || null;
   if (project.endDate !== undefined) db.end_date = project.endDate || null;
@@ -258,7 +259,7 @@ const toDbProject = (project) => {
 const mapTask = (row) => {
   if (!row) return null;
   const rawCustom = row.custom_fields != null && typeof row.custom_fields === 'object' ? row.custom_fields : {};
-  const { _checklist, ...userCustomFields } = rawCustom;
+  const { _checklist, _frente, _task_type, ...userCustomFields } = rawCustom;
   return {
     id: row.id,
     title: row.title,
@@ -279,7 +280,8 @@ const mapTask = (row) => {
     customFields: userCustomFields,
     checklist: _checklist || null,
     closedAt: row.closed_at || null,
-    frente: row.frente || null,
+    frente: _frente ?? row.frente ?? null,
+    taskType: _task_type ?? null,
     isDeleted: row.is_deleted === true,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -304,24 +306,36 @@ const toDbTask = (task) => {
   if (task.workspaceId !== undefined) db.workspace_id = task.workspaceId || null;
   if (task.environmentId !== undefined) db.environment_id = task.environmentId || null;
   if ('roadmapPhaseId' in task) db.roadmap_phase_id = task.roadmapPhaseId || null;
-  // Merge user-defined customFields with internal _checklist key
-  const hasChecklist = task.checklist !== undefined;
+  // Merge user-defined customFields with internal reserved keys (_checklist, _frente, _task_type)
+  const hasChecklist  = task.checklist  !== undefined;
   const hasCustomFields = task.customFields !== undefined;
-  if (hasChecklist || hasCustomFields) {
+  const hasFrente     = task.frente     !== undefined;
+  const hasTaskType   = task.taskType   !== undefined;
+  if (hasChecklist || hasCustomFields || hasFrente || hasTaskType) {
     const userFields = task.customFields || {};
     const merged = { ...userFields };
     if (hasChecklist) {
       if (task.checklist) merged._checklist = task.checklist;
       else delete merged._checklist;
     }
+    if (hasFrente) {
+      if (task.frente) merged._frente = task.frente;
+      else delete merged._frente;
+    }
+    if (hasTaskType) {
+      if (task.taskType) merged._task_type = task.taskType;
+      else delete merged._task_type;
+    }
     db.custom_fields = merged;
   }
-  // Auto-track closed_at when status changes
+  // Auto-track closed_at when status changes; preserve existing timestamp on re-saves
   if (task.status !== undefined) {
-    if (task.status === 'completed') db.closed_at = new Date().toISOString();
-    else db.closed_at = null;
+    if (task.status === 'completed') {
+      db.closed_at = task.closedAt || new Date().toISOString();
+    } else {
+      db.closed_at = null;
+    }
   }
-  if (task.frente !== undefined) db.frente = task.frente || null;
   return db;
 };
 
@@ -350,6 +364,12 @@ const mapComment = (row) => {
   };
 };
 
+const toDbComment = (comment) => ({
+  task_id: comment.taskId,
+  user_id: comment.userId,
+  text: comment.content,
+});
+
 // ============================================================================
 // USUARIOS
 // ============================================================================
@@ -359,6 +379,18 @@ export const dbUsers = {
     const { data, error } = await supabase.from('users').select('*').order('created_at', { ascending: false });
     if (error) throw error;
     return (data || []).map(mapUser);
+  },
+  // Devuelve solo los usuarios miembros de un entorno específico, con su rol
+  getByEnvironment: async (environmentId) => {
+    if (!environmentId) return [];
+    const { data, error } = await supabase
+      .from('environment_members')
+      .select('role, user:users(*)')
+      .eq('environment_id', environmentId);
+    if (error) throw error;
+    return (data || [])
+      .filter(m => m.user)
+      .map(m => ({ ...mapUser(m.user), envRole: m.role }));
   },
   getById: async (id) => {
     const { data, error } = await supabase.from('users').select('*').eq('id', id).single();
@@ -594,7 +626,10 @@ export const dbProjects = {
   },
   update: async (id, updates, currentUser = null) => {
     if (currentUser) await setAuditUser(currentUser.id, currentUser.email, currentUser.name);
-    const data = await restFetch(`projects?id=eq.${id}`, 'PATCH', toDbProject(updates));
+    const data = await restFetch(`projects?id=eq.${id}`, 'PATCH', {
+      ...toDbProject(updates),
+      updated_at: new Date().toISOString(),
+    });
     return mapProject(Array.isArray(data) ? data[0] : data);
   },
   delete: async (id, currentUser = null) => {
@@ -708,11 +743,7 @@ export const dbComments = {
     return (data || []).map(mapComment);
   },
   create: async (commentData) => {
-    const data = await restFetch('comments', 'POST', {
-      task_id: commentData.taskId,
-      user_id: commentData.userId,
-      text: commentData.content,
-    });
+    const data = await restFetch('comments', 'POST', toDbComment(commentData));
     return mapComment(Array.isArray(data) ? data[0] : data);
   },
   delete: async (id) => {
@@ -969,60 +1000,90 @@ export const dbPerformance = {
     const start = startDate || '2020-01-01';
     const end   = endDate ? `${endDate}T23:59:59` : '2099-12-31T23:59:59';
 
-    let query = supabase
+    // ── Paso 1: tareas completadas en el workspace y período ──────────────
+    let q = supabase
       .from('tasks')
-      .select('id, assignee_id, closed_at, updated_at, end_date, frente, estimated_hours, assignee:users(id, name, avatar)')
+      .select('id, assignee_id, closed_at, updated_at, end_date, custom_fields, estimated_hours, assignee:users(id, name, avatar)')
       .eq('status', 'completed')
       .eq('is_deleted', false)
-      .or(
-        `and(closed_at.not.is.null,closed_at.gte.${start},closed_at.lte.${end}),` +
-        `and(closed_at.is.null,updated_at.gte.${start},updated_at.lte.${end})`
-      );
+      .gte('updated_at', start)
+      .lte('updated_at', end);
 
-    if (workspaceId) query = query.eq('workspace_id', workspaceId);
-    if (frente)      query = query.eq('frente', frente);
+    if (workspaceId) q = q.eq('workspace_id', workspaceId);
+    if (frente)      q = q.contains('custom_fields', { _frente: frente });
 
-    const { data, error } = await query;
-    if (error) throw error;
+    const { data: tasks, error: tasksErr } = await q;
+    if (tasksErr) throw tasksErr;
 
+    // ── Paso 2: entornos de cada assignee vía environment_members ─────────
+    const assigneeIds = [...new Set((tasks || []).map(t => t.assignee_id).filter(Boolean))];
+    const envByUser = {}; // uid → [{ id, name, color, icon }]
+
+    if (assigneeIds.length > 0) {
+      const { data: memberships } = await supabase
+        .from('environment_members')
+        .select('user_id, env:environments(id, name, color, icon)')
+        .in('user_id', assigneeIds);
+
+      (memberships || []).forEach(m => {
+        if (!m.env) return;
+        const uid = String(m.user_id);
+        if (!envByUser[uid]) envByUser[uid] = [];
+        if (!envByUser[uid].find(e => e.id === m.env.id)) {
+          envByUser[uid].push(m.env);
+        }
+      });
+    }
+
+    const NO_ENV = { id: '__no_env__', name: 'Sin entorno', color: '#94a3b8', icon: null };
+
+    // ── Paso 3: agrupar por (environment_id, frente, assignee_id) ─────────
     const map = {};
-    (data || []).forEach(task => {
-      const aid           = task.assignee_id;           // null = sin asignar
-      const fk            = task.frente || '__nf__';    // group key for frente
-      const key           = `${fk}::${aid || '__na__'}`;
-      const effectiveDate = task.closed_at || task.updated_at;
+    (tasks || []).forEach(task => {
+      const aid  = task.assignee_id;
+      const fk   = task.custom_fields?._frente || '__nf__';
+      const envs = aid
+        ? (envByUser[String(aid)]?.length ? envByUser[String(aid)] : [NO_ENV])
+        : [NO_ENV];
 
-      if (!map[key]) {
-        map[key] = {
-          assignee_id:   aid,
-          assignee_name: aid ? (task.assignee?.name || 'Sin nombre') : 'Sin asignar',
-          avatar:        aid ? (task.assignee?.avatar || null) : null,
-          frente:        task.frente || null,
-          total_closed:  0,
-          // KPI: solo tareas con closed_at real (Fix 1)
-          _on_time:      0,
-          _late:         0,
-          _real_kpi:     0,
-          trend_data:    [],
-          _hours:        [],
-        };
-      }
-      map[key].total_closed++;
-      if (effectiveDate) map[key].trend_data.push({ t: effectiveDate, v: 1 });
-      if (task.estimated_hours != null) map[key]._hours.push(task.estimated_hours);
-      // KPI y tardías solo si closed_at existe (no usar updated_at como fallback)
-      if (task.closed_at && task.end_date) {
-        map[key]._real_kpi++;
-        if (task.closed_at.slice(0, 10) <= task.end_date) map[key]._on_time++;
-        else map[key]._late++;
-      }
+      envs.forEach(env => {
+        const key = `${env.id}::${fk}::${aid || '__na__'}`;
+        if (!map[key]) {
+          map[key] = {
+            environment_id:    env.id,
+            environment_name:  env.name,
+            environment_color: env.color,
+            environment_icon:  env.icon,
+            frente:            task.custom_fields?._frente || null,
+            assignee_id:       aid,
+            assignee_name:     aid ? (task.assignee?.name || 'Sin nombre') : 'Sin asignar',
+            avatar:            aid ? (task.assignee?.avatar || null) : null,
+            total_closed:      0,
+            _on_time:          0,
+            _late:             0,
+            _real_kpi:         0,
+            trend_data:        [],
+            _hours:            [],
+          };
+        }
+        const row = map[key];
+        row.total_closed++;
+        const eff = task.closed_at || task.updated_at;
+        if (eff) row.trend_data.push({ t: eff, v: 1 });
+        if (task.estimated_hours != null) row._hours.push(task.estimated_hours);
+        // KPI: solo contar si closed_at real existe
+        if (task.closed_at && task.end_date) {
+          row._real_kpi++;
+          if (task.closed_at.slice(0, 10) <= task.end_date) row._on_time++;
+          else row._late++;
+        }
+      });
     });
 
     return Object.values(map).map(r => {
       const { _on_time, _late, _real_kpi, _hours, ...rest } = r;
       return {
         ...rest,
-        // null = sin datos reales de closed_at (no mostrar KPI)
         kpi_pct:    (rest.assignee_id && _real_kpi >= 2)
           ? Math.round((_on_time / _real_kpi) * 100)
           : null,
@@ -1039,13 +1100,15 @@ export const dbPerformance = {
   getFrenteOptions: async (workspaceId = null) => {
     let query = supabase
       .from('tasks')
-      .select('frente')
-      .not('frente', 'is', null)
-      .neq('frente', '');
+      .select('custom_fields')
+      .not('custom_fields', 'is', null);
     if (workspaceId) query = query.eq('workspace_id', workspaceId);
     const { data, error } = await query;
     if (error) throw error;
-    return [...new Set((data || []).map(r => r.frente))].sort();
+    const values = (data || [])
+      .map(r => r.custom_fields?._frente)
+      .filter(v => typeof v === 'string' && v.trim());
+    return [...new Set(values)].sort();
   },
 
   getTallajeDistribution: async ({ environmentId, startDate, endDate } = {}) => {

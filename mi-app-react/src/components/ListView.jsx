@@ -6,7 +6,7 @@ import CustomFieldsManager from './CustomFields/CustomFieldsManager';
 import CustomFieldCell from './CustomFields/CustomFieldCell';
 import {
   ChevronRight, Flag, X, GripVertical,
-  MoreVertical, Pencil, Trash2, Plus, Clock, Eye
+  Trash2, Plus, Clock, Eye
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { DESIGN_TOKENS } from '../styles/tokens';
@@ -338,6 +338,28 @@ const SortableTaskRow = ({
                   {task.title}
                 </div>
               );
+            case 'tipo_tarea': {
+              const TASK_TYPE_OPTIONS = {
+                seguimiento: { label: 'Seguimiento', color: '#2563eb', bg: '#eff6ff' },
+                entregable:  { label: 'Entregable',  color: '#7c3aed', bg: '#f5f3ff' },
+              };
+              const typeOpt = TASK_TYPE_OPTIONS[task.taskType] || null;
+              return isEditing ? (
+                <PillSelect
+                  value={editedTask.taskType || ''}
+                  options={TASK_TYPE_OPTIONS}
+                  onChange={(v) => setEditedTask({ ...editedTask, taskType: v || null })}
+                />
+              ) : typeOpt ? (
+                <div style={{
+                  padding: '4px 10px', background: typeOpt.bg, color: typeOpt.color,
+                  borderRadius: '4px', fontSize: '11px', fontWeight: 600,
+                  textAlign: 'center', whiteSpace: 'nowrap',
+                }}>{typeOpt.label}</div>
+              ) : (
+                <div style={{ color: DESIGN_TOKENS.neutral[400], fontSize: '12px' }}>—</div>
+              );
+            }
             case 'proyecto':
               return isEditing ? (
                 <ArrayPillSelect
@@ -510,11 +532,12 @@ const SortableTaskRow = ({
                 ? editedTask.roadmapPhaseId
                 : rawFieldValue;
 
-              // member_select, roadmap_sync y select → siempre usar CustomFieldCell
+              // member_select, roadmap_sync, select y dependency → siempre usar CustomFieldCell
               if (
                 customField.type === 'member_select' ||
                 customField.type === 'roadmap_sync' ||
-                customField.type === 'select'
+                customField.type === 'select' ||
+                customField.type === 'dependency'
               ) {
                 return (
                   <CustomFieldCell
@@ -733,7 +756,6 @@ function ListView({
   const { currentEnvironment, currentWorkspace, currentUser, canEditTaskDates, membershipMap } = useApp();
   const [listName, setListName] = useState(initialListName);
   const [isEditingName, setIsEditingName] = useState(false);
-  const [showListMenu, setShowListMenu] = useState(false);
   const [weeks, setWeeks] = useState([
   ]);
   const [activeId, setActiveId] = useState(null);
@@ -747,6 +769,7 @@ function ListView({
 
   const [columns, setColumns] = useState([
     { key: 'nombre',       label: 'NOMBRE',       width: '1fr'   },
+    { key: 'tipo_tarea',   label: 'TIPO',         width: '120px' },
     { key: 'proyecto',     label: 'PROYECTO',     width: '150px' },
     { key: 'estado',       label: 'ESTADO',       width: '120px' },
     { key: 'prioridad',    label: 'PRIORIDAD',    width: '120px' },
@@ -756,7 +779,7 @@ function ListView({
   ]);
   const lsHiddenKey = `lv_hidden_${listId || 'default'}`;
   const [visibleColumns, setVisibleColumns] = useState(() => {
-    const allKeys = ['nombre', 'proyecto', 'estado', 'prioridad', 'fecha_inicio', 'fecha_limite', 'asignado'];
+    const allKeys = ['nombre', 'tipo_tarea', 'proyecto', 'estado', 'prioridad', 'fecha_inicio', 'fecha_limite', 'asignado'];
     try {
       const stored = JSON.parse(localStorage.getItem(lsHiddenKey) || '[]');
       return allKeys.filter(k => !stored.includes(k));
@@ -902,14 +925,6 @@ function ListView({
     }
   };
 
-  const handleDeleteList = () => {
-    setShowListMenu(false);
-    setConfirmData({
-      title: '¿Eliminar lista?',
-      message: `La lista "${listName}" y todas sus tareas serán eliminadas permanentemente.`,
-      onConfirm: () => onListDelete(listId),
-    });
-  };
 
   const activeTask = listTasks.find(t => t.id === activeId);
 
@@ -1066,59 +1081,6 @@ function ListView({
               );
             })()}
 
-            <div style={{ position: 'relative' }}>
-              <button
-                onClick={() => setShowListMenu(!showListMenu)}
-                style={{
-                  padding: '10px', background: 'white',
-                  border: `1px solid ${DESIGN_TOKENS.border.color.normal}`,
-                  borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center',
-                }}
-              >
-                <MoreVertical size={18} />
-              </button>
-
-              {showListMenu && (
-                <div style={{
-                  position: 'absolute', top: '100%', right: 0, marginTop: '8px',
-                  background: 'white', border: `1px solid ${DESIGN_TOKENS.border.color.subtle}`,
-                  borderRadius: '8px', boxShadow: DESIGN_TOKENS.shadows.lg,
-                  padding: '6px', minWidth: '180px', zIndex: 100,
-                }}>
-                  <button
-                    onClick={() => { setIsEditingName(true); setShowListMenu(false); }}
-                    style={{
-                      width: '100%', display: 'flex', alignItems: 'center', gap: '12px',
-                      padding: '10px 12px', background: 'none', border: 'none',
-                      borderRadius: '4px', cursor: 'pointer', fontSize: '14px',
-                      fontWeight: 500, color: DESIGN_TOKENS.neutral[700], textAlign: 'left',
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.background = DESIGN_TOKENS.neutral[100]}
-                    onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
-                  >
-                    <Pencil size={16} />
-                    Cambiar el nombre
-                  </button>
-
-                  <div style={{ height: '1px', background: DESIGN_TOKENS.border.color.subtle, margin: '4px 0' }} />
-
-                  <button
-                    onClick={handleDeleteList}
-                    style={{
-                      width: '100%', display: 'flex', alignItems: 'center', gap: '12px',
-                      padding: '10px 12px', background: 'none', border: 'none',
-                      borderRadius: '4px', cursor: 'pointer', fontSize: '14px',
-                      fontWeight: 500, color: DESIGN_TOKENS.danger.base, textAlign: 'left',
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.background = DESIGN_TOKENS.danger.light}
-                    onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
-                  >
-                    <Trash2 size={16} />
-                    Eliminar lista
-                  </button>
-                </div>
-              )}
-            </div>
           </div>
         </div>
 
@@ -1306,6 +1268,7 @@ function ListView({
                             assigneeId: assigneeIdValue || null,
                             startDate: updated.startDate || null,
                             dueDate: updated.endDate || null,
+                            taskType: updated.taskType ?? null,
                             customFields: updated.customFields ?? {},
                             // Preservar checklist al actualizar (se guarda dentro de custom_fields)
                             ...(updated.checklist !== undefined ? { checklist: updated.checklist } : {}),
@@ -1401,7 +1364,7 @@ function ListView({
     </DndContext>
 
     {colMenu && (() => {
-      const STANDARD_COLUMNS = ['nombre', 'proyecto', 'estado', 'prioridad', 'fecha_inicio', 'fecha_limite', 'semana', 'asignado'];
+      const STANDARD_COLUMNS = ['nombre', 'tipo_tarea', 'proyecto', 'estado', 'prioridad', 'fecha_inicio', 'fecha_limite', 'semana', 'asignado'];
       const isCustomField = !STANDARD_COLUMNS.includes(colMenu.col.key);
       const customFieldDef = isCustomField ? currentProject?.customFieldDefinitions?.find(f => f.id === colMenu.col.key) : null;
 

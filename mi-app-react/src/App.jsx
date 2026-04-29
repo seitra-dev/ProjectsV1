@@ -1451,7 +1451,11 @@ useEffect(() => {
   // Tareas - CRUD individual
   const createTask = async (taskData) => {
     try {
-      const created = await dbTasks.create(taskData);
+      const enriched = {
+        ...taskData,
+        workspaceId: taskData.workspaceId ?? currentWorkspace?.id ?? null,
+      };
+      const created = await dbTasks.create(enriched);
       setTasks(prev => [created, ...prev]);
       logActivity('task_created', `Tarea creada: ${created.title}`);
       return created;
@@ -2870,6 +2874,22 @@ function ProjectsView({ projects, createProject, deleteProject, updateProject, u
   const { addToast } = useToast();
   const { currentEnvironment, currentWorkspace } = useApp();
 
+  // Usuarios filtrados al entorno activo
+  const [envMemberSetPV, setEnvMemberSetPV] = useState(null);
+  useEffect(() => {
+    if (!currentEnvironment?.id) { setEnvMemberSetPV(null); return; }
+    supabase.from('environment_members').select('user_id').eq('environment_id', currentEnvironment.id)
+      .then(({ data }) => {
+        if (data && data.length > 0) setEnvMemberSetPV(new Set(data.map(m => String(m.user_id))));
+        else setEnvMemberSetPV(null);
+      })
+      .catch(() => setEnvMemberSetPV(null));
+  }, [currentEnvironment?.id]);
+  const envUsers = useMemo(
+    () => envMemberSetPV ? users.filter(u => envMemberSetPV.has(String(u.id))) : users,
+    [users, envMemberSetPV]
+  );
+
   // Filtrar estrictamente por entorno activo — sin fallback null
   const environmentProjects = currentEnvironment
     ? projects.filter(p => p.environmentId === currentEnvironment.id)
@@ -3023,7 +3043,7 @@ function ProjectsView({ projects, createProject, deleteProject, updateProject, u
       {editingProject && (
         <EditProjectModal
           project={editingProject}
-          users={users}
+          users={envUsers}
           currentUser={currentUser}
           onClose={() => setEditingProject(null)}
           onSave={(updated) => {
@@ -3035,7 +3055,7 @@ function ProjectsView({ projects, createProject, deleteProject, updateProject, u
 
       {showNewProject && (
         <ProjectFormModal
-          users={users}
+          users={envUsers}
           currentUser={currentUser}
           onSave={async (project) => {
             console.log('[ProjectsView] onSave recibido, environmentId:', currentEnvironment?.id, '| workspaceId:', currentWorkspace?.id, '| project.name:', project.name);
@@ -3546,6 +3566,7 @@ function FilterSelect({ value, onChange, options = [], placeholder, avatarMode =
 // PROJECT DETAIL VIEW
 // ============================================================================
 function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTaskUpdate, onTaskDelete, users, comments, onCommentsChange, tags, onTaskClick, onProjectUpdate, patchProjectInState, globalExpediteCheck, onEnsureUserInPool }) {
+  const { currentEnvironment } = useApp();
   const [viewMode, setViewMode] = useState('list');
   const [showNewTask, setShowNewTask] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
@@ -3555,6 +3576,24 @@ function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTask
   const [headerCollapsed, setHeaderCollapsed] = useState(false);
   const [pendingDeleteTask, setPendingDeleteTask] = useState(null);
   const [deletingTask, setDeletingTask] = useState(false);
+
+  // Usuarios filtrados al entorno del proyecto
+  const [envMemberSet, setEnvMemberSet] = useState(null);
+  useEffect(() => {
+    const envId = project?.environmentId || currentEnvironment?.id;
+    if (!envId) { setEnvMemberSet(null); return; }
+    supabase.from('environment_members').select('user_id').eq('environment_id', envId)
+      .then(({ data }) => {
+        if (data && data.length > 0) setEnvMemberSet(new Set(data.map(m => String(m.user_id))));
+        else setEnvMemberSet(null);
+      })
+      .catch(() => setEnvMemberSet(null));
+  }, [project?.environmentId, currentEnvironment?.id]);
+
+  const envUsers = useMemo(
+    () => envMemberSet ? users.filter(u => envMemberSet.has(String(u.id))) : users,
+    [users, envMemberSet]
+  );
 
   // ── Edición inline del proyecto ──────────────────────────────────────────
   const [editingProject, setEditingProject] = useState(false);
@@ -3601,47 +3640,71 @@ function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTask
   }, [tasks]);
 
   const [showMembersModal, setShowMembersModal] = useState(false);
-  const [allSystemUsers, setAllSystemUsers] = useState([]);
-  const [loadingAllUsers, setLoadingAllUsers] = useState(false);
-  const [memberSearch, setMemberSearch] = useState('');
+  const [allModalUsers, setAllModalUsers]   = useState([]);   // todos los usuarios del sistema
+  const [envMemberIds,  setEnvMemberIds]    = useState(null); // Set de IDs del entorno (null = sin filtro)
+  const [loadingModal,  setLoadingModal]    = useState(false);
+  const [memberSearch,  setMemberSearch]    = useState('');
   const { addToast } = useToast();
 
-  // Cargar todos los usuarios del sistema al abrir el modal
+  // Al abrir el modal: cargar todos los usuarios + IDs del entorno por separado
   useEffect(() => {
-    if (!showMembersModal) return;
-    setLoadingAllUsers(true);
-    dbUsers.getAll()
-      .then(data => setAllSystemUsers(data || []))
-      .catch(() => setAllSystemUsers([]))
-      .finally(() => setLoadingAllUsers(false));
-  }, [showMembersModal]);
+    if (!showMembersModal) { setMemberSearch(''); return; }
+    const envId = project?.environmentId || currentEnvironment?.id;
+    setLoadingModal(true);
 
-  // IDs de miembros actuales del proyecto
-  const memberIds = project?.members ?? [];
-  // Objetos usuario de los miembros actuales (busca en allSystemUsers o en users del entorno)
+    const p1 = dbUsers.getAll();
+    // Solo traemos user_id de environment_members — sin joins, evita problemas de RLS
+    const p2 = envId
+      ? supabase.from('environment_members').select('user_id').eq('environment_id', envId)
+      : Promise.resolve({ data: null, error: null });
+
+    Promise.all([p1, p2])
+      .then(([allU, { data: memberships }]) => {
+        setAllModalUsers(allU || []);
+        if (memberships && memberships.length > 0) {
+          setEnvMemberIds(new Set(memberships.map(m => String(m.user_id))));
+        } else {
+          setEnvMemberIds(null); // sin datos de entorno → no filtrar
+        }
+      })
+      .catch(() => { setAllModalUsers([]); setEnvMemberIds(null); })
+      .finally(() => setLoadingModal(false));
+  }, [showMembersModal, project?.environmentId, currentEnvironment?.id]);
+
+  // IDs de miembros actuales del proyecto (normalizado a strings para comparación segura)
+  const memberIds = useMemo(
+    () => (project?.members ?? []).map(String),
+    [project?.members]
+  );
+
+  // "En este proyecto": resuelve IDs contra el pool completo de usuarios
   const projectMembers = useMemo(() => {
-    const pool = allSystemUsers.length > 0 ? allSystemUsers : users;
-    return memberIds.map(id => pool.find(u => u.id === id)).filter(Boolean);
-  }, [memberIds, allSystemUsers, users]);
-  // Todos los usuarios del sistema que aún NO son miembros del proyecto
+    const pool = allModalUsers.length > 0 ? allModalUsers : users;
+    return memberIds.map(id => pool.find(u => String(u.id) === id)).filter(Boolean);
+  }, [memberIds, allModalUsers, users]);
+
+  // "Agregar persona": usuarios del entorno que aún no son miembros del proyecto
   const nonMembers = useMemo(() => {
-    const pool = allSystemUsers.length > 0 ? allSystemUsers : users;
-    const filtered = pool.filter(u => !memberIds.includes(u.id));
-    if (!memberSearch.trim()) return filtered;
+    const pool = allModalUsers.length > 0 ? allModalUsers : users;
+    // Si tenemos IDs del entorno, filtramos; si no, mostramos todos
+    const envPool = envMemberIds
+      ? pool.filter(u => envMemberIds.has(String(u.id)))
+      : pool;
+    const available = envPool.filter(u => !memberIds.includes(String(u.id)));
+    if (!memberSearch.trim()) return available;
     const q = memberSearch.toLowerCase();
-    return filtered.filter(u =>
+    return available.filter(u =>
       u.name?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q)
     );
-  }, [allSystemUsers, users, memberIds, memberSearch]);
+  }, [allModalUsers, users, memberIds, envMemberIds, memberSearch]);
 
   const handleAddMember = async (userId) => {
-    const newMembers = [...memberIds, userId];
+    const newMembers = [...memberIds, String(userId)];
     try {
       const updated = await dbProjects.update(project.id, { members: newMembers });
       patchProjectInState?.({ ...project, ...updated, members: newMembers });
-      // Si el usuario no estaba en el pool del equipo, lo añadimos para que
-      // aparezca de inmediato en los selectores de "Asignado" de las tareas.
-      const addedUser = allSystemUsers.find(u => u.id === userId);
+      const addedUser = allModalUsers.find(u => String(u.id) === String(userId))
+                     || users.find(u => String(u.id) === String(userId));
       if (addedUser) onEnsureUserInPool?.(addedUser);
       addToast('Miembro añadido al proyecto', 'success');
     } catch (err) {
@@ -3650,7 +3713,7 @@ function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTask
   };
 
   const handleRemoveMember = async (userId) => {
-    const newMembers = memberIds.filter(id => id !== userId);
+    const newMembers = memberIds.filter(id => id !== String(userId));
     try {
       const updated = await dbProjects.update(project.id, { members: newMembers });
       patchProjectInState?.({ ...project, ...updated, members: newMembers });
@@ -3884,7 +3947,7 @@ function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTask
                     <label style={labelStyle}>Responsable</label>
                     <select style={{ ...inputStyle, background: 'white', cursor: 'pointer' }} value={editForm.leaderId || ''} onChange={e => fld('leaderId', e.target.value)}>
                       <option value="">— Sin asignar</option>
-                      {users.map(u => <option key={u.id} value={u.id}>{u.name || u.email}</option>)}
+                      {envUsers.map(u => <option key={u.id} value={u.id}>{u.name || u.email}</option>)}
                     </select>
                   </div>
                 </div>
@@ -3989,7 +4052,7 @@ function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTask
             value={filterAssignee}
             onChange={setFilterAssignee}
             placeholder="Todos los asignados"
-            options={users.map(u => ({ key: u.id, label: u.name || u.email, color: '#6366f1' }))}
+            options={envUsers.map(u => ({ key: u.id, label: u.name || u.email, color: '#6366f1' }))}
           />
 
           {isFiltered && (
@@ -4032,10 +4095,6 @@ function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTask
             }}>{projectMembers.length}</span>
           </button>
 
-          <button onClick={() => setShowNewTask(true)} style={primaryButtonStyle}>
-            <ListPlus size={18} />
-            Nueva Tarea
-          </button>
         </div>
       </div>
 
@@ -4229,7 +4288,7 @@ function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTask
                 />
               </div>
 
-              {loadingAllUsers ? (
+              {loadingModal ? (
                 <p style={{ color: '#94a3b8', fontSize: '13px', textAlign: 'center', padding: '12px 0' }}>Cargando usuarios…</p>
               ) : nonMembers.length > 0 ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '220px', overflowY: 'auto' }}>
@@ -4280,7 +4339,7 @@ function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTask
                 </p>
               ) : (
                 <p style={{ color: '#94a3b8', fontSize: '13px', textAlign: 'center', padding: '12px 0' }}>
-                  Todos los usuarios del sistema ya son miembros de este proyecto.
+                  Todos los miembros del entorno ya están en este proyecto.
                 </p>
               )}
             </div>

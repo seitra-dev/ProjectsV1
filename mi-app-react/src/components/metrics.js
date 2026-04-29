@@ -91,29 +91,19 @@ export const getGlobalMetrics = async (userId, userRole) => {
     const wsMap  = Object.fromEntries((workspaces || []).map(w => [w.id, w]));
     const envMap = Object.fromEntries(environments.map(e => [e.id, e]));
 
-    // 3. Proyectos de esos workspaces
-    let rawProjects = [];
-    if (wsIds.length > 0) {
-      const { data } = await supabase
-        .from('projects')
-        .select('*')
-        .in('workspace_id', wsIds)
-        .order('created_at', { ascending: false });
-      rawProjects = data || [];
-    }
+    // 3. Proyectos por workspace y por environment_id directo — en paralelo
+    const [wsProjRes, envProjRes] = await Promise.all([
+      wsIds.length > 0
+        ? supabase.from('projects').select('*').in('workspace_id', wsIds).order('created_at', { ascending: false })
+        : Promise.resolve({ data: [] }),
+      supabase.from('projects').select('*').in('environment_id', envIds).order('created_at', { ascending: false }),
+    ]);
 
-    // También proyectos vinculados directamente por environment_id
-    if (envIds.length > 0) {
-      const { data: directEnvProjects } = await supabase
-        .from('projects')
-        .select('*')
-        .in('environment_id', envIds)
-        .order('created_at', { ascending: false });
-      const seen = new Set(rawProjects.map(p => p.id));
-      (directEnvProjects || []).forEach(p => {
-        if (!seen.has(p.id)) { rawProjects.push(p); seen.add(p.id); }
-      });
-    }
+    let rawProjects = wsProjRes.data || [];
+    const seen = new Set(rawProjects.map(p => p.id));
+    (envProjRes.data || []).forEach(p => {
+      if (!seen.has(p.id)) { rawProjects.push(p); seen.add(p.id); }
+    });
 
     // 4. Tareas con asignado
     const projectIds = rawProjects.map(p => p.id);
