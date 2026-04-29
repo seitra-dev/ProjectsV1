@@ -36,8 +36,6 @@ import SelectEnvironmentPrompt from './components/SelectEnvironmentPrompt';
 import EditProjectModal from './components/EditProjectModal';
 import { TASK_STATUSES, TASK_STATUS_DROPDOWN, PROJECT_STATUS_DROPDOWN, getTaskStatus, getProjectStatus } from './constants/statuses';
 import StatusBadge from './components/shared/StatusBadge';
-import { supabase } from '../supabaseClient';
-
 
 // ============================================================================
 // TOAST NOTIFICATION SYSTEM
