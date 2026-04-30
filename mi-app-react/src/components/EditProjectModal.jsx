@@ -90,7 +90,7 @@ const PRIORITY_OPTIONS = [
 
 const STATUS_OPTIONS = Object.entries(PROJECT_STATUS_DROPDOWN).map(([value, cfg]) => ({ value, label: cfg.label }));
 
-const AREA_OPTIONS = ['TI', 'Crédito', 'Cartera', 'Riesgo', 'Datos', 'Transversal'];
+const AREA_OPTIONS = ['TI', 'Crédito', 'Cartera', 'Riesgo', 'Datos', 'Transversal', 'Interno'];
 
 const DATE_ROLES = ['admin', 'super_admin', 'project_manager'];
 

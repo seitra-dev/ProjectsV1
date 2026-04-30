@@ -317,8 +317,6 @@ const SortableTaskRow = ({ task, projects, users, onUpdate, columns, visibleColu
         return <div style={{ color: '#94a3b8', fontSize: '12px' }}>{task.start_date || '—'}</div>;
       case 'fecha_limite':
         return <div style={{ color: '#94a3b8', fontSize: '12px' }}>{task.due_date || '—'}</div>;
-      case 'semana':
-        return <div style={{ color: '#94a3b8', fontSize: '12px' }}>{task.week || '—'}</div>;
       case 'asignado':
         return assignee ? (
           <div style={{
@@ -490,7 +488,6 @@ function BacklogView() {
     { key: 'prioridad', label: 'PRIORIDAD', width: '120px' },
     { key: 'fecha_inicio', label: 'FECHA INICIO', width: '130px' },
     { key: 'fecha_limite', label: 'FECHA LÍMITE', width: '130px' },
-    { key: 'semana', label: 'SEMANA', width: '120px' },
     { key: 'asignado', label: 'ASIGNADO', width: '150px' },
   ]);
   const [visibleColumns, setVisibleColumns] = useState(

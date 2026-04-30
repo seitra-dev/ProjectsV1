@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import ConfirmModal from './ConfirmModal';
 import HistoryModal from './HistoryModal';
 import { ColumnMenu } from './shared/ColumnMenu';
@@ -342,6 +342,7 @@ const SortableTaskRow = ({
               const TASK_TYPE_OPTIONS = {
                 seguimiento: { label: 'Seguimiento', color: '#2563eb', bg: '#eff6ff' },
                 entregable:  { label: 'Entregable',  color: '#7c3aed', bg: '#f5f3ff' },
+                gestion:     { label: 'Gestión',     color: '#059669', bg: '#ecfdf5' },
               };
               const typeOpt = TASK_TYPE_OPTIONS[task.taskType] || null;
               return isEditing ? (
@@ -475,17 +476,6 @@ const SortableTaskRow = ({
                 )
               ) : (
                 <div style={{ color: DESIGN_TOKENS.neutral[600], fontSize: '12px' }}>{task.endDate || '—'}</div>
-              );
-            case 'semana':
-              return isEditing ? (
-                <ArrayPillSelect
-                  value={editedTask.weekId}
-                  items={weeks}
-                  onChange={(id) => setEditedTask({ ...editedTask, weekId: id })}
-                  placeholder="Semana"
-                />
-              ) : (
-                <div style={{ color: DESIGN_TOKENS.neutral[500], fontSize: '12px' }}>{week?.name || '—'}</div>
               );
             case 'asignado':
               return isEditing ? (
@@ -740,11 +730,13 @@ const SortableTaskRow = ({
 // ============================================================================
 function ListView({
   listId,
+  storageKey,               // clave única para persistir columnas ocultas por proyecto/lista
   listName: initialListName,
   tasks = [],
   projects = [],
   users = [],
   onTasksChange = () => {},
+  onTaskSaved = null,       // callback(savedTask) tras save exitoso en DB — para sincronizar estado global
   onListNameChange = () => {},
   onListDelete = () => {},
   onError = () => {},
@@ -768,7 +760,7 @@ function ListView({
   const savingTaskRef = useRef(false);
 
   const [columns, setColumns] = useState([
-    { key: 'nombre',       label: 'NOMBRE',       width: '1fr'   },
+    { key: 'nombre',       label: 'NOMBRE',       width: 'minmax(300px, 1fr)' },
     { key: 'tipo_tarea',   label: 'TIPO',         width: '120px' },
     { key: 'proyecto',     label: 'PROYECTO',     width: '150px' },
     { key: 'estado',       label: 'ESTADO',       width: '120px' },
@@ -777,7 +769,7 @@ function ListView({
     { key: 'fecha_limite', label: 'FECHA LÍMITE', width: '120px' },
     { key: 'asignado',     label: 'ASIGNADO',     width: '140px' },
   ]);
-  const lsHiddenKey = `lv_hidden_${listId || 'default'}`;
+  const lsHiddenKey = `lv_hidden_${storageKey || listId || 'default'}`;
   const [visibleColumns, setVisibleColumns] = useState(() => {
     const allKeys = ['nombre', 'tipo_tarea', 'proyecto', 'estado', 'prioridad', 'fecha_inicio', 'fecha_limite', 'asignado'];
     try {
@@ -785,6 +777,18 @@ function ListView({
       return allKeys.filter(k => !stored.includes(k));
     } catch { return allKeys; }
   });
+
+  // Ancho mínimo de la tabla: suma de columnas visibles + handle + acciones.
+  // Permite scroll horizontal cuando hay muchas columnas sin comprimir el contenido.
+  const minTableWidth = useMemo(() => {
+    const visCols = columns.filter(c => visibleColumns.includes(c.key));
+    const colsWidth = visCols.reduce((sum, c) => {
+      if (c.key === 'nombre') return sum + 300;
+      const px = parseInt(c.width, 10);
+      return sum + (isNaN(px) ? 140 : px);
+    }, 0);
+    return 24 + colsWidth + 90; // 24 drag-handle + cols + ~90 acciones
+  }, [columns, visibleColumns]);
   const [showHiddenMenu, setShowHiddenMenu] = useState(false);
   const hiddenMenuRef = useRef(null);
   const [draggedCol, setDraggedCol] = useState(null);
@@ -1131,7 +1135,7 @@ function ListView({
           scrollbarWidth: 'thin',
           scrollbarColor: '#e5e7eb transparent',
         }}>
-          <div style={{ minWidth: 'fit-content', width: '100%' }}>
+          <div style={{ minWidth: minTableWidth, width: '100%' }}>
           {/* TABLE HEADER — dynamic columns with drag-and-drop */}
           {(() => {
             const visibleCols = columns.filter(c => visibleColumns.includes(c.key));
@@ -1270,6 +1274,7 @@ function ListView({
                             dueDate: updated.endDate || null,
                             taskType: updated.taskType ?? null,
                             customFields: updated.customFields ?? {},
+                            roadmapPhaseId: updated.roadmapPhaseId ?? null,
                             // Preservar checklist al actualizar (se guarda dentro de custom_fields)
                             ...(updated.checklist !== undefined ? { checklist: updated.checklist } : {}),
                           };
@@ -1278,8 +1283,10 @@ function ListView({
                           onTasksChange(tasks.map(t => t.id === updated.id ? updated : t));
                           try {
                             const result = await dbTasks.update(updated.id, dbPayload, currentUser);
-                            // Sync with actual DB result
+                            // Sync local list with actual DB result
                             onTasksChange(prevTasks.map(t => t.id === result.id ? result : t));
+                            // Sync global tasks state (needed for roadmap, gantt, etc.)
+                            onTaskSaved?.(result);
                           } catch (err) {
                             // Revert on error
                             onTasksChange(prevTasks);
@@ -1364,7 +1371,7 @@ function ListView({
     </DndContext>
 
     {colMenu && (() => {
-      const STANDARD_COLUMNS = ['nombre', 'tipo_tarea', 'proyecto', 'estado', 'prioridad', 'fecha_inicio', 'fecha_limite', 'semana', 'asignado'];
+      const STANDARD_COLUMNS = ['nombre', 'tipo_tarea', 'proyecto', 'estado', 'prioridad', 'fecha_inicio', 'fecha_limite', 'asignado'];
       const isCustomField = !STANDARD_COLUMNS.includes(colMenu.col.key);
       const customFieldDef = isCustomField ? currentProject?.customFieldDefinitions?.find(f => f.id === colMenu.col.key) : null;
 
@@ -1562,14 +1569,6 @@ const NewTaskRow = ({ projects = [], users = [], weeks = [], defaultData = {}, p
         value={taskData.endDate}
         onChange={(e) => setTaskData({ ...taskData, endDate: e.target.value })}
         style={dateInputStyle}
-      />
-
-      {/* SEMANA */}
-      <ArrayPillSelect
-        value={taskData.weekId}
-        items={weeks}
-        onChange={(id) => setTaskData({ ...taskData, weekId: id })}
-        placeholder="Semana"
       />
 
       {/* ASIGNADO — solo miembros del proyecto seleccionado */}
