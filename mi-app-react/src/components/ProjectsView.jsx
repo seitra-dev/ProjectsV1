@@ -176,6 +176,7 @@ const METRIC_COLORS = [
   { color: '#10b981', bg: '#ecfdf5' },
   { color: '#f59e0b', bg: '#fffbeb' },
   { color: '#ef4444', bg: '#fef2f2' },
+  { color: '#64748b', bg: '#f1f5f9' },
 ];
 const KpiCard = ({ label, value, icon, colorIdx = 0, loading }) => {
   const { color, bg } = METRIC_COLORS[colorIdx];
@@ -373,7 +374,6 @@ export default function ProjectsView({ selectedEnvironment, onRefresh: externalR
   // ── Datos ─────────────────────────────────────────────────────────────────
   const [rawProjects, setRawProjects] = useState([]);
   const [rawTasks,    setRawTasks]    = useState([]);
-  const [kpis,        setKpis]        = useState({});
   const [users,       setUsers]       = useState([]);
   const [workspaces,  setWorkspaces]  = useState([]);
   const [envList,     setEnvList]     = useState([]);   // entornos visibles
@@ -410,7 +410,6 @@ export default function ProjectsView({ selectedEnvironment, onRefresh: externalR
 
       setRawProjects(metricsData.projects || []);
       setRawTasks(metricsData.tasks || []);
-      setKpis(metricsData);
       setUsers(usersData);
       setWorkspaces(metricsData.workspaces || []);
       setEnvList(metricsData.environments || []);
@@ -478,6 +477,13 @@ export default function ProjectsView({ selectedEnvironment, onRefresh: externalR
     });
   }, [rawProjects, rawTasks, wsMap]);
 
+  // helper: un proyecto es "general" si no tiene equipo/entorno asignado
+  const isGeneral = (p) => {
+    const envId   = p._environment?.id || p.environment_id;
+    const wsEnvId = p._workspace?.environment_id;
+    return !envId && !wsEnvId;
+  };
+
   // ── Filtros aplicados ─────────────────────────────────────────────────────
   const filtered = useMemo(() => {
     let list = hierarchy;
@@ -486,7 +492,8 @@ export default function ProjectsView({ selectedEnvironment, onRefresh: externalR
     if (filterEnv      !== 'all') list = list.filter(p => {
       const envId   = p._environment?.id || p.environment_id;
       const wsEnvId = p._workspace?.environment_id;
-      return envId === filterEnv || wsEnvId === filterEnv;
+      // incluir proyectos del equipo seleccionado + proyectos generales (sin equipo)
+      return envId === filterEnv || wsEnvId === filterEnv || isGeneral(p);
     });
     if (searchText.trim()) {
       const q = searchText.toLowerCase();
@@ -494,6 +501,29 @@ export default function ProjectsView({ selectedEnvironment, onRefresh: externalR
     }
     return list;
   }, [hierarchy, filterStatus, filterPriority, filterEnv, searchText]);
+
+  // KPIs calculados del entorno seleccionado (+ generales); ignora status/priority/search
+  const envKpis = useMemo(() => {
+    let projs = hierarchy;
+    if (filterEnv !== 'all') {
+      projs = projs.filter(p => {
+        const envId   = p._environment?.id || p.environment_id;
+        const wsEnvId = p._workspace?.environment_id;
+        return envId === filterEnv || wsEnvId === filterEnv || isGeneral(p);
+      });
+    }
+    const projIds = new Set(projs.map(p => p.id));
+    const tasks = rawTasks.filter(t => projIds.has(t.project_id) && !t.is_deleted && !t.parent_id);
+    return {
+      totalProjects:  projs.length,
+      totalMilestones: projs.reduce((sum, p) => sum + (p._phases?.length || 0), 0),
+      totalTasks:     tasks.length,
+      completed:      tasks.filter(t => t.status === 'completed').length,
+      inProgress:     tasks.filter(t => t.status === 'in_progress').length,
+      highPriority:   tasks.filter(t => t.priority === 'high' || t.priority === 'urgent').length,
+      backlog:        projs.filter(p => (p.status || '') === 'backlog').length,
+    };
+  }, [hierarchy, rawTasks, filterEnv]);
 
   // ── Toggle helpers ────────────────────────────────────────────────────────
   const toggle = (set, id) => {
@@ -541,41 +571,72 @@ export default function ProjectsView({ selectedEnvironment, onRefresh: externalR
     <div>
       {/* KPI CARDS */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 8, marginBottom: 16 }}>
-        <KpiCard label="Proyectos"      value={kpis.totalProjects}   icon={<Briefcase size={16} />}     colorIdx={0} loading={loading} />
-        <KpiCard label="Hitos"          value={kpis.totalMilestones} icon={<Flag size={16} />}           colorIdx={1} loading={loading} />
-        <KpiCard label="Tareas"         value={kpis.totalTasks}      icon={<ListChecks size={16} />}    colorIdx={2} loading={loading} />
-        <KpiCard label="Completadas"    value={kpis.completed}       icon={<CheckCircle2 size={16} />}  colorIdx={3} loading={loading} />
-        <KpiCard label="En Progreso"    value={kpis.inProgress}      icon={<Clock size={16} />}         colorIdx={4} loading={loading} />
-        <KpiCard label="Alta Prioridad" value={kpis.highPriority}    icon={<AlertTriangle size={16} />} colorIdx={5} loading={loading} />
+        <KpiCard label="Proyectos"      value={envKpis.totalProjects}   icon={<Briefcase size={16} />}     colorIdx={0} loading={loading} />
+        <KpiCard label="Hitos"          value={envKpis.totalMilestones} icon={<Flag size={16} />}           colorIdx={1} loading={loading} />
+        <KpiCard label="Tareas"         value={envKpis.totalTasks}      icon={<ListChecks size={16} />}     colorIdx={2} loading={loading} />
+        <KpiCard label="Completadas"    value={envKpis.completed}       icon={<CheckCircle2 size={16} />}   colorIdx={3} loading={loading} />
+        <KpiCard label="En Progreso"    value={envKpis.inProgress}      icon={<Clock size={16} />}          colorIdx={4} loading={loading} />
+        <KpiCard label="Alta Prioridad" value={envKpis.highPriority}    icon={<AlertTriangle size={16} />}  colorIdx={5} loading={loading} />
+        <KpiCard label="Backlog"        value={envKpis.backlog}         icon={<ListChecks size={16} />}     colorIdx={6} loading={loading} />
       </div>
 
       {/* RESUMEN RÁPIDO POR ENTORNO */}
       {!loading && envSummary.length > 1 && (
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
-          {envSummary.map(env => (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16, alignItems: 'center' }}>
+          {envSummary.map(env => {
+            const found = envList.find(e => e.name === env.name);
+            const isActive = found && filterEnv === found.id;
+            return (
+              <button
+                key={env.name}
+                onClick={() => {
+                  if (found) setFilterEnv(prev => prev === found.id ? 'all' : found.id);
+                }}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  padding: '5px 12px', borderRadius: 20,
+                  background: isActive ? `${env.color}25` : `${env.color}15`,
+                  border: `1.5px solid ${isActive ? env.color : env.color + '40'}`,
+                  color: env.color, fontSize: 12, fontWeight: 600,
+                  cursor: 'pointer', fontFamily: 'inherit',
+                  transition: 'all 0.15s',
+                  boxShadow: isActive ? `0 0 0 2px ${env.color}30` : 'none',
+                }}
+              >
+                <Globe2 size={11} />
+                {env.name}
+                <span style={{ background: env.color, color: 'white', borderRadius: 10, padding: '0px 6px', fontSize: 10, fontWeight: 700 }}>
+                  {env.count}
+                </span>
+              </button>
+            );
+          })}
+
+          {/* Chip Backlog */}
+          {backlogCount > 0 && (
             <button
-              key={env.name}
-              onClick={() => {
-                const found = envList.find(e => e.name === env.name);
-                if (found) setFilterEnv(prev => prev === found.id ? 'all' : found.id);
-              }}
+              onClick={() => setFilterStatus(prev => prev === 'backlog' ? 'all' : 'backlog')}
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: 6,
                 padding: '5px 12px', borderRadius: 20,
-                background: `${env.color}15`,
-                border: `1px solid ${env.color}40`,
-                color: env.color, fontSize: 12, fontWeight: 600,
+                background: filterStatus === 'backlog' ? '#f5f3ff' : '#fafafa',
+                border: `1.5px solid ${filterStatus === 'backlog' ? '#8b5cf6' : '#e2e8f0'}`,
+                color: filterStatus === 'backlog' ? '#7c3aed' : '#64748b',
+                fontSize: 12, fontWeight: 600,
                 cursor: 'pointer', fontFamily: 'inherit',
                 transition: 'all 0.15s',
+                boxShadow: filterStatus === 'backlog' ? '0 0 0 2px #8b5cf630' : 'none',
               }}
             >
-              <Globe2 size={11} />
-              {env.name}
-              <span style={{ background: env.color, color: 'white', borderRadius: 10, padding: '0px 6px', fontSize: 10, fontWeight: 700 }}>
-                {env.count}
+              📋 Backlog
+              <span style={{
+                background: filterStatus === 'backlog' ? '#8b5cf6' : '#94a3b8',
+                color: 'white', borderRadius: 10, padding: '0px 6px', fontSize: 10, fontWeight: 700,
+              }}>
+                {backlogCount}
               </span>
             </button>
-          ))}
+          )}
         </div>
       )}
 

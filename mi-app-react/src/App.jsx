@@ -36,8 +36,6 @@ import SelectEnvironmentPrompt from './components/SelectEnvironmentPrompt';
 import EditProjectModal from './components/EditProjectModal';
 import { TASK_STATUSES, TASK_STATUS_DROPDOWN, PROJECT_STATUS_DROPDOWN, getTaskStatus, getProjectStatus } from './constants/statuses';
 import StatusBadge from './components/shared/StatusBadge';
-import { supabase } from '../supabaseClient';
-
 
 // ============================================================================
 // TOAST NOTIFICATION SYSTEM
@@ -1962,6 +1960,7 @@ useEffect(() => {
               onTaskCreate={createTask}
               onTaskUpdate={updateTask}
               onTaskDelete={deleteTask}
+              onTaskStateUpdate={(saved) => setTasks(prev => prev.map(t => t.id === saved.id ? saved : t))}
               users={users}
               comments={comments}
               onCommentsChange={saveComments}
@@ -3600,7 +3599,7 @@ function FilterSelect({ value, onChange, options = [], placeholder, avatarMode =
 // ============================================================================
 // PROJECT DETAIL VIEW
 // ============================================================================
-function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTaskUpdate, onTaskDelete, users, comments, onCommentsChange, tags, onTaskClick, onProjectUpdate, patchProjectInState, globalExpediteCheck, onEnsureUserInPool }) {
+function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTaskUpdate, onTaskDelete, onTaskStateUpdate, users, comments, onCommentsChange, tags, onTaskClick, onProjectUpdate, patchProjectInState, globalExpediteCheck, onEnsureUserInPool }) {
   const { currentEnvironment } = useApp();
   const [viewMode, setViewMode] = useState('list');
   const [showNewTask, setShowNewTask] = useState(false);
@@ -4137,6 +4136,7 @@ function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTask
       {viewMode === 'list' && (
         <ListView
           listId={null}
+          storageKey={project.id}
           listName={project.name}
           tasks={filteredEffectiveTasks}
           projects={projects}
@@ -4144,6 +4144,7 @@ function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTask
           customFieldsProjectId={project.id}
           onProjectUpdate={patchProjectInState || (() => {})}
           onTasksChange={isFiltered ? undefined : setLiveTasks}
+          onTaskSaved={onTaskStateUpdate}
           onListNameChange={() => {}}
           onListDelete={() => {}}
           onError={(msg) => addToast(msg, 'error')}
@@ -4847,6 +4848,9 @@ function GanttView({ tasks, project, users = [], onTaskClick }) {
 
   const effectiveScale = scale || (totalMonths <= 3 ? 'weeks' : totalMonths <= 14 ? 'months' : 'quarters');
 
+  const pxPerDay = effectiveScale === 'weeks' ? 26 : effectiveScale === 'months' ? 11 : 5;
+  const timelineWidth = Math.max(900, totalDays * pxPerDay);
+
   // Generate header columns
   const generateColumns = () => {
     const cols = [];
@@ -4882,11 +4886,15 @@ function GanttView({ tasks, project, users = [], onTaskClick }) {
   };
   const columns = generateColumns();
 
-  // Add end to each column
-  const columnsWithEnd = columns.map((col, i) => ({
-    ...col,
-    end: columns[i + 1] ? columns[i + 1].start : rangeEnd,
-  }));
+  // Add end + isCurrentPeriod to each column
+  const columnsWithEnd = columns.map((col, i) => {
+    const colEnd = columns[i + 1] ? columns[i + 1].start : rangeEnd;
+    return {
+      ...col,
+      end: colEnd,
+      isCurrentPeriod: today >= col.start && today < colEnd,
+    };
+  });
 
   const DAY_MS = 1000 * 60 * 60 * 24;
 
@@ -5008,13 +5016,14 @@ function GanttView({ tasks, project, users = [], onTaskClick }) {
 
         {/* Timeline col */}
         <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
-          {/* Column grid lines */}
+          {/* Column grid lines + alternating bg */}
           {columnsWithEnd.map((col, ci) => (
             <div key={ci} style={{
               position: 'absolute', top: 0, bottom: 0,
               left: `${dayToFrac(col.start) * 100}%`,
               width: `${(dayToFrac(col.end) - dayToFrac(col.start)) * 100}%`,
-              borderRight: '1px solid #f0f2f7',
+              borderRight: `1px solid ${col.isCurrentPeriod ? '#fde68a' : '#e8ebf2'}`,
+              background: col.isCurrentPeriod ? 'rgba(251,191,36,0.07)' : ci % 2 === 0 ? 'transparent' : 'rgba(99,102,241,0.025)',
             }} />
           ))}
 
@@ -5122,7 +5131,7 @@ function GanttView({ tasks, project, users = [], onTaskClick }) {
         border: '1px solid #e5e7eb', borderRadius: '14px', overflow: 'auto',
         boxShadow: '0 2px 12px rgba(0,0,0,0.06)', background: 'white',
       }}>
-        <div style={{ minWidth: `${NAME_COL_W + Math.max(800, totalDays * 12)}px` }}>
+        <div style={{ minWidth: `${NAME_COL_W + timelineWidth}px` }}>
 
           {/* Header */}
           <div style={{ display: 'flex', height: `${HEADER_H}px`, position: 'sticky', top: 0, zIndex: 10, background: 'white', borderBottom: '2px solid #e5e7eb' }}>
@@ -5143,13 +5152,18 @@ function GanttView({ tasks, project, users = [], onTaskClick }) {
                   position: 'absolute', top: 0, bottom: 0,
                   left: `${dayToFrac(col.start) * 100}%`,
                   width: `${(dayToFrac(col.end) - dayToFrac(col.start)) * 100}%`,
-                  borderRight: '1px solid #e5e7eb',
+                  borderRight: `1px solid ${col.isCurrentPeriod ? '#fbbf24' : '#d1d5db'}`,
+                  borderLeft: col.isCurrentPeriod ? '2px solid #fbbf24' : 'none',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: '11px', fontWeight: 700, color: '#374151',
-                  overflow: 'hidden', whiteSpace: 'nowrap', padding: '0 4px',
-                  background: '#f8faff',
+                  fontSize: '11px', fontWeight: col.isCurrentPeriod ? 800 : 700,
+                  color: col.isCurrentPeriod ? '#92400e' : '#374151',
+                  overflow: 'hidden', whiteSpace: 'nowrap', padding: '0 6px',
+                  background: col.isCurrentPeriod ? '#fef3c7' : ci % 2 === 0 ? '#f8faff' : '#eef2ff',
                 }}>
                   {col.label}
+                  {col.isCurrentPeriod && (
+                    <span style={{ marginLeft: 4, fontSize: '9px', background: '#f59e0b', color: 'white', borderRadius: 4, padding: '1px 4px', fontWeight: 700, letterSpacing: '0.05em' }}>HOY</span>
+                  )}
                 </div>
               ))}
               {/* Today marker in header */}
@@ -5591,125 +5605,145 @@ function CalendarView({ projects, tasks }) {
   const nextMonth = () => setCurrentDate(new Date(year, month + 1, 1));
 
   return (
-    <div style={{ padding: '2rem' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+    <div style={{ padding: '24px' }}>
+      {/* HEADER */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: 12 }}>
         <div>
-          <h2 style={{ margin: 0, fontSize: '1.75rem', fontWeight: 800, color: DESIGN_TOKENS.neutral[800] }}>
+          <h2 style={{ margin: 0, fontSize: '28px', fontWeight: 800, color: DESIGN_TOKENS.neutral[800] }}>
             {monthNames[month]} {year}
           </h2>
-          <p style={{ color: DESIGN_TOKENS.neutral[600], margin: '0.5rem 0 0' }}>
+          <p style={{ color: DESIGN_TOKENS.neutral[600], margin: '6px 0 0', fontSize: 14 }}>
             Calendario de proyectos y tareas
           </p>
         </div>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button onClick={prevMonth} style={iconButtonStyle}>
-            <ChevronLeft size={18} />
-          </button>
-          <button onClick={() => setCurrentDate(today)} style={secondaryButtonStyle}>
-            Hoy
-          </button>
-          <button onClick={nextMonth} style={iconButtonStyle}>
-            <ChevronRight size={18} />
-          </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={prevMonth} style={iconButtonStyle}><ChevronLeft size={18} /></button>
+          <button onClick={() => setCurrentDate(today)} style={secondaryButtonStyle}>Hoy</button>
+          <button onClick={nextMonth} style={iconButtonStyle}><ChevronRight size={18} /></button>
         </div>
       </div>
 
-      <div style={{
-        background: 'white',
-        borderRadius: '12px',
-        border: `1px solid ${DESIGN_TOKENS.neutral[200]}`,
-        padding: '1.5rem',
-        boxShadow: DESIGN_TOKENS.shadows.sm
-      }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '0.5rem', marginBottom: '1rem' }}>
-          {['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'].map(d => (
-            <div key={d} style={{ textAlign: 'center', fontSize: '0.75rem', color: DESIGN_TOKENS.neutral[500], fontWeight: 700, textTransform: 'uppercase' }}>
-              {d}
-            </div>
-          ))}
-        </div>
+      {/* CALENDAR BODY — overflowX:auto da scroll horizontal si el zoom es muy alto */}
+      <div style={{ overflowX: 'auto' }}>
+        <div style={{
+          minWidth: 700,
+          background: 'white',
+          borderRadius: 12,
+          border: `1px solid ${DESIGN_TOKENS.neutral[200]}`,
+          padding: 16,
+          boxShadow: DESIGN_TOKENS.shadows.sm,
+        }}>
+          {/* Cabecera días de la semana */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 6, marginBottom: 8 }}>
+            {['DOM','LUN','MAR','MIÉ','JUE','VIE','SÁB'].map(d => (
+              <div key={d} style={{
+                textAlign: 'center', fontSize: 11,
+                color: DESIGN_TOKENS.neutral[500], fontWeight: 700,
+                textTransform: 'uppercase', letterSpacing: '0.06em',
+                padding: '4px 0',
+              }}>
+                {d}
+              </div>
+            ))}
+          </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '0.5rem' }}>
-          {monthMatrix.map((week, wi) => (
-            week.map((day, di) => {
-              if (!day) {
-                return <div key={`${wi}-${di}`} style={{ minHeight: 100, background: 'transparent' }} />;
-              }
+          {/* Semanas */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 6 }}>
+            {monthMatrix.map((week, wi) =>
+              week.map((day, di) => {
+                if (!day) {
+                  return <div key={`${wi}-${di}`} style={{ minHeight: 90 }} />;
+                }
 
-              const iso = day.toISOString().slice(0,10);
-              const dueProjects = projectsByDate[iso] || [];
-              const dueTasks = tasksByDate[iso] || [];
-              const isToday = isSameDay(day, today);
+                const iso = day.toISOString().slice(0, 10);
+                const dueProjects = projectsByDate[iso] || [];
+                const dueTasks    = tasksByDate[iso]    || [];
+                const isToday     = isSameDay(day, today);
+                const total       = dueProjects.length + dueTasks.length;
+                // mostrar máx 2 proyectos + 2 tareas (4 total), resto en "+N más"
+                const shownProjs  = dueProjects.slice(0, 2);
+                const remaining   = Math.max(0, dueProjects.length - 2);
+                const taskSlots   = Math.max(0, 4 - shownProjs.length);
+                const shownTasks  = dueTasks.slice(0, taskSlots);
+                const more        = total - shownProjs.length - shownTasks.length;
 
-              return (
-                <div
-                  key={iso}
-                  style={{
-                    minHeight: 100,
-                    borderRadius: 8,
-                    border: `2px solid ${isToday ? DESIGN_TOKENS.primary.base : DESIGN_TOKENS.neutral[200]}`,
-                    padding: '0.75rem',
-                    background: isToday ? DESIGN_TOKENS.primary.lighter : 'white',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '0.5rem',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s'
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!isToday) e.currentTarget.style.background = DESIGN_TOKENS.neutral[50];
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isToday) e.currentTarget.style.background = 'white';
-                  }}
-                >
-                  <div style={{ fontSize: '1rem', fontWeight: 700, color: isToday ? DESIGN_TOKENS.primary.dark : DESIGN_TOKENS.neutral[800] }}>
-                    {day.getDate()}
+                return (
+                  <div
+                    key={iso}
+                    style={{
+                      minHeight: 90,
+                      borderRadius: 8,
+                      border: `2px solid ${isToday ? DESIGN_TOKENS.primary.base : DESIGN_TOKENS.neutral[200]}`,
+                      padding: '6px 8px',
+                      background: isToday ? DESIGN_TOKENS.primary.lighter : 'white',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 3,
+                      overflow: 'hidden',   // nunca desborda la celda
+                      minWidth: 0,          // fix CSS grid overflow
+                      boxSizing: 'border-box',
+                      transition: 'background 0.15s',
+                    }}
+                    onMouseEnter={e => { if (!isToday) e.currentTarget.style.background = DESIGN_TOKENS.neutral[50]; }}
+                    onMouseLeave={e => { if (!isToday) e.currentTarget.style.background = 'white'; }}
+                  >
+                    {/* Número del día */}
+                    <div style={{
+                      fontSize: 13, fontWeight: 700, lineHeight: 1,
+                      color: isToday ? DESIGN_TOKENS.primary.dark : DESIGN_TOKENS.neutral[800],
+                      marginBottom: 2,
+                      flexShrink: 0,
+                    }}>
+                      {day.getDate()}
+                    </div>
+
+                    {/* Proyectos */}
+                    {shownProjs.map(p => (
+                      <div key={p.id} title={p.name} style={{
+                        fontSize: 11, fontWeight: 600,
+                        color: 'white',
+                        background: p.color || DESIGN_TOKENS.primary.base,
+                        padding: '2px 5px',
+                        borderRadius: 4,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        flexShrink: 0,
+                        minWidth: 0,
+                      }}>
+                        📁 {p.name}
+                      </div>
+                    ))}
+
+                    {/* Tareas */}
+                    {shownTasks.map(t => (
+                      <div key={t.id} title={t.title} style={{
+                        fontSize: 11, fontWeight: 500,
+                        color: DESIGN_TOKENS.neutral[700],
+                        background: (STATUS_OPTIONS[t.status] || STATUS_OPTIONS.todo).bg,
+                        padding: '2px 5px',
+                        borderRadius: 4,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        flexShrink: 0,
+                        minWidth: 0,
+                      }}>
+                        ✓ {t.title}
+                      </div>
+                    ))}
+
+                    {/* Resto */}
+                    {more > 0 && (
+                      <div style={{ fontSize: 11, color: DESIGN_TOKENS.neutral[400], fontWeight: 600, flexShrink: 0 }}>
+                        +{more} más
+                      </div>
+                    )}
                   </div>
-
-                  {dueProjects.slice(0, 2).map(p => (
-                    <div key={p.id} style={{
-                      fontSize: '0.7rem',
-                      color: 'white',
-                      background: p.color,
-                      padding: '0.25rem 0.5rem',
-                      borderRadius: 4,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                      fontWeight: 600
-                    }}
-                    title={p.name}>
-                      📁 {p.name}
-                    </div>
-                  ))}
-
-                  {dueTasks.slice(0, 2).map(t => (
-                    <div key={t.id} style={{
-                      fontSize: '0.7rem',
-                      color: DESIGN_TOKENS.neutral[700],
-                      background: (STATUS_OPTIONS[t.status] || STATUS_OPTIONS.todo).bg,
-                      padding: '0.25rem 0.5rem',
-                      borderRadius: 4,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                      fontWeight: 500
-                    }}
-                    title={t.title}>
-                      ✓ {t.title}
-                    </div>
-                  ))}
-
-                  {(dueProjects.length + dueTasks.length > 4) && (
-                    <div style={{ fontSize: '0.7rem', color: DESIGN_TOKENS.neutral[500], fontWeight: 600 }}>
-                      +{dueProjects.length + dueTasks.length - 4} más
-                    </div>
-                  )}
-                </div>
-              );
-            })
-          ))}
+                );
+              })
+            )}
+          </div>
         </div>
       </div>
     </div>

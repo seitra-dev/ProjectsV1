@@ -254,11 +254,20 @@ export const getWeeklyTasks = async (environmentId = null, weekStart = null) => 
         .select('id')
         .eq('environment_id', environmentId);
       const wsIds = (workspaces || []).map(w => w.id);
-      const { data: projects } = await supabase
-        .from('projects')
-        .select('id')
-        .in('workspace_id', wsIds);
-      const projectIds = (projects || []).map(p => p.id);
+
+      const [wsProjRes, envProjRes] = await Promise.all([
+        wsIds.length > 0
+          ? supabase.from('projects').select('id').in('workspace_id', wsIds)
+          : Promise.resolve({ data: [] }),
+        supabase.from('projects').select('id').eq('environment_id', environmentId),
+      ]);
+
+      const seen = new Set();
+      const projectIds = [];
+      for (const p of [...(wsProjRes.data || []), ...(envProjRes.data || [])]) {
+        if (!seen.has(p.id)) { seen.add(p.id); projectIds.push(p.id); }
+      }
+
       if (projectIds.length > 0) {
         query = query.in('project_id', projectIds);
       } else {
