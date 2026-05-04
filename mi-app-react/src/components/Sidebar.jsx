@@ -251,12 +251,12 @@ function Sidebar({ isOpen, activeView, onViewChange, projects, onProjectSelect, 
                       : 'transparent',
                     color: isActive ? 'var(--text-primary)' : 'var(--text-muted)',
                     border: isActive ? '1px solid rgba(15, 23, 42, 0.05)' : '1px solid transparent',
-                    boxShadow: (isActive && !collapsed) ? 'inset 3px 0 0 0 #0f172a' : 'none',
                     borderRadius: '12px',
                     cursor: 'pointer',
                     transition: 'all 0.3s ease',
                     fontSize: '14px',
                     fontWeight: isActive ? 700 : 500,
+                    textAlign: 'left',
                   }}
                   onMouseEnter={(e) => {
                     if (!isActive) {
@@ -271,6 +271,16 @@ function Sidebar({ isOpen, activeView, onViewChange, projects, onProjectSelect, 
                     }
                   }}
                 >
+                  {isActive && !collapsed && (
+                    <div style={{
+                      position: 'absolute',
+                      left: '0',
+                      width: '3px',
+                      height: '18px',
+                      background: '#0f172a',
+                      borderRadius: '0 4px 4px 0',
+                    }} />
+                  )}
                   <span style={{
                     flexShrink: 0,
                     display: 'flex',
