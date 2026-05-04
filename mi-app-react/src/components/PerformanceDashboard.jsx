@@ -326,7 +326,7 @@ const PersonRow = ({ row, weeks, capacities, startDate, endDate }) => {
   return (
     <tr style={{ background: 'white' }}>
       <TD style={{ maxWidth: 240 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingLeft: 48 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingLeft: 28 }}>
           <AvatarCell name={row.assignee_name} src={row.avatar} size={24} />
           <div style={{ minWidth: 0 }}>
             <div style={{ fontWeight: 500, fontSize: 13, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -360,55 +360,11 @@ const PersonRow = ({ row, weeks, capacities, startDate, endDate }) => {
   );
 };
 
-// ─── Nivel 2: Frente ──────────────────────────────────────────────────────────
-
-const FrenteSection = ({ label, rows, isNoFrente, weeks, capacities, startDate, endDate }) => {
-  const [expanded, setExpanded] = useState(true);
-  const a     = useMemo(() => agg(rows, weeks), [rows, weeks]);
-  const trend = useMemo(() => aggregateTrend(a.trend, startDate, endDate), [a.trend, startDate, endDate]);
-  const hasNoAssignee = rows.every(r => !r.assignee_id);
-
-  return (
-    <>
-      <tr style={{ background: '#f8fafc', cursor: 'pointer' }} onClick={() => setExpanded(v => !v)}>
-        <TD style={{ maxWidth: 240 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingLeft: 26 }}>
-            <button onClick={e => { e.stopPropagation(); setExpanded(v => !v); }}
-              style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 2, flexShrink: 0, color: '#6366f1', display: 'flex', alignItems: 'center' }}>
-              {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-            </button>
-            <span style={{ fontWeight: 600, fontSize: 12, color: '#334155', fontStyle: isNoFrente ? 'italic' : 'normal' }}>{label}</span>
-            <span style={{ fontSize: 10, color: '#94a3b8' }}>· {rows.length} persona{rows.length !== 1 ? 's' : ''}</span>
-          </div>
-        </TD>
-        <TD style={{ textAlign: 'center' }}>
-          <span style={{ fontWeight: 700, fontSize: 13, color: '#0f172a' }}>{a.total}</span>
-          {a.late > 0 && <div style={{ fontSize: 10, color: '#f97316', marginTop: 1 }}>{a.late} tarde</div>}
-        </TD>
-        <TD><Sparkline data={trend} color="#64748b" /></TD>
-        <TD>{hasNoAssignee ? <span style={{ color: '#94a3b8', fontSize: 12 }}>—</span> : <KpiBadge pct={a.kpi} />}</TD>
-        <TD style={{ textAlign: 'center' }}>
-          {hasNoAssignee ? <span style={{ color: '#94a3b8', fontSize: 12 }}>—</span> : (
-            <div>
-              <span style={{ fontWeight: 600, fontSize: 13, color: '#0f172a' }}>{a.capR}</span>
-              <span style={{ fontSize: 10, color: '#94a3b8', marginLeft: 2 }}>/sem</span>
-            </div>
-          )}
-        </TD>
-      </tr>
-      {expanded && rows.map(r => (
-        <PersonRow key={`${r.frente}::${r.assignee_id}`} row={r} weeks={weeks} capacities={capacities} startDate={startDate} endDate={endDate} />
-      ))}
-    </>
-  );
-};
-
 // ─── Nivel 1: Entorno ─────────────────────────────────────────────────────────
 
 const EnvironmentSection = ({ env, weeks, capacities, startDate, endDate }) => {
   const [expanded, setExpanded] = useState(true);
-  const allRows = useMemo(() => env.frentes.flatMap(f => f.rows), [env.frentes]);
-  const a     = useMemo(() => agg(allRows, weeks), [allRows, weeks]);
+  const a     = useMemo(() => agg(env.rows, weeks), [env.rows, weeks]);
   const trend = useMemo(() => aggregateTrend(a.trend, startDate, endDate), [a.trend, startDate, endDate]);
   const color = env.environment_color || '#6366f1';
 
@@ -423,7 +379,7 @@ const EnvironmentSection = ({ env, weeks, capacities, startDate, endDate }) => {
             </button>
             <div style={{ width: 10, height: 10, borderRadius: '50%', background: color, flexShrink: 0 }} />
             <span style={{ fontWeight: 700, fontSize: 13, color: '#0f172a' }}>{env.environment_name}</span>
-            <span style={{ fontSize: 10, color: '#64748b' }}>· {allRows.length} colaborador{allRows.length !== 1 ? 'es' : ''}</span>
+            <span style={{ fontSize: 10, color: '#64748b' }}>· {env.rows.length} colaborador{env.rows.length !== 1 ? 'es' : ''}</span>
           </div>
         </TD>
         <TD style={{ textAlign: 'center' }}>
@@ -437,17 +393,8 @@ const EnvironmentSection = ({ env, weeks, capacities, startDate, endDate }) => {
           <span style={{ fontSize: 10, color: '#94a3b8', marginLeft: 2 }}>/sem</span>
         </TD>
       </tr>
-      {expanded && env.frentes.map(f => (
-        <FrenteSection
-          key={f.label}
-          label={f.label}
-          rows={f.rows}
-          isNoFrente={f.isNoFrente}
-          weeks={weeks}
-          capacities={capacities}
-          startDate={startDate}
-          endDate={endDate}
-        />
+      {expanded && env.rows.map(r => (
+        <PersonRow key={r.assignee_id} row={r} weeks={weeks} capacities={capacities} startDate={startDate} endDate={endDate} />
       ))}
     </>
   );
@@ -512,8 +459,8 @@ const FF  = ({ label, children }) => (
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 export default function PerformanceDashboard() {
-  const { currentUser, currentWorkspace } = useApp();
-  const canAccess = ['admin', 'super_admin'].includes(currentUser?.system_role);
+  const { currentUser, currentWorkspace, orgRole, isPlatformOwner } = useApp();
+  const canAccess = isPlatformOwner?.(currentUser) || orgRole === 'org_admin';
 
   const def = { equipo: '', startDate: firstOfYear(), endDate: today() };
   const [filters,     setFilters]     = useState(def);
@@ -558,7 +505,7 @@ export default function PerformanceDashboard() {
     return Math.round(valid.reduce((s, r) => s + r.kpi_pct, 0) / valid.length);
   }, [filteredRows]);
 
-  // Jerarquía: Entorno → Frente → Colaborador (sobre filteredRows)
+  // Jerarquía: Entorno → Colaborador (sobre filteredRows)
   const byEnv = useMemo(() => {
     const envMap = {};
     filteredRows.forEach(r => {
@@ -569,29 +516,12 @@ export default function PerformanceDashboard() {
           environment_name:  r.environment_name  || 'Sin entorno',
           environment_color: r.environment_color || '#94a3b8',
           environment_icon:  r.environment_icon,
-          frenteMap: {},
+          rows: [],
         };
       }
-      const fk = r.frente || '__nf__';
-      if (!envMap[eid].frenteMap[fk]) envMap[eid].frenteMap[fk] = [];
-      envMap[eid].frenteMap[fk].push(r);
+      envMap[eid].rows.push(r);
     });
-
-    return Object.values(envMap)
-      .sort((a, b) => a.environment_name.localeCompare(b.environment_name))
-      .map(env => ({
-        ...env,
-        frentes: Object.entries(env.frenteMap)
-          .sort(([a], [b]) => {
-            if (a === '__nf__') return 1; if (b === '__nf__') return -1;
-            return a.localeCompare(b);
-          })
-          .map(([fk, fRows]) => ({
-            label:      fk === '__nf__' ? 'Sin frente' : fk,
-            isNoFrente: fk === '__nf__',
-            rows:       fRows,
-          })),
-      }));
+    return Object.values(envMap).sort((a, b) => a.environment_name.localeCompare(b.environment_name));
   }, [filteredRows]);
 
   const loadAll = async () => {
@@ -768,11 +698,11 @@ export default function PerformanceDashboard() {
                   <>
                     <SkeletonRow bg="#e8edf3" pl={0} />
                     <SkeletonRow bg="#f1f5f9" pl={0} />
-                    <SkeletonRow bg="#f8fafc" pl={26} />
-                    <SkeletonRow bg="white"   pl={48} />
-                    <SkeletonRow bg="white"   pl={48} />
-                    <SkeletonRow bg="#f8fafc" pl={26} />
-                    <SkeletonRow bg="white"   pl={48} />
+                    <SkeletonRow bg="white"   pl={28} />
+                    <SkeletonRow bg="white"   pl={28} />
+                    <SkeletonRow bg="#f1f5f9" pl={0} />
+                    <SkeletonRow bg="white"   pl={28} />
+                    <SkeletonRow bg="white"   pl={28} />
                   </>
                 ) : filteredRows.length === 0 ? (
                   <tr><td colSpan={5} style={{ padding: '60px', textAlign: 'center', color: '#94a3b8', fontSize: 14 }}>Sin datos para el período seleccionado.</td></tr>

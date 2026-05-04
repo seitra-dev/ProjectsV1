@@ -41,6 +41,11 @@ export const AppProvider = ({ children }) => {
   // membershipMap: { [envId]: { role: 'owner'|'admin'|'member'|'viewer', ... } }
   const [membershipMap, setMembershipMap] = useState({});
 
+  // Organización del usuario actual
+  const [organizationId, setOrganizationId] = useState(null);
+  const [orgRole, setOrgRole] = useState(null);
+  const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
+
   // ==========================================================================
   // HELPERS (compatibilidad con AppContext-OLD)
   // ==========================================================================
@@ -98,30 +103,36 @@ export const AppProvider = ({ children }) => {
   // PERMISOS
   // ============================================================================
 
-  const isSuperAdmin = (user) =>
-    (user?.system_role || user?.role) === 'super_admin';
+  const isPlatformOwner = (user) =>
+    user?.id === 'e33a38dc-da51-4318-a01a-4f04da60291a'
+    || (user?.role === 'platform_owner')
+    || (user?.system_role === 'platform_owner');
+
+  // Alias para compatibilidad — devuelve true para platform_owner
+  const isSuperAdmin = (user) => isPlatformOwner(user);
 
   const getUserRoleInEnv = (envId) =>
     membershipMap[envId]?.role || null;
 
   const canManageMembers = (envId) => {
-    if (isSuperAdmin(currentUser)) return true;
+    if (isPlatformOwner(currentUser)) return true;
     const role = getUserRoleInEnv(envId);
     return role === 'owner' || role === 'admin';
   };
 
   const canEditTaskDates = () => {
-    const sysRole = currentUser?.system_role;
-    return sysRole === 'super_admin' || sysRole === 'admin' || sysRole === 'project_manager';
+    if (isPlatformOwner(currentUser)) return true;
+    return orgRole === 'org_admin';
   };
 
   const canDeleteEnvironment = (envId) => {
-    if (isSuperAdmin(currentUser)) return true;
+    if (isPlatformOwner(currentUser)) return true;
     return getUserRoleInEnv(envId) === 'owner';
   };
 
   const canViewEnvironment = (envId) => {
-    if (isSuperAdmin(currentUser)) return true;
+    if (isPlatformOwner(currentUser)) return true;
+    if (orgRole === 'org_admin') return true;
     return membershipMap[envId] != null;
   };
 
@@ -140,21 +151,53 @@ export const AppProvider = ({ children }) => {
     } catch { return null; }
   };
 
-  // Enriquece el usuario con system_role desde la tabla users
+  // Enriquece el usuario con role desde la tabla users + membresía de org
   const enrichUserProfile = async (baseUser) => {
     try {
       const profile = await dbUsers.getById(baseUser.id);
       if (profile) {
         const enriched = {
           ...baseUser,
-          system_role: profile.system_role || profile.role || 'user',
+          system_role: profile.role || 'user',
           role: profile.role || 'user',
           name: profile.name || baseUser.name,
           avatar: profile.avatar || baseUser.avatar || '👤',
         };
-        // Cachear el rol en localStorage para que el Sidebar filtre correctamente
-        // desde el primer render en la próxima carga de página.
-        try { localStorage.setItem('seitra_system_role', enriched.system_role); } catch {}
+        try { localStorage.setItem('seitra_system_role', enriched.role); } catch {}
+
+        // Cargar membresía de org (salvo platform_owner que ve todo)
+        const isPO = enriched.role === 'platform_owner' || baseUser.id === 'e33a38dc-da51-4318-a01a-4f04da60291a';
+        if (!isPO) {
+          const { data: memberships, error: membershipError } = await supabase
+            .from('organization_members')
+            .select('organization_id, role')
+            .eq('user_id', baseUser.id)
+            .limit(1);
+
+          console.log('🔍 user.id:', baseUser.id);
+          console.log('🔍 organization_members query result:', memberships, membershipError);
+          console.log('🔍 organizationId (estado actual antes de setear):', organizationId);
+
+          const membership = memberships?.[0] ?? null;
+
+          if (membership) {
+            setOrganizationId(membership.organization_id);
+            setOrgRole(membership.role);
+            enriched.organizationId = membership.organization_id;
+            enriched.orgRole = membership.role;
+            console.log('🔍 membresía encontrada → organizationId:', membership.organization_id, '| role:', membership.role);
+
+            if (membership.role === 'org_admin') {
+              const { count } = await supabase
+                .from('organization_join_requests')
+                .select('id', { count: 'exact', head: true })
+                .eq('organization_id', membership.organization_id)
+                .eq('status', 'pending');
+              setPendingRequestsCount(count || 0);
+            }
+          }
+        }
+
         return enriched;
       }
     } catch (e) {
@@ -170,22 +213,37 @@ export const AppProvider = ({ children }) => {
       const newMembershipMap = {};
       let myMemberships = [];
 
-      // Cargar membresías una sola vez para todos los roles
-      try {
-        myMemberships = await dbEnvironmentMembers.getMyMemberships(userId);
-        myMemberships.forEach(m => { newMembershipMap[m.environment_id] = m; });
-      } catch {}
+      const isPO = systemRole === 'platform_owner' || userId === 'e33a38dc-da51-4318-a01a-4f04da60291a';
 
-      if (systemRole === 'super_admin') {
-        // Super admin ve TODOS los entornos
+      if (isPO) {
+        // Platform owner ve TODOS los entornos
         envs = await dbEnvironments.getAll();
+        try {
+          myMemberships = await dbEnvironmentMembers.getMyMemberships(userId);
+          myMemberships.forEach(m => { newMembershipMap[m.environment_id] = m; });
+        } catch {}
       } else {
-        // Otros roles: solo entornos donde son miembros
-        const memberEnvIds = myMemberships.map(m => m.environment_id);
+        // Otros usuarios: JOIN directo — solo entornos donde el usuario tiene membresía
+        const { data: envsWithMembership, error: envError } = await supabase
+          .from('environments')
+          .select('*, environment_members!inner(user_id, role, joined_at)')
+          .eq('environment_members.user_id', userId)
+          .eq('is_deleted', false);
 
-        if (memberEnvIds.length > 0) {
-          const allEnvs = await dbEnvironments.getAll();
-          envs = allEnvs.filter(e => memberEnvIds.includes(e.id));
+        console.log('🔍 environments query result:', envsWithMembership, envError);
+        console.log('🔍 userId usado en query entornos:', userId);
+
+        if (envError) {
+          console.warn('[AppContext] Error cargando entornos con membresía:', envError.message);
+        } else if (envsWithMembership?.length) {
+          envsWithMembership.forEach(env => {
+            const m = env.environment_members?.[0];
+            if (m) {
+              newMembershipMap[env.id] = { environment_id: env.id, user_id: m.user_id, role: m.role, joined_at: m.joined_at };
+              myMemberships.push({ environment_id: env.id, role: m.role, joined_at: m.joined_at });
+            }
+          });
+          envs = envsWithMembership.map(({ environment_members: _em, ...env }) => env);
         }
       }
 
@@ -257,9 +315,11 @@ export const AppProvider = ({ children }) => {
           setCurrentEnvironment(null);
           setCurrentWorkspace(null);
           setMembershipMap({});
+          setOrganizationId(null);
+          setOrgRole(null);
+          setPendingRequestsCount(0);
           setIsLoading(false);
           setAuthChecked(false);
-          // Limpiar caché del rol al cerrar sesión
           try { localStorage.removeItem('seitra_system_role'); } catch {}
           return;
         }
@@ -528,6 +588,12 @@ export const AppProvider = ({ children }) => {
     lists,
     membershipMap,
 
+    // Organización
+    organizationId,
+    orgRole,
+    pendingRequestsCount,
+    setPendingRequestsCount,
+
     // Setters
     setEnvironments,
     setCurrentEnvironmentState,
@@ -537,14 +603,15 @@ export const AppProvider = ({ children }) => {
     setCurrentUser,
 
     // Permisos
-    isSuperAdmin: () => isSuperAdmin(currentUser),
+    isPlatformOwner: () => isPlatformOwner(currentUser),
+    isSuperAdmin: () => isPlatformOwner(currentUser), // compatibilidad
     getUserRoleInEnv,
     canManageMembers,
     canEditTaskDates,
     canDeleteEnvironment,
     canViewEnvironment,
     canWorkWithoutEnvironment: () =>
-      ['super_admin', 'admin', 'project_manager'].includes(currentUser?.system_role),
+      isPlatformOwner(currentUser) || orgRole === 'org_admin',
 
     // Environments
     createEnvironment,
@@ -571,6 +638,7 @@ export const AppProvider = ({ children }) => {
   }), [
     environments, currentEnvironment, currentWorkspace, currentUser,
     isLoading, authChecked, lists, membershipMap,
+    organizationId, orgRole, pendingRequestsCount,
   ]);
 
   return (

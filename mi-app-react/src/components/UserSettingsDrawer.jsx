@@ -1,12 +1,13 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  X, Camera, Trash2, ChevronRight, ArrowLeft, Shield, Sun, Moon,
+  X, Camera, Trash2, ChevronRight, ArrowLeft, Shield, Sun, Moon, Users,
 } from 'lucide-react';
 import { DESIGN_TOKENS } from '../styles/tokens';
 import { supabase } from '../lib/supabase';
 import { dbUsers, dbTasks } from '../lib/database';
 import { auth } from '../lib/auth';
+import { useApp } from '../context/AppContext';
 
 const AVATAR_BUCKET = 'avatars';
 
@@ -164,9 +165,12 @@ export default function UserSettingsDrawer({
   projects = [],
   onTaskRestored,
   addToast,
+  onNavigate,
 }) {
+  const { organizationId, orgRole, isPlatformOwner } = useApp();
   const fileRef = useRef(null);
   const [view, setView] = useState('main');
+  const [orgData, setOrgData] = useState(null);
   const [loadingProfile, setLoadingProfile] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [firstName, setFirstName] = useState('');
@@ -242,11 +246,17 @@ export default function UserSettingsDrawer({
       setTotpCode('');
       setNewPassword('');
       setConfirmPassword('');
+      setOrgData(null);
       return;
     }
     refreshProfile();
     loadMfa();
-  }, [isOpen, refreshProfile, loadMfa]);
+    if (organizationId) {
+      supabase.from('organizations').select('id, name, icon, color').eq('id', organizationId).single()
+        .then(({ data }) => setOrgData(data || null))
+        .catch(() => setOrgData(null));
+    }
+  }, [isOpen, refreshProfile, loadMfa, organizationId]);
 
   const loadTrash = useCallback(async () => {
     setTrashLoading(true);
@@ -846,6 +856,55 @@ export default function UserSettingsDrawer({
                   </button>
                 </div>
               </section>
+
+              {(orgRole === 'org_admin' || isPlatformOwner?.()) && orgData && (
+                <section style={{ marginBottom: 28 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: DESIGN_TOKENS.neutral[500], letterSpacing: '0.08em' }}>
+                    ORGANIZACIÓN
+                  </span>
+                  <div style={{
+                    marginTop: 12, padding: '12px 14px', borderRadius: 10,
+                    border: `1px solid ${DESIGN_TOKENS.border.color.subtle}`,
+                    background: DESIGN_TOKENS.neutral[50],
+                    display: 'flex', alignItems: 'center', gap: 10,
+                  }}>
+                    <div style={{
+                      width: 36, height: 36, borderRadius: 8,
+                      background: orgData.color || '#6357dc',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 18, flexShrink: 0,
+                    }}>
+                      {orgData.icon || '🏢'}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, fontSize: 14, color: DESIGN_TOKENS.neutral[800], overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {orgData.name}
+                      </div>
+                      <div style={{ fontSize: 12, color: DESIGN_TOKENS.neutral[500] }}>
+                        {isPlatformOwner?.() ? 'Platform Owner' : 'Administrador'}
+                      </div>
+                    </div>
+                  </div>
+                  {onNavigate && (
+                    <button
+                      type="button"
+                      onClick={() => onNavigate('members')}
+                      style={{
+                        marginTop: 10, width: '100%', padding: '10px 16px',
+                        borderRadius: 8, border: `1px solid ${DESIGN_TOKENS.border.color.normal}`,
+                        background: '#fff', fontWeight: 600, fontSize: 13,
+                        color: DESIGN_TOKENS.neutral[800], cursor: 'pointer',
+                        fontFamily: DESIGN_TOKENS.typography.fontFamily,
+                        display: 'flex', alignItems: 'center', gap: 8,
+                        boxSizing: 'border-box',
+                      }}
+                    >
+                      <Users size={15} />
+                      Gestionar miembros
+                    </button>
+                  )}
+                </section>
+              )}
 
               <button
                 type="button"

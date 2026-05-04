@@ -11,7 +11,7 @@ import {
   ArrowRight, Menu, Home, Briefcase, ClipboardList, Zap, Layers,
   MessageSquare, Copy, FileText, Star, StarOff,
   ChevronLeft, Send, TrendingUp, Target,
-  AlertTriangle, Info, CheckCircle, Loader, Moon, Sun,
+  AlertTriangle, Info, CheckCircle, Loader, Moon, Sun, Bell,
   Keyboard, Layout, BarChart, CheckSquare, Pencil,
 } from 'lucide-react';
 
@@ -34,6 +34,8 @@ import CreateListModal from './components/Enviroments/CreateListModal';
 import UserSettingsDrawer from './components/UserSettingsDrawer';
 import SelectEnvironmentPrompt from './components/SelectEnvironmentPrompt';
 import EditProjectModal from './components/EditProjectModal';
+import NoOrgScreen from './components/NoOrgScreen';
+import OrgJoinRequestsView from './components/OrgJoinRequestsView';
 import { TASK_STATUSES, TASK_STATUS_DROPDOWN, PROJECT_STATUS_DROPDOWN, getTaskStatus, getProjectStatus } from './constants/statuses';
 import StatusBadge from './components/shared/StatusBadge';
 
@@ -264,16 +266,20 @@ function AppContent() {
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
   const { addToast } = useToast();
+  const { organizationId: ctxOrgId, isPlatformOwner: ctxIsPO } = useApp();
 
   // Detectar si Supabase redirigió con un token de recuperación de contraseña.
   // Flujo implícito: el token llega en el hash (#type=recovery)
-  // Flujo PKCE (por defecto en Supabase moderno): el código llega en query param (?code=...)
-  // en la ruta /reset-password, y el SDK dispara PASSWORD_RECOVERY via onAuthStateChange.
+  // Flujo PKCE (por defecto en Supabase moderno): el código llega en ?code=... junto
+  // con el marcador ?type=recovery que colocamos en el redirectTo.
   const [isRecoveryMode, setIsRecoveryMode] = useState(() => {
     const hash = window.location.hash;
     const params = new URLSearchParams(window.location.search);
-    const isResetPath = window.location.pathname.includes('reset-password');
-    return hash.includes('type=recovery') || (isResetPath && params.has('code'));
+    return (
+      hash.includes('type=recovery') ||
+      params.get('type') === 'recovery' ||
+      window.location.pathname.includes('reset-password')
+    );
   });
 
   // Leer sesión de localStorage de forma sincrónica — sin loading screen, sin async
@@ -325,6 +331,31 @@ function AppContent() {
     }).catch(() => { /* silencioso — no bloquea la app */ });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps — solo al montar
 
+  // hasOrg: null=verificando | true=tiene org | false=sin org
+  const [hasOrg, setHasOrg] = useState(null);
+
+  useEffect(() => {
+    if (!currentUser?.id) { setHasOrg(null); return; }
+    // platform_owner siempre tiene acceso — chequear por ID y por rol
+    if (
+      currentUser.role === 'platform_owner' ||
+      currentUser.id === 'e33a38dc-da51-4318-a01a-4f04da60291a' ||
+      ctxIsPO?.(currentUser)
+    ) { setHasOrg(true); return; }
+    // Si AppContext ya cargó la membresía de org (JWT válido y refrescado), usarla
+    if (ctxOrgId) { setHasOrg(true); return; }
+
+    supabase
+      .from('organization_members')
+      .select('organization_id')
+      .eq('user_id', currentUser.id)
+      .limit(1)
+      .then(({ data, error }) => {
+        if (error) { console.warn('[hasOrg] query error:', error.message); return; }
+        setHasOrg(Array.isArray(data) && data.length > 0);
+      });
+  }, [currentUser?.id, currentUser?.role, ctxOrgId, ctxIsPO]);
+
   // Verificar sesión al montar (maneja el caso F5 con token expirado o renovado)
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -353,6 +384,14 @@ function AppContent() {
         session?.user &&
         (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED')
       ) {
+        // Supabase a veces dispara SIGNED_IN en lugar de PASSWORD_RECOVERY en flujo PKCE.
+        // Si el URL aún tiene el marcador de recovery, mantenemos el modo reset.
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('type') === 'recovery' || window.location.hash.includes('type=recovery')) {
+          setIsRecoveryMode(true);
+          setShowLanding(false);
+          return;
+        }
         // Sesión válida confirmada por Supabase (restaurada, login nuevo, o token renovado)
         setCurrentUser(prev => {
           // Si ya tenemos los datos del mismo usuario (enriquecidos), no los pisamos
@@ -498,6 +537,12 @@ if (isTransitioning) {
   if (isRecoveryMode) return <ResetPasswordScreen onDone={() => { setIsRecoveryMode(false); window.history.replaceState({}, '', window.location.origin); }} />;
   if (showLanding) return <LandingPage onGetStarted={handleGetStarted} />;
   if (!currentUser) return <LoginScreen onLogin={handleLogin} onShowLanding={() => setShowLanding(true)} />;
+  if (hasOrg === false) return (
+    <NoOrgScreen
+      currentUser={currentUser}
+      onOrgReady={() => setHasOrg(true)}
+    />
+  );
   return (
     <MainApp
       user={currentUser}
@@ -1354,7 +1399,7 @@ function MainApp({ user, onLogout, darkMode, toggleDarkMode, onUserUpdate }) {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
   // ── GUARDIA DE ENTORNO ────────────────────────────────────────────────────
-  const VIEWS_SKIP_ENV = new Set(['management', 'tasks', 'chat', 'analytics', 'backlog']);
+  const VIEWS_SKIP_ENV = new Set(['management', 'tasks', 'chat', 'analytics', 'backlog', 'members']);
   const needsEnvPrompt = !VIEWS_SKIP_ENV.has(activeView)
     && !currentEnvironment
     && !canWorkWithoutEnvironment();
@@ -2008,6 +2053,10 @@ useEffect(() => {
           {activeView === 'management' && (
             <ManagementView currentUser={user} />
           )}
+
+          {activeView === 'members' && (
+            <OrgJoinRequestsView />
+          )}
         </div>
       </div>
 
@@ -2052,6 +2101,7 @@ useEffect(() => {
         projects={projects}
         onTaskRestored={handleTaskRestoredFromTrash}
         addToast={addToast}
+        onNavigate={(view) => { setUserSettingsOpen(false); handleViewChange(view, ''); }}
       />
     </div>
   );
@@ -2215,6 +2265,180 @@ function SearchOverlay({ query, projects, tasks, onSelectProject, onSelectTask, 
 }
 
 // ============================================================================
+// NOTIFICATION BELL — solicitudes de ingreso a la org
+// ============================================================================
+function NotificationBell() {
+  const { pendingRequestsCount, organizationId, currentUser, setPendingRequestsCount, orgRole, isPlatformOwner } = useApp();
+  const [open, setOpen] = useState(false);
+  const [requests, setRequests] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [processingId, setProcessingId] = useState(null);
+  const wrapRef = useRef(null);
+
+  const isAdmin = isPlatformOwner?.() || orgRole === 'org_admin';
+
+  const fetchRequests = useCallback(async () => {
+    if (!organizationId) return;
+    setLoading(true);
+    try {
+      const { data } = await supabase
+        .from('organization_join_requests')
+        .select('*, user:users(id, name, email, avatar)')
+        .eq('organization_id', organizationId)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false });
+      setRequests(data || []);
+    } finally {
+      setLoading(false);
+    }
+  }, [organizationId]);
+
+  useEffect(() => {
+    if (open && isAdmin) fetchRequests();
+    else setRequests([]);
+  }, [open, isAdmin, fetchRequests]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const handleApprove = async (req) => {
+    setProcessingId(req.id);
+    try {
+      await supabase.from('organization_members').insert({
+        organization_id: req.organization_id,
+        user_id: req.user_id,
+        role: 'member',
+        invited_by: currentUser?.id,
+      });
+      await supabase.from('organization_join_requests')
+        .update({ status: 'approved', reviewed_by: currentUser?.id, reviewed_at: new Date().toISOString() })
+        .eq('id', req.id);
+      setPendingRequestsCount(prev => Math.max(0, prev - 1));
+      setRequests(prev => prev.filter(r => r.id !== req.id));
+    } catch (err) {
+      console.error('[NotificationBell] approve error:', err);
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handleReject = async (req) => {
+    setProcessingId(req.id);
+    try {
+      await supabase.from('organization_join_requests')
+        .update({ status: 'rejected', reviewed_by: currentUser?.id, reviewed_at: new Date().toISOString() })
+        .eq('id', req.id);
+      setPendingRequestsCount(prev => Math.max(0, prev - 1));
+      setRequests(prev => prev.filter(r => r.id !== req.id));
+    } catch (err) {
+      console.error('[NotificationBell] reject error:', err);
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  if (!isAdmin) return null;
+
+  return (
+    <div ref={wrapRef} style={{ position: 'relative' }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{ ...iconButtonStyle, position: 'relative' }}
+        title="Notificaciones"
+        onMouseEnter={e => { e.currentTarget.style.background = 'rgba(15,23,42,0.05)'; e.currentTarget.style.color = '#0f172a'; }}
+        onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = '#64748b'; }}
+      >
+        <Bell size={17} />
+        {pendingRequestsCount > 0 && (
+          <span style={{
+            position: 'absolute', top: 2, right: 2,
+            minWidth: 16, height: 16, borderRadius: 8,
+            background: '#ef4444', color: '#fff',
+            fontSize: 9, fontWeight: 700,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: '0 3px', lineHeight: 1,
+          }}>
+            {pendingRequestsCount > 9 ? '9+' : pendingRequestsCount}
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 8px)', right: 0,
+          width: 340, maxHeight: 420, overflowY: 'auto',
+          background: '#fff', borderRadius: 14,
+          border: '1px solid #e2e8f0',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.13)',
+          zIndex: 2000,
+        }}>
+          <div style={{ padding: '13px 16px', borderBottom: '1px solid #f1f5f9', fontWeight: 700, fontSize: 14, color: '#0f172a', position: 'sticky', top: 0, background: '#fff' }}>
+            Solicitudes de ingreso
+          </div>
+          {loading ? (
+            <div style={{ padding: 28, textAlign: 'center', fontSize: 13, color: '#94a3b8' }}>Cargando…</div>
+          ) : requests.length === 0 ? (
+            <div style={{ padding: 28, textAlign: 'center', fontSize: 13, color: '#94a3b8' }}>
+              No hay solicitudes pendientes
+            </div>
+          ) : (
+            requests.map(req => {
+              const u = req.user || {};
+              const busy = processingId === req.id;
+              const avatarIsUrl = typeof u.avatar === 'string' && (u.avatar.startsWith('http') || u.avatar.startsWith('data:'));
+              return (
+                <div key={req.id} style={{ padding: '12px 16px', borderBottom: '1px solid #f8fafc', display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{
+                    width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
+                    background: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 14, fontWeight: 700, color: '#475569', overflow: 'hidden',
+                  }}>
+                    {avatarIsUrl
+                      ? <img src={u.avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      : (u.name || u.email || '?').charAt(0).toUpperCase()
+                    }
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, fontSize: 13, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {u.name || u.email}
+                    </div>
+                    <div style={{ fontSize: 11, color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {u.email}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                    <button
+                      disabled={busy}
+                      onClick={() => handleReject(req)}
+                      style={{ padding: '5px 10px', borderRadius: 7, border: '1px solid #e2e8f0', background: '#fff', fontSize: 11, fontWeight: 600, color: '#64748b', cursor: busy ? 'wait' : 'pointer', fontFamily: 'inherit' }}
+                    >
+                      Rechazar
+                    </button>
+                    <button
+                      disabled={busy}
+                      onClick={() => handleApprove(req)}
+                      style={{ padding: '5px 10px', borderRadius: 7, border: 'none', background: '#0f172a', fontSize: 11, fontWeight: 600, color: '#fff', cursor: busy ? 'wait' : 'pointer', fontFamily: 'inherit' }}
+                    >
+                      Aprobar
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================================
 // TOP BAR
 // ============================================================================
 function TopBar({ user, onLogout, onMenuClick, searchQuery, onSearchChange, darkMode, toggleDarkMode, breadcrumbs, onBreadcrumbClick, onExportReport, isMobile, onOpenUserSettings, searchInputRef }) {
@@ -2287,6 +2511,8 @@ function TopBar({ user, onLogout, onMenuClick, searchQuery, onSearchChange, dark
             onOpenSettings={() => setShowEnvSettings(true)}
             onManageMembers={() => setShowMembersModal(true)}
           />
+
+          <NotificationBell />
 
           <button onClick={onExportReport} style={iconButtonStyle} title="Exportar reporte completo"
             onMouseEnter={e => { e.currentTarget.style.background = 'rgba(15,23,42,0.05)'; e.currentTarget.style.color = '#0f172a'; }}
