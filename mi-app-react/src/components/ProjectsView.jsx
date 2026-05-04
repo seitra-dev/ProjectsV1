@@ -613,7 +613,7 @@ export default function ProjectsView({ selectedEnvironment, onRefresh: externalR
           })}
 
           {/* Chip Backlog */}
-          {backlogCount > 0 && (
+          {envKpis.backlog > 0 && (
             <button
               onClick={() => setFilterStatus(prev => prev === 'backlog' ? 'all' : 'backlog')}
               style={{
@@ -633,7 +633,7 @@ export default function ProjectsView({ selectedEnvironment, onRefresh: externalR
                 background: filterStatus === 'backlog' ? '#8b5cf6' : '#94a3b8',
                 color: 'white', borderRadius: 10, padding: '0px 6px', fontSize: 10, fontWeight: 700,
               }}>
-                {backlogCount}
+                {envKpis.backlog}
               </span>
             </button>
           )}

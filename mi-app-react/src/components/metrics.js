@@ -50,7 +50,7 @@ export const getGlobalMetrics = async (userId, userRole) => {
   try {
     // 1. Obtener entornos accesibles
     let environments = [];
-    if (userRole === 'super_admin') {
+    if (userRole === 'platform_owner') {
       const { data } = await supabase
         .from('environments')
         .select('id, name, color, icon')

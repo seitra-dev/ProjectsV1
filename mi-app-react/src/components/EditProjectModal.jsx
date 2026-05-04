@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Edit2, Save, Lock } from 'lucide-react';
 import { dbProjects } from '../lib/database';
 import { PROJECT_STATUS_DROPDOWN } from '../constants/statuses';
+import { useApp } from '../context/AppContext';
 
 const S = {
   overlay: {
@@ -92,9 +93,10 @@ const STATUS_OPTIONS = Object.entries(PROJECT_STATUS_DROPDOWN).map(([value, cfg]
 
 const AREA_OPTIONS = ['TI', 'Crédito', 'Cartera', 'Riesgo', 'Datos', 'Transversal', 'Interno'];
 
-const DATE_ROLES = ['admin', 'super_admin', 'project_manager'];
+const DATE_ROLES = ['platform_owner', 'org_admin', 'project_manager'];
 
 export default function EditProjectModal({ project, onClose, users = [], currentUser, onSave }) {
+  const { canEditTaskDates } = useApp();
   const [form, setForm] = useState({
     name:          project.name        || '',
     description:   project.description || '',
@@ -114,8 +116,7 @@ export default function EditProjectModal({ project, onClose, users = [], current
     return () => document.removeEventListener('keydown', handler);
   }, [saving, onClose]);
 
-  const role = currentUser?.system_role || currentUser?.role || '';
-  const canEditDates = DATE_ROLES.includes(role);
+  const canEditDates = canEditTaskDates();
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   const handleSubmit = async () => {

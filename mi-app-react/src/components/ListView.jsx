@@ -553,6 +553,51 @@ const SortableTaskRow = ({
 
               const displayValue = fieldValue !== null ? String(fieldValue) : '—';
 
+              if (customField.type === 'url') {
+                if (isEditing) {
+                  return (
+                    <input type="url" value={fieldValue || ''}
+                      onChange={(e) => setEditedTask({
+                        ...editedTask,
+                        customFields: { ...editedTask.customFields, [colKey]: e.target.value || null }
+                      })}
+                      style={{ ...dateInputStyle, color: '#2563eb' }} />
+                  );
+                }
+                if (!fieldValue) return <div style={{ color: DESIGN_TOKENS.neutral[400], fontSize: '12px' }}>—</div>;
+                let displayUrl;
+                try { displayUrl = new URL(fieldValue).hostname.replace(/^www\./, '') || fieldValue; }
+                catch { displayUrl = fieldValue; }
+                return (
+                  <div style={{ minWidth: 0, overflow: 'hidden' }}>
+                    <a
+                      href={fieldValue}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      title={fieldValue}
+                      style={{
+                        color: '#2563eb',
+                        fontSize: '12px',
+                        textDecoration: 'none',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        minWidth: 0,
+                      }}
+                    >
+                      <span style={{ flexShrink: 0, display: 'flex' }}>🔗</span>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: 'underline' }}>
+                        {displayUrl}
+                      </span>
+                    </a>
+                  </div>
+                );
+              }
+
               if (customField.type === 'date' && isEditing) {
                 return canEditDates ? (
                   <input type="date" value={fieldValue || ''}

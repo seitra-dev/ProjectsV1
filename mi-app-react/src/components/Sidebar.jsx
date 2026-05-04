@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Home, Briefcase, Check, Calendar, PieChart, BarChart2, Star, MessageSquare } from 'lucide-react';
+import { Home, Briefcase, Check, Calendar, PieChart, BarChart2, MessageSquare, Users } from 'lucide-react';
 import { DESIGN_TOKENS } from '/src/styles/tokens';
 import WorkspaceList from './Enviroments/WorkspaceList';
 import CreateWorkspaceModal from './Enviroments/CreateWorkspaceModal';
@@ -48,31 +48,45 @@ const sidebarFooterStyle = {
 };
 
 function Sidebar({ isOpen, activeView, onViewChange, projects, onProjectSelect, user, toggleFavorite, isMobile, onClose, onSelectList, onOpenUserSettings }) {
-  const { setCurrentWorkspaceState, currentEnvironment } = useApp();
+  const { setCurrentWorkspaceState, currentEnvironment, orgRole, pendingRequestsCount, isPlatformOwner } = useApp();
   const [showCreateWorkspace, setShowCreateWorkspace] = useState(false);
   const [showCreateList, setShowCreateList] = useState(false);
   const [createListWorkspace, setCreateListWorkspace] = useState(null);
 
+  // Resolver rol efectivo:
+  // 1. user.role desde BD (platform_owner | user)
+  // 2. orgRole del AppContext (org_admin | member)
+  // 3. caché localStorage como fallback mientras carga
+  const effectiveSystemRole = user?.role
+    || (() => { try { return localStorage.getItem('seitra_system_role'); } catch { return null; } })()
+    || 'user';
+
+  const isOwner    = effectiveSystemRole === 'platform_owner' || isPlatformOwner?.();
+  const isOrgAdmin = isOwner || orgRole === 'org_admin';
+
   const allMenuItems = [
-    { id: 'dashboard', icon: <Home size={19} />, label: 'Dashboard' },
-    { id: 'projects', icon: <Briefcase size={19} />, label: 'Proyectos' },
-    { id: 'tasks', icon: <Check size={19} />, label: 'Mis Tareas' },
-    { id: 'calendar', icon: <Calendar size={19} />, label: 'Calendario' },
-    { id: 'chat', icon: <MessageSquare size={19} />, label: 'Chat del Equipo' },
-    { id: 'analytics', icon: <PieChart size={19} />, label: 'Analítica' },
-    { id: 'management', icon: <BarChart2 size={19} />, label: 'Gestión', roles: ['super_admin', 'admin', 'project_manager'] },
+    { id: 'dashboard',   icon: <Home size={19} />,        label: 'Dashboard' },
+    { id: 'projects',    icon: <Briefcase size={19} />,   label: 'Proyectos' },
+    { id: 'tasks',       icon: <Check size={19} />,       label: 'Mis Tareas' },
+    { id: 'calendar',    icon: <Calendar size={19} />,    label: 'Calendario' },
+    { id: 'chat',        icon: <MessageSquare size={19} />, label: 'Chat del Equipo' },
+    { id: 'analytics',   icon: <PieChart size={19} />,    label: 'Analítica' },
+    {
+      id: 'management',
+      icon: <BarChart2 size={19} />,
+      label: 'Gestión',
+    },
+    {
+      id: 'members',
+      icon: <Users size={19} />,
+      label: 'Miembros',
+      badge: isOrgAdmin && pendingRequestsCount > 0 ? pendingRequestsCount : null,
+      visibleWhen: isOrgAdmin,
+    },
   ];
 
-  // Resolver el rol con prioridad:
-  // 1. user.system_role (ya enriquecido desde la BD)
-  // 2. caché en localStorage (guardado en la sesión anterior, disponible de inmediato)
-  // 3. Sin rol (no mostrar ítems restringidos)
-  // Esto evita que "Gestión" desaparezca mientras authChecked es false.
-  const effectiveRole = user?.system_role
-    || (() => { try { return localStorage.getItem('seitra_system_role'); } catch { return null; } })();
-
   const menuItems = allMenuItems.filter(item =>
-    !item.roles || item.roles.includes(effectiveRole)
+    item.visibleWhen === undefined ? true : item.visibleWhen
   );
 
   const favoriteProjects = projects.filter(p => p.favorite);
@@ -237,6 +251,7 @@ function Sidebar({ isOpen, activeView, onViewChange, projects, onProjectSelect, 
                       : 'transparent',
                     color: isActive ? 'var(--text-primary)' : 'var(--text-muted)',
                     border: isActive ? '1px solid rgba(15, 23, 42, 0.05)' : '1px solid transparent',
+                    boxShadow: (isActive && !collapsed) ? 'inset 3px 0 0 0 #0f172a' : 'none',
                     borderRadius: '12px',
                     cursor: 'pointer',
                     transition: 'all 0.3s ease',
@@ -256,22 +271,23 @@ function Sidebar({ isOpen, activeView, onViewChange, projects, onProjectSelect, 
                     }
                   }}
                 >
-                  {isActive && !collapsed && (
-                    <div style={{
-                      position: 'absolute',
-                      left: '0',
-                      width: '4px',
-                      height: '18px',
-                      background: '#0f172a',
-                      borderRadius: '0 4px 4px 0',
-                    }} />
-                  )}
                   <span style={{
                     flexShrink: 0,
                     display: 'flex',
                     color: isActive ? 'var(--text-primary)' : 'inherit',
                   }}>{item.icon}</span>
-                  {(!collapsed || isMobile) && <span>{item.label}</span>}
+                  {(!collapsed || isMobile) && (
+                    <span style={{ flex: 1 }}>{item.label}</span>
+                  )}
+                  {item.badge && (!collapsed || isMobile) && (
+                    <span style={{
+                      background: '#ef4444', color: '#fff', borderRadius: '999px',
+                      fontSize: '10px', fontWeight: 700, padding: '1px 6px', lineHeight: '16px',
+                      minWidth: 18, textAlign: 'center',
+                    }}>
+                      {item.badge > 9 ? '9+' : item.badge}
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -345,7 +361,7 @@ function Sidebar({ isOpen, activeView, onViewChange, projects, onProjectSelect, 
                             {user?.name || user?.email || 'Usuario'}
                         </div>
                         <div style={{ fontSize: '11px', color: 'var(--text-subtle)', fontWeight: 500 }}>
-                            {user?.role === 'admin' ? 'Project Manager' : 'Analista'}
+                            {isOwner ? 'Platform Owner' : isOrgAdmin ? 'Administrador' : 'Miembro'}
                         </div>
                     </div>
                 )}

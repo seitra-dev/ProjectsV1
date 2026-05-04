@@ -8,9 +8,9 @@ import AnalyticsGeneralView from './AnalyticsGeneralView';
 // ============================================================================
 
 export default function AnalyticsDashboard() {
-  const { environments, currentUser, isSuperAdmin } = useApp();
+  const { environments, currentUser, isSuperAdmin, orgRole } = useApp();
   const superAdmin = isSuperAdmin();
-  const canSeePerformance = superAdmin || ['admin', 'super_admin'].includes(currentUser?.role);
+  const canSeePerformance = superAdmin || orgRole === 'org_admin';
 
   const [activeTab, setActiveTab] = useState('general');
 

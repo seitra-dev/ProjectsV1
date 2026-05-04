@@ -935,7 +935,7 @@ function ManagementRoadmap({ selectedEnv = 'all' }) {
 // MAIN VIEW
 // ============================================================================
 export default function ManagementView() {
-  const { currentUser, environments } = useApp();
+  const { currentUser, environments, orgRole, isPlatformOwner } = useApp();
 
   // ── Tabs / entorno ────────────────────────────────────────────────────────
   const [activeTab,    setActiveTab]    = useState('week');
@@ -1083,17 +1083,6 @@ export default function ManagementView() {
     setShowCapModal(false);
   };
 
-  // ── Acceso ────────────────────────────────────────────────────────────────
-  const canAccess = ['super_admin', 'admin', 'project_manager'].includes(currentUser?.system_role);
-  if (!canAccess) {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '60vh', gap: 12 }}>
-        <AlertTriangle size={40} color="#f59e0b" />
-        <div style={{ fontSize: 16, fontWeight: 600, color: '#374151' }}>Acceso restringido</div>
-        <div style={{ fontSize: 13, color: '#6b7280' }}>Esta vista es solo para jefes y coordinadores.</div>
-      </div>
-    );
-  }
 
   return (
     <div style={{ padding: '16px 24px', maxWidth: activeTab === 'roadmap' ? 'none' : 1400, margin: '0 auto', fontFamily: DESIGN_TOKENS.typography.fontFamily }}>

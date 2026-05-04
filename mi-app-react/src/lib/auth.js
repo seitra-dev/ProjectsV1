@@ -173,7 +173,7 @@ export const auth = {
     try {
       const appUrl = import.meta.env.VITE_APP_URL || window.location.origin;
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: appUrl,
+        redirectTo: `${appUrl}?type=recovery`,
       });
 
       if (error) throw error;
