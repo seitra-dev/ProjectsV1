@@ -580,65 +580,6 @@ export default function ProjectsView({ selectedEnvironment, onRefresh: externalR
         <KpiCard label="Backlog"        value={envKpis.backlog}         icon={<ListChecks size={16} />}     colorIdx={6} loading={loading} />
       </div>
 
-      {/* RESUMEN RÁPIDO POR ENTORNO */}
-      {!loading && envSummary.length > 1 && (
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16, alignItems: 'center' }}>
-          {envSummary.map(env => {
-            const found = envList.find(e => e.name === env.name);
-            const isActive = found && filterEnv === found.id;
-            return (
-              <button
-                key={env.name}
-                onClick={() => {
-                  if (found) setFilterEnv(prev => prev === found.id ? 'all' : found.id);
-                }}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 6,
-                  padding: '5px 12px', borderRadius: 20,
-                  background: isActive ? `${env.color}25` : `${env.color}15`,
-                  border: `1.5px solid ${isActive ? env.color : env.color + '40'}`,
-                  color: env.color, fontSize: 12, fontWeight: 600,
-                  cursor: 'pointer', fontFamily: 'inherit',
-                  transition: 'all 0.15s',
-                  boxShadow: isActive ? `0 0 0 2px ${env.color}30` : 'none',
-                }}
-              >
-                <Globe2 size={11} />
-                {env.name}
-                <span style={{ background: env.color, color: 'white', borderRadius: 10, padding: '0px 6px', fontSize: 10, fontWeight: 700 }}>
-                  {env.count}
-                </span>
-              </button>
-            );
-          })}
-
-          {/* Chip Backlog */}
-          {envKpis.backlog > 0 && (
-            <button
-              onClick={() => setFilterStatus(prev => prev === 'backlog' ? 'all' : 'backlog')}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 6,
-                padding: '5px 12px', borderRadius: 20,
-                background: filterStatus === 'backlog' ? '#f5f3ff' : '#fafafa',
-                border: `1.5px solid ${filterStatus === 'backlog' ? '#8b5cf6' : '#e2e8f0'}`,
-                color: filterStatus === 'backlog' ? '#7c3aed' : '#64748b',
-                fontSize: 12, fontWeight: 600,
-                cursor: 'pointer', fontFamily: 'inherit',
-                transition: 'all 0.15s',
-                boxShadow: filterStatus === 'backlog' ? '0 0 0 2px #8b5cf630' : 'none',
-              }}
-            >
-              📋 Backlog
-              <span style={{
-                background: filterStatus === 'backlog' ? '#8b5cf6' : '#94a3b8',
-                color: 'white', borderRadius: 10, padding: '0px 6px', fontSize: 10, fontWeight: 700,
-              }}>
-                {envKpis.backlog}
-              </span>
-            </button>
-          )}
-        </div>
-      )}
 
       {/* BARRA DE ACCIONES */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>

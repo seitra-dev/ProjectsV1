@@ -470,7 +470,7 @@ const DroppableStatusGroup = ({ statusKey, statusInfo, tasks, isExpanded, onTogg
 // BACKLOG VIEW — CONECTADO A SUPABASE
 // ============================================================================
 function BacklogView() {
-  const { currentEnvironment, currentWorkspace } = useApp();
+  const { currentEnvironment, currentWorkspace, organizationId } = useApp();
 
   const [tasks, setTasks] = useState([]);
   const [projects, setProjects] = useState([]);
@@ -627,6 +627,7 @@ function BacklogView() {
       dueDate: taskData.endDate || null,
       workspaceId: currentWorkspace.id,
       environmentId: currentEnvironment?.id || null,
+      organizationId: organizationId || currentEnvironment?.organization_id || currentWorkspace?.organization_id || null,
       progress: 0,
     };
 

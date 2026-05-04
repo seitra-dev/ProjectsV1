@@ -790,7 +790,7 @@ function ListView({
   onProjectUpdate = () => {},
   onTaskClick = null,
 }) {
-  const { currentEnvironment, currentWorkspace, currentUser, canEditTaskDates, membershipMap } = useApp();
+  const { currentEnvironment, currentWorkspace, currentUser, canEditTaskDates, membershipMap, organizationId } = useApp();
   const [listName, setListName] = useState(initialListName);
   const [isEditingName, setIsEditingName] = useState(false);
   const [weeks, setWeeks] = useState([
@@ -953,6 +953,7 @@ function ListView({
         dueDate: taskData.endDate || null,
         listId,
         workspaceId: currentWorkspace?.id || null,
+        organizationId: organizationId || currentEnvironment?.organization_id || currentWorkspace?.organization_id || null,
         progress: 0,
       });
       onTasksChange([{ ...created, listId, endDate: created.dueDate }, ...tasks]);
