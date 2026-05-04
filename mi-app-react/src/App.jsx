@@ -4854,7 +4854,7 @@ function TaskRow({ task, allTasks, users, expanded, onToggle, onEdit, onDelete, 
 // ============================================================================
 // TABLE VIEW
 // ============================================================================
-function TableView({ tasks = [], users = [], onEdit, onTaskClick }) {
+function TableView({ tasks = [], users = [], projects = [], onEdit, onTaskClick }) {
   const getStatusStyle = (status) => {
     const key = (status || '').toLowerCase().replace(/ /g, '_');
     return STATUS_OPTIONS[key] || { bg: DESIGN_TOKENS.neutral[100], color: DESIGN_TOKENS.neutral[600], label: status || 'Sin estado' };
@@ -4899,6 +4899,7 @@ function TableView({ tasks = [], users = [], onEdit, onTaskClick }) {
           <thead>
             <tr style={{ background: DESIGN_TOKENS.neutral[50] }}>
               <th style={thStyle}>Tarea</th>
+              {projects.length > 0 && <th style={thStyle}>Proyecto</th>}
               <th style={thStyle}>Estado</th>
               <th style={thStyle}>Prioridad</th>
               <th style={thStyle}>Asignado</th>
@@ -4931,6 +4932,47 @@ function TableView({ tasks = [], users = [], onEdit, onTaskClick }) {
                       {task.title}
                     </div>
                   </td>
+
+                  {/* Proyecto */}
+                  {projects.length > 0 && (() => {
+                    const project = projects.find(p => p.id === task.projectId);
+                    return (
+                      <td style={tdStyle}>
+                        {project ? (
+                          <div style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: '3px 10px',
+                            borderRadius: '20px',
+                            background: project.color ? `${project.color}18` : DESIGN_TOKENS.neutral[100],
+                            border: `1px solid ${project.color ? `${project.color}40` : DESIGN_TOKENS.border.color.subtle}`,
+                            maxWidth: '160px',
+                          }}>
+                            <span style={{
+                              width: '7px',
+                              height: '7px',
+                              borderRadius: '50%',
+                              background: project.color || DESIGN_TOKENS.neutral[400],
+                              flexShrink: 0,
+                            }} />
+                            <span style={{
+                              fontSize: '12px',
+                              fontWeight: 600,
+                              color: project.color || DESIGN_TOKENS.neutral[700],
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                            }}>
+                              {project.name}
+                            </span>
+                          </div>
+                        ) : (
+                          <span style={{ fontSize: '12px', color: DESIGN_TOKENS.neutral[400] }}>—</span>
+                        )}
+                      </td>
+                    );
+                  })()}
 
                   {/* Estado (Badge) */}
                   <td style={tdStyle}>
@@ -5766,6 +5808,7 @@ function AllTasksView({ tasks, projects, users, currentUser, onTaskClick }) {
       <TableView
         tasks={filteredTasks}
         users={users}
+        projects={projects}
         onEdit={() => {}}
         onTaskClick={onTaskClick}
       />
