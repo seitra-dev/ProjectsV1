@@ -162,17 +162,18 @@ export default function OrgJoinRequestsView() {
 
   // ── Carga de datos ──────────────────────────────────────────────────────────
   const loadRequests = useCallback(async () => {
-    if (!organizationId) return;
     setLoading(true);
     try {
-      // Solicitudes pendientes
-      const { data: reqs, error: reqErr } = await supabase
+      // Solicitudes pendientes — si hay organizationId filtra por ella, si no trae todas
+      let query = supabase
         .from('organization_join_requests')
         .select('id, user_id, organization_id, status, requested_at')
-        .eq('organization_id', organizationId)
         .eq('status', 'pending')
         .order('requested_at', { ascending: true });
 
+      if (organizationId) query = query.eq('organization_id', organizationId);
+
+      const { data: reqs, error: reqErr } = await query;
       if (reqErr) throw reqErr;
       if (!reqs?.length) { setRequests([]); return; }
 
@@ -193,15 +194,14 @@ export default function OrgJoinRequestsView() {
   }, [organizationId]);
 
   useEffect(() => {
-    if (!organizationId) return;
-
-    supabase
-      .from('organizations')
-      .select('id, name, icon, color')
-      .eq('id', organizationId)
-      .single()
-      .then(({ data }) => setOrg(data));
-
+    if (organizationId) {
+      supabase
+        .from('organizations')
+        .select('id, name, icon, color')
+        .eq('id', organizationId)
+        .single()
+        .then(({ data }) => setOrg(data));
+    }
     loadRequests();
   }, [organizationId, loadRequests]);
 

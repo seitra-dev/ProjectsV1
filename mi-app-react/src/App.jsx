@@ -1376,7 +1376,7 @@ function ResetPasswordScreen({ onDone }) {
 // ============================================================================
 function MainApp({ user, onLogout, darkMode, toggleDarkMode, onUserUpdate }) {
   const { addToast } = useToast();
-  const { currentWorkspace, currentEnvironment, lists, canWorkWithoutEnvironment } = useApp();
+  const { currentWorkspace, currentEnvironment, lists, canWorkWithoutEnvironment, organizationId: appOrgId } = useApp();
   const [activeView, setActiveView] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [projects, setProjects] = useState([]);
@@ -1476,6 +1476,7 @@ useEffect(() => {
       : (safeLeaderId ? [safeLeaderId] : []);
     const payload = {
       ...projectData,
+      organizationId: projectData.organizationId || appOrgId || user?.organizationId || currentEnvironment?.organization_id || currentWorkspace?.organization_id || null,
       workspaceId: projectData.workspaceId || currentWorkspace?.id || null,
       environmentId: projectData.environmentId || currentEnvironment?.id || null,
       leaderId: safeLeaderId,
@@ -1531,6 +1532,7 @@ useEffect(() => {
     try {
       const enriched = {
         ...taskData,
+        organizationId: taskData.organizationId ?? appOrgId ?? user?.organizationId ?? currentEnvironment?.organization_id ?? currentWorkspace?.organization_id ?? null,
         workspaceId: taskData.workspaceId ?? currentWorkspace?.id ?? null,
       };
       const created = await dbTasks.create(enriched);

@@ -390,6 +390,7 @@ export const AppProvider = ({ children }) => {
         color: data.color || '#6366f1',
         icon: data.icon || '📊',
         owner_id: currentUser.id,
+        organization_id: organizationId || null,
       });
 
       // 2. Registrar al creador como 'owner' en environment_members
@@ -478,7 +479,8 @@ export const AppProvider = ({ children }) => {
         icon: data.settings?.icon || 'Briefcase',
         visibility: data.settings?.visibility || 'all_members',
         permission: data.settings?.permission || 'full',
-        created_by: currentUser?.id
+        created_by: currentUser?.id,
+        organization_id: organizationId || null,
       });
       const rawFreshWorkspaces = await dbWorkspaces.getByEnvironment(envId);
       const freshWorkspaces = filterWorkspacesForUser(rawFreshWorkspaces, currentUser?.id);
@@ -557,7 +559,7 @@ export const AppProvider = ({ children }) => {
   // ============================================================================
 
   const createList = async (listData) => {
-    const newList = await dbLists.create(listData);
+    const newList = await dbLists.create({ ...listData, organizationId: listData.organizationId || organizationId || null });
     setLists(prev => [...prev, newList]);
     return newList;
   };

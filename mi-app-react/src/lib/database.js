@@ -248,6 +248,7 @@ const toDbProject = (project) => {
   if (project.leaderId !== undefined) db.owner_id = project.leaderId;
   if (project.workspaceId !== undefined) db.workspace_id = project.workspaceId;
   if (project.environmentId !== undefined) db.environment_id = project.environmentId;
+  if (project.organizationId !== undefined) db.organization_id = project.organizationId || null;
   if (project.tags !== undefined) db.tags = project.tags;
   if (project.members !== undefined) db.members = project.members || [];
   if (project.favorite !== undefined) db.favorite = project.favorite;
@@ -305,6 +306,7 @@ const toDbTask = (task) => {
   if (task.estimatedHours !== undefined) db.estimated_hours = task.estimatedHours || null;
   if (task.workspaceId !== undefined) db.workspace_id = task.workspaceId || null;
   if (task.environmentId !== undefined) db.environment_id = task.environmentId || null;
+  if (task.organizationId !== undefined) db.organization_id = task.organizationId || null;
   if ('roadmapPhaseId' in task) db.roadmap_phase_id = task.roadmapPhaseId || null;
   // Merge user-defined customFields with internal reserved keys (_checklist, _frente, _task_type)
   const hasChecklist  = task.checklist  !== undefined;
@@ -818,6 +820,7 @@ export const dbLists = {
       description: listData.description || '',
       workspace_id: listData.workspaceId || null,
       environment_id: listData.environmentId || null,
+      organization_id: listData.organizationId || null,
       is_private: listData.isPrivate || false,
       created_by: listData.createdBy || null,
     });
