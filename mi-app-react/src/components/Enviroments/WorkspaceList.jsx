@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import {
   Plus, MoreVertical, ChevronRight, GripVertical, Pencil, Trash2,
   MessageSquare, ListTodo, Folder, FileText, Trello,
-  LayoutDashboard, Zap, FileInput, Layout, Briefcase
+  LayoutDashboard, Zap, FileInput, Layout, Briefcase, ClipboardList
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { DESIGN_TOKENS } from '../../styles/tokens.js';
@@ -558,7 +558,7 @@ const SortableWorkspaceItem = ({
 // ============================================================================
 // WORKSPACE LIST WITH DRAG AND DROP
 // ============================================================================
-const WorkspaceList = ({ onCreateWorkspace, onSelectWorkspace, onOpenChat, onOpenBacklog, onCreateList, onSelectList }) => {
+const WorkspaceList = ({ onCreateWorkspace, onSelectWorkspace, onOpenChat, onOpenBacklog, onCreateList, onSelectList, onOpenMySpaceToDo }) => {
   const { currentEnvironment, currentWorkspace, deleteWorkspace, updateWorkspace, lists, deleteList, updateList } = useApp();
   const workspaces = currentEnvironment?.workspaces || [];
   const [expandedWorkspaces, setExpandedWorkspaces] = useState({});
@@ -669,8 +669,8 @@ const handleAddOption = (type) => {
   setShowAddMenu(false);
   const ws = activeMenuWorkspace;
   setActiveMenuWorkspace(null);
-  if (type === 'space') {
-    onCreateWorkspace();
+  if (type === 'my-space-todo') {
+    onOpenMySpaceToDo && onOpenMySpaceToDo();
   } else if (type === 'chat') {
     onOpenChat && onOpenChat();
   } else if (type === 'backlog') {
@@ -832,9 +832,9 @@ const handleAddOption = (type) => {
                 </span>
               </div>
 
-              {/* ESPACIO */}
+              {/* MI ESPACIO TO DO */}
               <button
-                onClick={() => handleAddOption('space')}
+                onClick={() => handleAddOption('my-space-todo')}
                 style={{
                   width: '100%',
                   display: 'flex',
@@ -848,25 +848,25 @@ const handleAddOption = (type) => {
                   transition: `all ${DESIGN_TOKENS.transition.fast}`,
                   textAlign: 'left'
                 }}
-                onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(0, 102, 255, 0.06)'}
+                onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(180, 83, 9, 0.06)'}
                 onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
               >
-                <Briefcase size={18} color={DESIGN_TOKENS.primary.base} style={{ marginTop: '2px' }} />
+                <ClipboardList size={18} color="#B45309" style={{ marginTop: '2px', flexShrink: 0 }} />
                 <div style={{ flex: 1 }}>
                   <div style={{
                     fontSize: '14px',
                     fontWeight: 600,
-                    color: DESIGN_TOKENS.primary.base,
+                    color: '#B45309',
                     marginBottom: '2px'
                   }}>
-                    Espacio
+                    Mi espacio to do
                   </div>
                   <div style={{
                     fontSize: '12px',
                     color: DESIGN_TOKENS.neutral[500],
                     lineHeight: 1.3
                   }}>
-                    Agrupa listas y proyectos de un equipo o área
+                    Lista personal de tareas y notas
                   </div>
                 </div>
               </button>
