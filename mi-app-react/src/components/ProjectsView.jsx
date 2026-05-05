@@ -360,9 +360,17 @@ const SubtaskRow = ({ subtask, users }) => {
   );
 };
 
-const TABLE_HEADERS = [
-  'TIPO', 'NOMBRE / PROGRESO', 'EQUIPO', 'INICIO', 'FIN',
-  'DÍAS', 'PRIORIDAD', 'RESPONSABLE', 'ESTADO', 'ACCIONES',
+const COLUMNS = [
+  { label: 'TIPO',              key: null },
+  { label: 'NOMBRE / PROGRESO', key: 'name' },
+  { label: 'EQUIPO',            key: null },
+  { label: 'INICIO',            key: 'startDate' },
+  { label: 'FIN',               key: 'endDate' },
+  { label: 'DÍAS',              key: 'days' },
+  { label: 'PRIORIDAD',         key: 'priority' },
+  { label: 'RESPONSABLE',       key: null },
+  { label: 'ESTADO',            key: 'status' },
+  { label: 'ACCIONES',          key: null },
 ];
 
 // ============================================================================
@@ -389,7 +397,27 @@ export default function ProjectsView({ selectedEnvironment, onRefresh: externalR
   const [filterStatus,   setFilterStatus]   = useState('all');
   const [filterPriority, setFilterPriority] = useState('all');
   const [filterEnv,      setFilterEnv]      = useState('all');
+  const [filterPerson,   setFilterPerson]   = useState(() => {
+    try { return localStorage.getItem('seitra_fp_mgmt') || 'all'; } catch { return 'all'; }
+  });
   const [searchText,     setSearchText]     = useState('');
+
+  // ── Dropdown persona ──────────────────────────────────────────────────────
+  const [showPersonDD, setShowPersonDD] = useState(false);
+  const personDDRef = useRef(null);
+
+  // ── Ordenamiento ──────────────────────────────────────────────────────────
+  const [sortKey, setSortKey] = useState(null);
+  const [sortDir, setSortDir] = useState('asc');
+
+  const handleSort = (key) => {
+    if (!key) return;
+    setSortKey(prev => {
+      if (prev === key) { setSortDir(d => d === 'asc' ? 'desc' : 'asc'); return key; }
+      setSortDir('asc');
+      return key;
+    });
+  };
 
   // ── Modales ───────────────────────────────────────────────────────────────
   const [modal,    setModal]    = useState(null);   // 'project'|'milestone'|'task'
@@ -422,6 +450,19 @@ export default function ProjectsView({ selectedEnvironment, onRefresh: externalR
   }, [currentUser?.id, currentUser?.system_role, selectedEnvironment]);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  useEffect(() => {
+    try { localStorage.setItem('seitra_fp_mgmt', filterPerson); } catch {}
+  }, [filterPerson]);
+
+  useEffect(() => {
+    if (!showPersonDD) return;
+    const close = (e) => {
+      if (personDDRef.current && !personDDRef.current.contains(e.target)) setShowPersonDD(false);
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [showPersonDD]);
 
   const handleRefresh = () => { loadData(); externalRefresh?.(); };
 
@@ -484,6 +525,24 @@ export default function ProjectsView({ selectedEnvironment, onRefresh: externalR
     return !envId && !wsEnvId;
   };
 
+  // ── Personas con proyectos (para chips de filtro) ─────────────────────────
+  const projectPersons = useMemo(() => {
+    const seen = new Set();
+    const result = [];
+    hierarchy.forEach(p => {
+      const uid = String(p.owner_id || p.leaderId || '');
+      if (uid && !seen.has(uid)) {
+        const user = users.find(u => String(u.id) === uid);
+        if (user) { seen.add(uid); result.push(user); }
+      }
+    });
+    return result.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  }, [hierarchy, users]);
+
+  const selectedPersonUser = filterPerson !== 'all'
+    ? projectPersons.find(u => String(u.id) === filterPerson) || null
+    : null;
+
   // ── Filtros aplicados ─────────────────────────────────────────────────────
   const filtered = useMemo(() => {
     let list = hierarchy;
@@ -492,15 +551,53 @@ export default function ProjectsView({ selectedEnvironment, onRefresh: externalR
     if (filterEnv      !== 'all') list = list.filter(p => {
       const envId   = p._environment?.id || p.environment_id;
       const wsEnvId = p._workspace?.environment_id;
-      // incluir proyectos del equipo seleccionado + proyectos generales (sin equipo)
       return envId === filterEnv || wsEnvId === filterEnv || isGeneral(p);
+    });
+    if (filterPerson !== 'all') list = list.filter(p => {
+      const uid = String(p.owner_id || p.leaderId || '');
+      const isMember = Array.isArray(p.members) && p.members.some(m => String(m) === filterPerson);
+      return uid === filterPerson || isMember;
     });
     if (searchText.trim()) {
       const q = searchText.toLowerCase();
       list = list.filter(p => p.name?.toLowerCase().includes(q));
     }
     return list;
-  }, [hierarchy, filterStatus, filterPriority, filterEnv, searchText]);
+  }, [hierarchy, filterStatus, filterPriority, filterEnv, filterPerson, searchText]);
+
+  // ── Ordenamiento local ────────────────────────────────────────────────────
+  const PRIORITY_ORDER = { urgent: 0, high: 1, medium: 2, low: 3 };
+
+  const sorted = useMemo(() => {
+    if (!sortKey) return filtered;
+    return [...filtered].sort((a, b) => {
+      let va, vb;
+      if (sortKey === 'name') {
+        va = (a.name || '').toLowerCase();
+        vb = (b.name || '').toLowerCase();
+      } else if (sortKey === 'startDate') {
+        va = a.start_date || a.startDate || '';
+        vb = b.start_date || b.startDate || '';
+      } else if (sortKey === 'endDate') {
+        va = a.end_date || a.endDate || '';
+        vb = b.end_date || b.endDate || '';
+      } else if (sortKey === 'days') {
+        const sa = a.start_date || a.startDate, ea = a.end_date || a.endDate;
+        const sb = b.start_date || b.startDate, eb = b.end_date || b.endDate;
+        va = (sa && ea) ? Math.round((new Date(ea) - new Date(sa)) / 86400000) : -1;
+        vb = (sb && eb) ? Math.round((new Date(eb) - new Date(sb)) / 86400000) : -1;
+      } else if (sortKey === 'priority') {
+        va = PRIORITY_ORDER[a.priority || 'medium'] ?? 2;
+        vb = PRIORITY_ORDER[b.priority || 'medium'] ?? 2;
+      } else if (sortKey === 'status') {
+        va = (sColor(a.status || 'active').label || '').toLowerCase();
+        vb = (sColor(b.status || 'active').label || '').toLowerCase();
+      } else { return 0; }
+      if (va < vb) return sortDir === 'asc' ? -1 : 1;
+      if (va > vb) return sortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [filtered, sortKey, sortDir]);
 
   // KPIs calculados del entorno seleccionado (+ generales); ignora status/priority/search
   const envKpis = useMemo(() => {
@@ -582,72 +679,150 @@ export default function ProjectsView({ selectedEnvironment, onRefresh: externalR
 
 
       {/* BARRA DE ACCIONES */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-          {/* Búsqueda */}
-          <div style={{ position: 'relative' }}>
-            <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#9ca3af' }} />
-            <input
-              style={{ padding: '8px 12px 8px 30px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, outline: 'none', fontFamily: 'inherit', width: 190 }}
-              placeholder="Buscar proyecto…"
-              value={searchText}
-              onChange={e => setSearchText(e.target.value)}
-            />
-          </div>
+      <div style={{ marginBottom: 16 }}>
+        {/* Fila 1: búsqueda + selects + botones */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+            {/* Búsqueda */}
+            <div style={{ position: 'relative' }}>
+              <Search size={12} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#9ca3af' }} />
+              <input
+                style={{ padding: '5px 12px 5px 28px', border: '1px solid #e2e8f0', borderRadius: 20, fontSize: 12, outline: 'none', fontFamily: 'inherit', width: 180, color: '#334155' }}
+                placeholder="Buscar proyecto…"
+                value={searchText}
+                onChange={e => setSearchText(e.target.value)}
+              />
+            </div>
 
-          {/* Filtro entorno (solo si hay más de 1) */}
-          {envList.length > 1 && (
+            {/* Filtro entorno (solo si hay más de 1) */}
+            {envList.length > 1 && (
+              <select
+                value={filterEnv}
+                onChange={e => setFilterEnv(e.target.value)}
+                style={{ padding: '5px 12px', border: '1px solid #e2e8f0', borderRadius: 20, fontSize: 12, outline: 'none', fontFamily: 'inherit', background: 'white', cursor: 'pointer', color: '#475569', fontWeight: 500 }}
+              >
+                <option value="all">Equipo: Todos</option>
+                {envList.map(env => (
+                  <option key={env.id} value={env.id}>{env.icon || '📁'} {env.name}</option>
+                ))}
+              </select>
+            )}
+
             <select
-              value={filterEnv}
-              onChange={e => setFilterEnv(e.target.value)}
-              style={{ padding: '8px 10px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, outline: 'none', fontFamily: 'inherit', background: 'white', cursor: 'pointer' }}
+              value={filterStatus}
+              onChange={e => setFilterStatus(e.target.value)}
+              style={{ padding: '5px 12px', border: '1px solid #e2e8f0', borderRadius: 20, fontSize: 12, outline: 'none', fontFamily: 'inherit', background: 'white', cursor: 'pointer', color: '#475569', fontWeight: 500 }}
             >
-              <option value="all">Equipo: Todos</option>
-              {envList.map(env => (
-                <option key={env.id} value={env.id}>{env.icon || '📁'} {env.name}</option>
+              <option value="all">Estado: Todos</option>
+              {Object.entries(PROJECT_STATUS_DROPDOWN).map(([k, v]) => (
+                <option key={k} value={k}>{v.label}</option>
               ))}
             </select>
-          )}
 
-          <select
-            value={filterStatus}
-            onChange={e => setFilterStatus(e.target.value)}
-            style={{ padding: '8px 10px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, outline: 'none', fontFamily: 'inherit', background: 'white', cursor: 'pointer' }}
-          >
-            <option value="all">Estado: Todos</option>
-            {Object.entries(PROJECT_STATUS_DROPDOWN).map(([k, v]) => (
-              <option key={k} value={k}>{v.label}</option>
-            ))}
-          </select>
+            <select
+              value={filterPriority}
+              onChange={e => setFilterPriority(e.target.value)}
+              style={{ padding: '5px 12px', border: '1px solid #e2e8f0', borderRadius: 20, fontSize: 12, outline: 'none', fontFamily: 'inherit', background: 'white', cursor: 'pointer', color: '#475569', fontWeight: 500 }}
+            >
+              <option value="all">Prioridad: Todas</option>
+              <option value="urgent">Urgente</option>
+              <option value="high">Alta</option>
+              <option value="medium">Media</option>
+              <option value="low">Baja</option>
+            </select>
 
-          <select
-            value={filterPriority}
-            onChange={e => setFilterPriority(e.target.value)}
-            style={{ padding: '8px 10px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, outline: 'none', fontFamily: 'inherit', background: 'white', cursor: 'pointer' }}
-          >
-            <option value="all">Prioridad: Todas</option>
-            <option value="urgent">Urgente</option>
-            <option value="high">Alta</option>
-            <option value="medium">Media</option>
-            <option value="low">Baja</option>
-          </select>
+            {/* Dropdown responsable */}
+            {projectPersons.length > 0 && (
+              <div ref={personDDRef} style={{ position: 'relative' }}>
+                <button
+                  onClick={() => setShowPersonDD(v => !v)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 5,
+                    padding: selectedPersonUser ? '3px 8px 3px 4px' : '5px 12px',
+                    borderRadius: 20, border: '1px solid',
+                    borderColor: selectedPersonUser ? '#6366f1' : '#e2e8f0',
+                    background: selectedPersonUser ? '#eef2ff' : 'white',
+                    color: selectedPersonUser ? '#6366f1' : '#475569',
+                    fontSize: 12, fontWeight: selectedPersonUser ? 700 : 500,
+                    fontFamily: 'inherit', cursor: 'pointer', outline: 'none',
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  {selectedPersonUser ? (() => {
+                    const isUrl = typeof selectedPersonUser.avatar === 'string' && (selectedPersonUser.avatar.startsWith('http') || selectedPersonUser.avatar.startsWith('data:'));
+                    const ini = (selectedPersonUser.name || '?').split(' ').slice(0, 2).map(w => w[0] || '').join('').toUpperCase();
+                    return (
+                      <>
+                        <div style={{ width: 20, height: 20, borderRadius: '50%', flexShrink: 0, overflow: 'hidden', background: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 700, color: 'white' }}>
+                          {isUrl ? <img src={selectedPersonUser.avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : ini}
+                        </div>
+                        {(selectedPersonUser.name || '').split(' ')[0]}
+                        <span onClick={e => { e.stopPropagation(); setFilterPerson('all'); }} style={{ cursor: 'pointer', fontWeight: 400, fontSize: 14, lineHeight: 1, marginLeft: 1 }}>×</span>
+                      </>
+                    );
+                  })() : (
+                    <>Responsable <ChevronDown size={11} /></>
+                  )}
+                </button>
+
+                {showPersonDD && (
+                  <div style={{
+                    position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 300,
+                    background: 'white', borderRadius: 14, border: '1px solid #e8edf3',
+                    boxShadow: '0 8px 24px rgba(15,23,42,0.12)', padding: '12px 14px',
+                    minWidth: 220,
+                  }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
+                      Filtrar por responsable
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      <button
+                        onClick={() => { setFilterPerson('all'); setShowPersonDD(false); }}
+                        style={{ padding: '4px 12px', borderRadius: 20, border: 'none', cursor: 'pointer', background: filterPerson === 'all' ? '#1e293b' : '#f1f5f9', color: filterPerson === 'all' ? 'white' : '#475569', fontSize: 12, fontWeight: 600, fontFamily: 'inherit' }}
+                      >
+                        Todos
+                      </button>
+                      {projectPersons.map(user => {
+                        const active = filterPerson === String(user.id);
+                        const isUrl  = typeof user.avatar === 'string' && (user.avatar.startsWith('http') || user.avatar.startsWith('data:'));
+                        const ini    = (user.name || user.email || '?').split(' ').slice(0, 2).map(w => w[0] || '').join('').toUpperCase() || '?';
+                        return (
+                          <button
+                            key={user.id}
+                            onClick={() => { setFilterPerson(active ? 'all' : String(user.id)); setShowPersonDD(false); }}
+                            title={user.name || user.email}
+                            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 10px 3px 4px', borderRadius: 20, border: 'none', cursor: 'pointer', background: active ? '#6366f1' : '#f1f5f9', color: active ? 'white' : '#475569', fontSize: 12, fontWeight: 600, fontFamily: 'inherit', boxShadow: active ? '0 2px 8px rgba(99,102,241,0.25)' : 'none' }}
+                          >
+                            <div style={{ width: 22, height: 22, borderRadius: '50%', flexShrink: 0, overflow: 'hidden', background: active ? 'rgba(255,255,255,0.25)' : '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: 'white' }}>
+                              {isUrl ? <img src={user.avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : ini}
+                            </div>
+                            {(user.name || user.email || '?').split(' ')[0]}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <button
+              onClick={handleRefresh}
+              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', border: '1px solid #e2e8f0', borderRadius: 20, background: 'white', cursor: 'pointer', fontSize: 12, fontWeight: 500, color: '#475569', fontFamily: 'inherit' }}
+            >
+              <RefreshCw size={12} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
+              Actualizar
+            </button>
+          </div>
 
           <button
-            onClick={handleRefresh}
-            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: 8, background: 'white', cursor: 'pointer', fontSize: 13, fontWeight: 500, color: '#475569', fontFamily: 'inherit' }}
+            onClick={() => { setModalCtx({}); setModal('project'); }}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 16px', border: 'none', borderRadius: 20, background: '#6366f1', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'white', fontFamily: 'inherit' }}
           >
-            <RefreshCw size={13} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
-            Actualizar
+            <Plus size={14} />
+            Nuevo Proyecto
           </button>
         </div>
-
-        <button
-          onClick={() => { setModalCtx({}); setModal('project'); }}
-          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', border: 'none', borderRadius: 8, background: '#6366f1', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'white', fontFamily: 'inherit' }}
-        >
-          <Plus size={15} />
-          Nuevo Proyecto
-        </button>
       </div>
 
       {error && (
@@ -674,15 +849,36 @@ export default function ProjectsView({ selectedEnvironment, onRefresh: externalR
             <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1000 }}>
               <thead>
                 <tr style={{ background: '#1e293b', borderBottom: '2px solid #334155' }}>
-                  {TABLE_HEADERS.map(h => (
-                    <th key={h} style={{ padding: '11px 10px', textAlign: 'left', fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>
-                      {h}
-                    </th>
-                  ))}
+                  {COLUMNS.map(col => {
+                    const isActive = col.key && sortKey === col.key;
+                    const isSortable = !!col.key;
+                    return (
+                      <th
+                        key={col.label}
+                        onClick={() => handleSort(col.key)}
+                        style={{
+                          padding: '11px 10px', textAlign: 'left', fontSize: 10, fontWeight: 700,
+                          color: isActive ? '#e2e8f0' : '#94a3b8',
+                          textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap',
+                          cursor: isSortable ? 'pointer' : 'default',
+                          userSelect: 'none',
+                        }}
+                      >
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          {col.label}
+                          {isSortable && (
+                            <span style={{ fontSize: 10, opacity: isActive ? 1 : 0.3 }}>
+                              {isActive ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}
+                            </span>
+                          )}
+                        </span>
+                      </th>
+                    );
+                  })}
                 </tr>
               </thead>
               <tbody>
-                {filtered.map(project => {
+                {sorted.map(project => {
                   const projExp = expandedProjects.has(project.id);
                   return (
                     <React.Fragment key={project.id}>

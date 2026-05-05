@@ -64,7 +64,6 @@ function AddCustomFieldModal({ isOpen, onClose, onSave }) {
 
   return (
     <div
-      onClick={handleClose}
       style={{
         position: 'fixed',
         top: 0,

@@ -236,17 +236,20 @@ export const getWeeklyTasks = async (environmentId = null, weekStart = null) => 
     sunday.setDate(monday.getDate() + 6);
     sunday.setHours(23, 59, 59, 999);
 
-    const mondayStr = monday.toISOString().split('T')[0];
-    const sundayStr = sunday.toISOString().split('T')[0];
+    // Usar fecha local para evitar desfase de zona horaria
+    const toLocal = (d) =>
+      `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    const mondayStr = toLocal(monday);
+    const sundayStr = toLocal(sunday);
 
-    // Tareas que se solapan con la semana:
-    //   start_date <= sundayStr  AND  end_date >= mondayStr
+    // Cada tarea pertenece SOLO a la semana en que cae su end_date.
+    // Así una tarea no aparece en múltiples semanas por solapamiento.
     let query = supabase
       .from('tasks')
       .select('*, assignee:users(id, name, email, avatar), project:projects(id, name, workspace_id)')
-      .lte('start_date', sundayStr)
-      .gte('end_date',   mondayStr)
-      .eq('is_deleted',  false);
+      .gte('end_date', mondayStr)
+      .lte('end_date', sundayStr)
+      .eq('is_deleted', false);
 
     if (environmentId && environmentId !== 'all') {
       const { data: workspaces } = await supabase
