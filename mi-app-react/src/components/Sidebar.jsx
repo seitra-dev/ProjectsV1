@@ -317,6 +317,10 @@ function Sidebar({ isOpen, activeView, onViewChange, projects, onProjectSelect, 
                   onSelectList && onSelectList(list);
                   if (isMobile) onClose();
                 }}
+                onOpenMySpaceToDo={() => {
+                  onViewChange('my-space-todo', 'Mi espacio to do');
+                  if (isMobile) onClose();
+                }}
               />
             </div>
           )}

@@ -300,6 +300,7 @@ const toDbTask = (task) => {
   if (task.assigneeId !== undefined) db.assignee_id = task.assigneeId || null;
   if (task.parentId !== undefined) db.parent_id = task.parentId || null;
   if (task.dueDate !== undefined) db.end_date = task.dueDate || null;
+  if (task.endDate !== undefined) db.end_date = task.endDate || null;
   if (task.startDate !== undefined) db.start_date = task.startDate || null;
   if (task.progress !== undefined) db.progress = task.progress;
   if (task.tags !== undefined) db.tags = task.tags;
@@ -1004,13 +1005,18 @@ export const dbPerformance = {
     const end   = endDate ? `${endDate}T23:59:59` : '2099-12-31T23:59:59';
 
     // ── Paso 1: tareas completadas en el workspace y período ──────────────
+    // Filtramos por closed_at para que el rango coincida con cuándo se cerró
+    // realmente cada tarea. Antes se filtraba por updated_at, lo que hacía que
+    // al filtrar un mes concreto aparecieran tareas cerradas en otro período
+    // (actualizadas después), dejando las gráficas de tendencia vacías.
     let q = supabase
       .from('tasks')
       .select('id, assignee_id, closed_at, updated_at, end_date, custom_fields, estimated_hours, assignee:users(id, name, avatar)')
       .eq('status', 'completed')
       .eq('is_deleted', false)
-      .gte('updated_at', start)
-      .lte('updated_at', end);
+      .not('closed_at', 'is', null)
+      .gte('closed_at', start)
+      .lte('closed_at', end);
 
     if (workspaceId) q = q.eq('workspace_id', workspaceId);
     if (frente)      q = q.contains('custom_fields', { _frente: frente });
@@ -1071,8 +1077,8 @@ export const dbPerformance = {
         }
         const row = map[key];
         row.total_closed++;
-        const eff = task.closed_at || task.updated_at;
-        if (eff) row.trend_data.push({ t: eff, v: 1 });
+        // closed_at siempre existe aquí (la query lo garantiza con .not('closed_at','is',null))
+        if (task.closed_at) row.trend_data.push({ t: task.closed_at, v: 1 });
         if (task.estimated_hours != null) row._hours.push(task.estimated_hours);
         // KPI: solo contar si closed_at real existe
         if (task.closed_at && task.end_date) {

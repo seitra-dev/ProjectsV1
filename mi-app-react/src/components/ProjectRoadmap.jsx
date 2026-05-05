@@ -14,14 +14,21 @@ import { TASK_STATUSES, getTaskStatus, getProjectStatus } from '../constants/sta
 
 const ProjectRoadmap = ({ project, tasks = [], users = [], onProjectUpdate, onTaskCreate, onTaskUpdate, onTaskDelete }) => {
   const [activeTab, setActiveTab] = useState('overview');
+  const [showAddTabMenu, setShowAddTabMenu] = useState(false);
+  const addTabBtnRef = useRef(null);
+  const addTabMenuRef = useRef(null);
 
   // Inicializar estructura si no existe
   const roadmapData = project.roadmap || {
     phases: [],
     userStories: [],
     risks: [],
-    meetings: []
+    meetings: [],
+    enabledTabs: ['stories', 'risks', 'meetings']
   };
+
+  // Para proyectos existentes sin enabledTabs guardado, mostrar todas por defecto
+  const enabledOptionalTabs = roadmapData.enabledTabs ?? ['stories', 'risks', 'meetings'];
 
   const updateRoadmap = (updates) => {
     onProjectUpdate({
@@ -33,13 +40,45 @@ const ProjectRoadmap = ({ project, tasks = [], users = [], onProjectUpdate, onTa
     });
   };
 
-  const tabs = [
+  const FIXED_TABS = [
     { id: 'overview', label: 'Resumen', icon: Home, color: '#6366f1' },
     { id: 'plan', label: 'Plan de Trabajo', icon: Clipboard, color: '#0ea5e9' },
+  ];
+
+  const OPTIONAL_TABS = [
     { id: 'stories', label: 'Historias de Usuario', icon: FileText, color: '#10b981' },
     { id: 'risks', label: 'Riesgos', icon: AlertTriangle, color: '#f59e0b' },
     { id: 'meetings', label: 'Seguimiento', icon: Calendar, color: '#8b5cf6' },
   ];
+
+  const tabs = [
+    ...FIXED_TABS,
+    ...OPTIONAL_TABS.filter(t => enabledOptionalTabs.includes(t.id))
+  ];
+
+  const availableToAdd = OPTIONAL_TABS.filter(t => !enabledOptionalTabs.includes(t.id));
+
+  const enableTab = (tabId) => {
+    updateRoadmap({ enabledTabs: [...enabledOptionalTabs, tabId] });
+    setShowAddTabMenu(false);
+    setActiveTab(tabId);
+  };
+
+  const disableTab = (tabId) => {
+    updateRoadmap({ enabledTabs: enabledOptionalTabs.filter(t => t !== tabId) });
+    if (activeTab === tabId) setActiveTab('overview');
+  };
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (
+        addTabBtnRef.current && !addTabBtnRef.current.contains(e.target) &&
+        addTabMenuRef.current && !addTabMenuRef.current.contains(e.target)
+      ) setShowAddTabMenu(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   return (
     <div style={{
@@ -124,7 +163,7 @@ const ProjectRoadmap = ({ project, tasks = [], users = [], onProjectUpdate, onTa
               overflowX: 'auto',
               flex: 1
             }}>
-              {tabs.map(tab => (
+              {FIXED_TABS.map(tab => (
                 <NavTab
                   key={tab.id}
                   label={tab.label}
@@ -134,6 +173,80 @@ const ProjectRoadmap = ({ project, tasks = [], users = [], onProjectUpdate, onTa
                   onClick={() => setActiveTab(tab.id)}
                 />
               ))}
+              {OPTIONAL_TABS.filter(t => enabledOptionalTabs.includes(t.id)).map(tab => (
+                <NavTab
+                  key={tab.id}
+                  label={tab.label}
+                  icon={tab.icon}
+                  color={tab.color}
+                  active={activeTab === tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  onRemove={() => disableTab(tab.id)}
+                />
+              ))}
+
+              {/* Botón para agregar secciones opcionales */}
+              {availableToAdd.length > 0 && (
+                <div style={{ position: 'relative', flexShrink: 0 }}>
+                  <button
+                    ref={addTabBtnRef}
+                    onClick={() => setShowAddTabMenu(s => !s)}
+                    title="Agregar sección"
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '6px',
+                      padding: '8px 12px', borderRadius: '10px',
+                      fontSize: '13px', fontWeight: 600,
+                      border: `1.5px dashed ${DESIGN_TOKENS.border.color.normal}`,
+                      cursor: 'pointer', transition: 'all 0.2s',
+                      background: showAddTabMenu ? DESIGN_TOKENS.neutral[100] : 'transparent',
+                      color: showAddTabMenu ? DESIGN_TOKENS.neutral[700] : DESIGN_TOKENS.neutral[400],
+                      whiteSpace: 'nowrap',
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = DESIGN_TOKENS.neutral[100]; e.currentTarget.style.color = DESIGN_TOKENS.neutral[700]; e.currentTarget.style.borderColor = DESIGN_TOKENS.neutral[400]; }}
+                    onMouseLeave={(e) => { if (!showAddTabMenu) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = DESIGN_TOKENS.neutral[400]; e.currentTarget.style.borderColor = DESIGN_TOKENS.border.color.normal; } }}
+                  >
+                    <Plus size={14} />
+                    Agregar sección
+                  </button>
+                  {showAddTabMenu && (
+                    <div
+                      ref={addTabMenuRef}
+                      style={{
+                        position: 'absolute', top: 'calc(100% + 6px)', left: 0,
+                        background: 'white', border: `1px solid ${DESIGN_TOKENS.border.color.subtle}`,
+                        borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
+                        padding: '6px', minWidth: '220px', zIndex: 200,
+                        animation: 'rmap-menuIn 0.15s ease',
+                      }}
+                    >
+                      <p style={{ fontSize: '11px', fontWeight: 700, color: DESIGN_TOKENS.neutral[400], textTransform: 'uppercase', letterSpacing: '0.6px', margin: '6px 10px 8px', padding: 0 }}>
+                        Secciones disponibles
+                      </p>
+                      {availableToAdd.map(tab => {
+                        const TabIcon = tab.icon;
+                        return (
+                          <button
+                            key={tab.id}
+                            onClick={() => enableTab(tab.id)}
+                            style={{
+                              width: '100%', display: 'flex', alignItems: 'center', gap: '10px',
+                              padding: '9px 12px', background: 'none', border: 'none',
+                              borderRadius: '8px', cursor: 'pointer', fontSize: '13px',
+                              fontWeight: 500, color: DESIGN_TOKENS.neutral[700], textAlign: 'left',
+                              transition: 'all 0.15s',
+                            }}
+                            onMouseEnter={(e) => { e.currentTarget.style.background = `${tab.color}12`; e.currentTarget.style.color = tab.color; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = DESIGN_TOKENS.neutral[700]; }}
+                          >
+                            <TabIcon size={16} color={tab.color} />
+                            {tab.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
             </nav>
 
             {/* Status Badge */}
@@ -281,6 +394,10 @@ const ProjectRoadmap = ({ project, tasks = [], users = [], onProjectUpdate, onTa
           50% { opacity: 0.5; }
         }
         .rmap-tl-scroll::-webkit-scrollbar { display: none; }
+        @keyframes rmap-menuIn {
+          from { opacity: 0; transform: scale(0.95) translateY(-4px); }
+          to   { opacity: 1; transform: scale(1)    translateY(0);    }
+        }
       `}</style>
     </div>
   );
@@ -290,84 +407,113 @@ const ProjectRoadmap = ({ project, tasks = [], users = [], onProjectUpdate, onTa
 // NAV TAB 
 // ============================================================================
 
-const NavTab = ({ label, icon: Icon, color, active, onClick }) => (
-  <button
-    onClick={onClick}
-    style={{
-      display: 'flex',
-      alignItems: 'center',
-      gap: '8px',
-      padding: '10px 16px',
-      borderRadius: '10px',
-      fontSize: '14px',
-      fontWeight: 600,
-      border: 'none',
-      cursor: 'pointer',
-      transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-      whiteSpace: 'nowrap',
-      position: 'relative',
-      overflow: 'hidden',
-      background: active 
-        ? `linear-gradient(135deg, ${color}, ${color}dd)`
-        : 'transparent',
-      color: active ? 'white' : DESIGN_TOKENS.neutral[600],
-      boxShadow: active 
-        ? `0 4px 12px ${color}40, 0 2px 4px ${color}20`
-        : 'none'
-    }}
-    onMouseEnter={(e) => {
-      if (!active) {
-        e.currentTarget.style.background = DESIGN_TOKENS.neutral[100];
-        e.currentTarget.style.color = DESIGN_TOKENS.neutral[800];
-        e.currentTarget.style.transform = 'translateY(-2px)';
-      } else {
-        e.currentTarget.style.transform = 'translateY(-2px) scale(1.02)';
-        e.currentTarget.style.boxShadow = `0 6px 16px ${color}50, 0 3px 6px ${color}30`;
-      }
-    }}
-    onMouseLeave={(e) => {
-      if (!active) {
-        e.currentTarget.style.background = 'transparent';
-        e.currentTarget.style.color = DESIGN_TOKENS.neutral[600];
-        e.currentTarget.style.transform = 'translateY(0)';
-      } else {
-        e.currentTarget.style.transform = 'translateY(0) scale(1)';
-        e.currentTarget.style.boxShadow = `0 4px 12px ${color}40, 0 2px 4px ${color}20`;
-      }
-    }}
-  >
-    {/* Shine effect cuando está activo */}
-    {active && (
-      <div style={{
-        position: 'absolute',
-        top: 0,
-        left: '-100%',
-        width: '100%',
-        height: '100%',
-        background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent)',
-        animation: 'navTabShine 3s infinite'
-      }} />
-    )}
-    
-    <Icon 
-      size={18} 
-      style={{
-        filter: active ? 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))' : 'none',
-        transition: 'all 0.3s',
-        flexShrink: 0
-      }}
-    />
-    {label}
+const NavTab = ({ label, icon: Icon, color, active, onClick, onRemove }) => {
+  const [hovered, setHovered] = useState(false);
 
-    <style>{`
-      @keyframes navTabShine {
-        0% { left: -100%; }
-        20% { left: 100%; }
-        100% { left: 100%; }
-      }
-    `}</style>
-  </button>
-);
+  return (
+    <div
+      style={{ position: 'relative', display: 'inline-flex', flexShrink: 0 }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <button
+        onClick={onClick}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          padding: `10px ${onRemove ? '28px' : '16px'} 10px 16px`,
+          borderRadius: '10px',
+          fontSize: '14px',
+          fontWeight: 600,
+          border: 'none',
+          cursor: 'pointer',
+          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+          whiteSpace: 'nowrap',
+          position: 'relative',
+          overflow: 'hidden',
+          background: active
+            ? `linear-gradient(135deg, ${color}, ${color}dd)`
+            : 'transparent',
+          color: active ? 'white' : DESIGN_TOKENS.neutral[600],
+          boxShadow: active
+            ? `0 4px 12px ${color}40, 0 2px 4px ${color}20`
+            : 'none'
+        }}
+        onMouseEnter={(e) => {
+          if (!active) {
+            e.currentTarget.style.background = DESIGN_TOKENS.neutral[100];
+            e.currentTarget.style.color = DESIGN_TOKENS.neutral[800];
+            e.currentTarget.style.transform = 'translateY(-2px)';
+          } else {
+            e.currentTarget.style.transform = 'translateY(-2px) scale(1.02)';
+            e.currentTarget.style.boxShadow = `0 6px 16px ${color}50, 0 3px 6px ${color}30`;
+          }
+        }}
+        onMouseLeave={(e) => {
+          if (!active) {
+            e.currentTarget.style.background = 'transparent';
+            e.currentTarget.style.color = DESIGN_TOKENS.neutral[600];
+            e.currentTarget.style.transform = 'translateY(0)';
+          } else {
+            e.currentTarget.style.transform = 'translateY(0) scale(1)';
+            e.currentTarget.style.boxShadow = `0 4px 12px ${color}40, 0 2px 4px ${color}20`;
+          }
+        }}
+      >
+        {active && (
+          <div style={{
+            position: 'absolute',
+            top: 0,
+            left: '-100%',
+            width: '100%',
+            height: '100%',
+            background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent)',
+            animation: 'navTabShine 3s infinite'
+          }} />
+        )}
+        <Icon
+          size={18}
+          style={{
+            filter: active ? 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))' : 'none',
+            transition: 'all 0.3s',
+            flexShrink: 0
+          }}
+        />
+        {label}
+        <style>{`
+          @keyframes navTabShine {
+            0% { left: -100%; }
+            20% { left: 100%; }
+            100% { left: 100%; }
+          }
+        `}</style>
+      </button>
+
+      {/* Botón para quitar la sección opcional */}
+      {onRemove && hovered && (
+        <button
+          title="Quitar sección"
+          onClick={(e) => { e.stopPropagation(); onRemove(); }}
+          style={{
+            position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)',
+            width: '18px', height: '18px', borderRadius: '50%',
+            background: active ? 'rgba(255,255,255,0.25)' : DESIGN_TOKENS.neutral[200],
+            border: 'none', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: active ? 'white' : DESIGN_TOKENS.neutral[500],
+            zIndex: 1, transition: 'background 0.15s',
+            padding: 0,
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.background = active ? 'rgba(255,255,255,0.4)' : DESIGN_TOKENS.neutral[300]}
+          onMouseLeave={(e) => e.currentTarget.style.background = active ? 'rgba(255,255,255,0.25)' : DESIGN_TOKENS.neutral[200]}
+        >
+          <X size={10} />
+        </button>
+      )}
+    </div>
+  );
+};
 
 // ============================================================================
 // OVERVIEW TAB

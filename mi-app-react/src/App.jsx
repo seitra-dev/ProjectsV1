@@ -36,6 +36,7 @@ import SelectEnvironmentPrompt from './components/SelectEnvironmentPrompt';
 import EditProjectModal from './components/EditProjectModal';
 import NoOrgScreen from './components/NoOrgScreen';
 import OrgJoinRequestsView from './components/OrgJoinRequestsView';
+import MySpaceToDo from './components/MySpaceToDo';
 import { TASK_STATUSES, TASK_STATUS_DROPDOWN, PROJECT_STATUS_DROPDOWN, getTaskStatus, getProjectStatus } from './constants/statuses';
 import StatusBadge from './components/shared/StatusBadge';
 
@@ -1452,7 +1453,7 @@ function MainApp({ user, onLogout, darkMode, toggleDarkMode, onUserUpdate }) {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
   // ── GUARDIA DE ENTORNO ────────────────────────────────────────────────────
-  const VIEWS_SKIP_ENV = new Set(['management', 'tasks', 'chat', 'analytics', 'backlog', 'members']);
+  const VIEWS_SKIP_ENV = new Set(['management', 'tasks', 'chat', 'analytics', 'backlog', 'members', 'my-space-todo']);
   const needsEnvPrompt = !VIEWS_SKIP_ENV.has(activeView)
     && !currentEnvironment
     && !canWorkWithoutEnvironment();
@@ -2111,6 +2112,10 @@ useEffect(() => {
 
           {activeView === 'members' && (
             <OrgJoinRequestsView />
+          )}
+
+          {activeView === 'my-space-todo' && (
+            <MySpaceToDo />
           )}
         </div>
       </div>
