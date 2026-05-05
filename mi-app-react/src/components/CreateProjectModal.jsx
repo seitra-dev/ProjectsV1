@@ -146,7 +146,7 @@ export default function CreateProjectModal({ open, onClose, users = [], workspac
   if (!open) return null;
 
   return (
-    <div style={S.overlay} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div style={S.overlay}>
       <div style={S.content}>
 
         {/* HEADER */}

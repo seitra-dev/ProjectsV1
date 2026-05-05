@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   Briefcase, AlertTriangle, ChevronDown, RefreshCw, Users,
   BarChart2, Calendar, ChevronLeft, ChevronRight, Settings, X,
@@ -948,7 +948,7 @@ export default function ManagementView() {
   const [refreshing,  setRefreshing]  = useState(false); // refresco silencioso (ya hay datos)
   const [error,       setError]       = useState('');
   const [lastUpdated, setLastUpdated] = useState(null);
-  const hasDataRef    = React.useRef(false); // true en cuanto se carga por primera vez
+  const hasDataRef    = useRef(false); // true en cuanto se carga por primera vez
 
   // ── Navegación de semana ──────────────────────────────────────────────────
   const [weekOffset, setWeekOffset] = useState(0); // 0 = semana actual
@@ -1002,12 +1002,23 @@ export default function ManagementView() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  // Refrescar tareas al activar el tab de semana (captura cambios de fechas hechos en otras vistas)
+  const loadDataRef = useRef(loadData);
+  useEffect(() => { loadDataRef.current = loadData; });
+  useEffect(() => {
+    if (activeTab === 'week') loadDataRef.current();
+  }, [activeTab]);
+
+  // Limpiar tareas al cambiar de semana para evitar mostrar datos de la semana anterior
+  useEffect(() => { setWeeklyTasks([]); }, [weekOffset]);
+
   // ── Procesamiento de tareas semanales ─────────────────────────────────────
-  // Semana actual: solo in_progress. Semanas pasadas/futuras: todas menos completadas/done.
+  // Semana actual: solo tareas con estado "in_progress" que solapan con esta semana.
+  // Semanas pasadas/futuras: todas las no completadas que solapan con esa semana.
   const activeTasks = useMemo(() => {
     const tasks = weeklyTasks || [];
     if (isCurrentWeek) return tasks.filter(t => t.status === 'in_progress');
-    return tasks.filter(t => !['completed', 'done'].includes(t.status));
+    return tasks.filter(t => !['completed', 'done', 'cancelled'].includes(t.status));
   }, [weeklyTasks, isCurrentWeek]);
 
   // Agrupar por persona + calcular saturación basada en capacidad

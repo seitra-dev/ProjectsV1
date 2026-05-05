@@ -451,83 +451,67 @@ function AppContent() {
 
 // Pantalla de transición optimizada
 if (isTransitioning) {
+  const _TA = '#494a97';
   return (
     <div style={{
       minHeight: '100vh', width: '100vw', display: 'flex', alignItems: 'center', justifyContent: 'center',
-      backgroundColor: '#0a0f1e', fontFamily: 'Inter, system-ui, sans-serif', overflow: 'hidden', position: 'relative'
+      background: 'linear-gradient(135deg, #05051a 0%, #0a0830 100%)',
+      fontFamily: 'Inter, system-ui, sans-serif', overflow: 'hidden', position: 'relative'
     }}>
       <style>{`
         @keyframes orbit-sync {
-          0% { transform: rotate(0deg) scale(1); filter: blur(60px); }
-          50% { transform: rotate(180deg) scale(1.2); filter: blur(40px); }
-          100% { transform: rotate(360deg) scale(1); filter: blur(60px); }
+          0% { transform: rotate(0deg) scale(1); filter: blur(80px); }
+          50% { transform: rotate(180deg) scale(1.15); filter: blur(60px); }
+          100% { transform: rotate(360deg) scale(1); filter: blur(80px); }
         }
         @keyframes reveal-brand {
-          0% { opacity: 0; transform: scale(0.9); letter-spacing: 0.2em; }
-          100% { opacity: 1; transform: scale(1); letter-spacing: -0.02em; }
+          0% { opacity: 0; transform: scale(0.92); }
+          100% { opacity: 1; transform: scale(1); }
         }
         @keyframes progress-bar {
           0% { width: 0%; }
           100% { width: 100%; }
         }
         .loading-shape {
-          position: absolute; width: 600px; height: 600px;
-          border-radius: 50%; background: radial-gradient(circle, rgba(79, 70, 229, 0.2) 0%, transparent 70%);
-          animation: orbit-sync 8s infinite linear;
+          position: absolute; border-radius: 50%;
+          animation: orbit-sync 8s infinite linear; pointer-events: none;
         }
       `}</style>
 
-      {/* FONDO AMBIENTAL (Consistente con el Login) */}
-      <div className="loading-shape" style={{ top: '-10%', right: '-5%' }} />
-      <div className="loading-shape" style={{ bottom: '-10%', left: '-5%', animationDelay: '-4s', background: 'radial-gradient(circle, rgba(124, 205, 243, 0.15) 0%, transparent 70%)' }} />
+      {/* FONDO — mismos orbes que el canvas del login */}
+      <div className="loading-shape" style={{ width: 700, height: 700, top: '-15%', right: '-10%', background: 'radial-gradient(circle, rgba(79,70,229,0.28) 0%, transparent 70%)' }} />
+      <div className="loading-shape" style={{ width: 700, height: 700, bottom: '-15%', left: '-10%', animationDelay: '-3s', background: 'radial-gradient(circle, rgba(124,58,237,0.22) 0%, transparent 70%)' }} />
+      <div className="loading-shape" style={{ width: 500, height: 500, top: '10%', left: '15%', animationDelay: '-6s', background: 'radial-gradient(circle, rgba(26,26,255,0.18) 0%, transparent 70%)' }} />
 
-      <div style={{ textAlign: 'center', zIndex: 10, width: '100%', maxWidth: '400px', padding: '0 2rem' }}>
-        
-        {/* LOGO ANIMADO */}
-        <div style={{ 
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '15px', 
-          marginBottom: '2.5rem', animation: 'reveal-brand 1.2s cubic-bezier(0.2, 0.8, 0.2, 1)' 
-        }}>
-          <div style={{ 
-            background: 'white', padding: '12px', borderRadius: '16px',
-            boxShadow: '0 0 30px rgba(79, 70, 229, 0.3)'
+      <div style={{ textAlign: 'center', zIndex: 10, width: '100%', maxWidth: '400px', padding: '0 2rem', animation: 'reveal-brand 1.1s cubic-bezier(0.2, 0.8, 0.2, 1)' }}>
+
+        {/* LOGO — idéntico al del panel izquierdo del login */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', marginBottom: '2.5rem' }}>
+          <div style={{
+            width: 46, height: 46, borderRadius: 13,
+            background: _TA, display: 'grid',
+            gridTemplateColumns: '1fr 1fr', gap: 4, padding: 10,
           }}>
-            <Layout size={38} color="#0a0f1e" strokeWidth={2.5} />
+            {[...Array(4)].map((_, i) => (
+              <div key={i} style={{ background: 'rgba(255,255,255,0.85)', borderRadius: 2 }} />
+            ))}
           </div>
-          <h1 style={{ fontSize: '2.2rem', fontWeight: 900, color: 'white', margin: 0 }}>Seitra</h1>
+          <h1 style={{ fontSize: '2rem', fontWeight: 900, color: 'white', margin: 0, letterSpacing: '-0.02em' }}>Seitra</h1>
         </div>
 
-        {/* MENSAJE DE ESTADO */}
-        <div style={{ marginBottom: '1.5rem' }}>
-          <div style={{ 
-            fontSize: '1rem', color: 'white', fontWeight: 600, 
-            letterSpacing: '0.1em', textTransform: 'uppercase', opacity: 0.9 
-          }}>
-            Sincronizando Equipo
+        {/* MENSAJE */}
+        <div style={{ marginBottom: '1.75rem' }}>
+          <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.45)', fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
+            Cargando entorno
           </div>
-          <div style={{ fontSize: '0.9rem', color: '#64748b', marginTop: '0.5rem' }}>
-            Configurando tus proyectos y metas...
+          <div style={{ fontSize: '1rem', color: 'white', fontWeight: 700, letterSpacing: '-0.01em' }}>
+            Sincronizando tu equipo...
           </div>
         </div>
 
-        {/* BARRA DE PROGRESO MINIMALISTA */}
-        <div style={{ 
-          width: '100%', height: '4px', background: 'rgba(255,255,255,0.05)', 
-          borderRadius: '10px', overflow: 'hidden', position: 'relative' 
-        }}>
-          <div style={{ 
-            height: '100%', background: 'linear-gradient(90deg, #4f46e5, #7ccdf3)',
-            borderRadius: '10px', animation: 'progress-bar 2.5s ease-in-out forwards'
-          }} />
-        </div>
-
-        {/* INDICADOR DE RED (Toque Pro) */}
-        <div style={{ 
-          marginTop: '2rem', display: 'flex', alignItems: 'center', justifyContent: 'center', 
-          gap: '8px', color: '#475569', fontSize: '0.75rem', fontWeight: 600 
-        }}>
-          <div style={{ width: 6, height: 6, borderRadius: '10%', background: '#0c0c0c' }} />
-          CONEXIÓN CIFRADA ESTABLECIDA
+        {/* BARRA DE PROGRESO */}
+        <div style={{ width: '100%', height: '3px', background: 'rgba(255,255,255,0.07)', borderRadius: '10px', overflow: 'hidden' }}>
+          <div style={{ height: '100%', background: `linear-gradient(90deg, ${_TA}, #6d28d9)`, borderRadius: '10px', animation: 'progress-bar 2.5s ease-in-out forwards' }} />
         </div>
       </div>
     </div>
@@ -1258,114 +1242,183 @@ function ResetPasswordScreen({ onDone }) {
     }
   };
 
+  const canvasRPRef = React.useRef(null);
+  React.useEffect(() => {
+    const canvas = canvasRPRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    let raf;
+    const resize = () => {
+      canvas.width = canvas.offsetWidth * (window.devicePixelRatio || 1);
+      canvas.height = canvas.offsetHeight * (window.devicePixelRatio || 1);
+      ctx.scale(window.devicePixelRatio || 1, window.devicePixelRatio || 1);
+    };
+    resize();
+    window.addEventListener('resize', resize);
+    const orbs = [
+      { x: 0.2, y: 0.3, r: 0.38, color: '#1a1aff', dx: 0.0003, dy: 0.0002 },
+      { x: 0.7, y: 0.6, r: 0.32, color: '#4f46e5', dx: -0.0002, dy: 0.0003 },
+      { x: 0.5, y: 0.1, r: 0.28, color: '#7c3aed', dx: 0.0002, dy: -0.0003 },
+      { x: 0.85, y: 0.2, r: 0.24, color: '#2563eb', dx: -0.0003, dy: -0.0002 },
+    ];
+    const draw = () => {
+      const W = canvas.offsetWidth, H = canvas.offsetHeight;
+      const bg = ctx.createLinearGradient(0, 0, W, H);
+      bg.addColorStop(0, '#05051a'); bg.addColorStop(1, '#0a0830');
+      ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+      orbs.forEach(o => {
+        o.x += o.dx; o.y += o.dy;
+        if (o.x < 0 || o.x > 1) o.dx *= -1;
+        if (o.y < 0 || o.y > 1) o.dy *= -1;
+        const grd = ctx.createRadialGradient(o.x*W, o.y*H, 0, o.x*W, o.y*H, o.r*Math.min(W,H));
+        grd.addColorStop(0, o.color + 'cc'); grd.addColorStop(1, o.color + '00');
+        ctx.fillStyle = grd; ctx.fillRect(0, 0, W, H);
+      });
+      raf = requestAnimationFrame(draw);
+    };
+    draw();
+    return () => { cancelAnimationFrame(raf); window.removeEventListener('resize', resize); };
+  }, []);
+
+  const RP_ACCENT = '#494a97';
+
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', fontFamily: 'Inter, system-ui, sans-serif', padding: '1rem' }}>
+    <div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #eef1fb 0%, #f3f0fd 100%)', fontFamily: 'Inter, system-ui, sans-serif' }}>
       <style>{`
-        .rp-input {
-          width: 100%; padding: 0.8rem 1rem; border-radius: 10px;
-          border: 1.5px solid #e2e8f0; background: #f8fafc;
-          font-size: 0.9rem; box-sizing: border-box;
-          transition: border-color 0.2s, box-shadow 0.2s; outline: none;
-          font-family: inherit; color: #1e293b;
+        @keyframes rpFadeUp {
+          from { opacity: 0; transform: translateY(22px) scale(0.98); }
+          to   { opacity: 1; transform: translateY(0) scale(1); }
         }
-        .rp-input:focus { border-color: #667eea; background: white; box-shadow: 0 0 0 3px rgba(102,126,234,0.12); }
-        .rp-input::placeholder { color: #cbd5e1; }
+        .rp-input-wrap {
+          position: relative; border-radius: 10px;
+          border: 1.5px solid #e2e8f0; background: #f8fafc;
+          transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .rp-input-wrap:focus-within { border-color: #494a97; box-shadow: 0 0 0 3px #494a9722; background: #fff; }
+        .rp-label {
+          position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+          font-size: 0.85rem; color: #94a3b8; pointer-events: none;
+          transition: top 0.18s, font-size 0.18s, color 0.18s, transform 0.18s;
+          background: transparent; padding: 0 2px;
+        }
+        .rp-input-wrap:focus-within .rp-label,
+        .rp-input-wrap.rp-filled .rp-label {
+          top: 0; transform: translateY(-50%); font-size: 0.72rem; color: #494a97; background: #fff;
+        }
+        .rp-inp {
+          width: 100%; padding: 20px 14px 6px; border: none; background: transparent;
+          font-size: 0.9rem; outline: none; color: #1e293b;
+          font-family: inherit; box-sizing: border-box; border-radius: 10px;
+        }
+        .rp-inp::placeholder { color: transparent; }
       `}</style>
 
-      <div style={{ background: 'white', borderRadius: '20px', padding: '2.5rem', width: '100%', maxWidth: '420px', boxShadow: '0 24px 64px rgba(0,0,0,0.2)' }}>
+      {/* CARD — mismas dimensiones que el login */}
+      <div style={{
+        width: 'min(980px, 95vw)', height: 'min(620px, 94vh)',
+        borderRadius: 28, display: 'flex', overflow: 'hidden',
+        boxShadow: '0 24px 64px rgba(73,74,151,0.14), 0 4px 20px rgba(0,0,0,0.08)',
+        animation: 'rpFadeUp 0.55s cubic-bezier(.22,1,.36,1) both',
+      }}>
 
-        {/* Logo */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '1.75rem' }}>
-          <div style={{ width: 36, height: 36, borderRadius: '10px', background: 'linear-gradient(135deg, #667eea, #764ba2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Zap size={18} color="white" strokeWidth={2.5} />
+        {/* PANEL IZQUIERDO — blanco, formulario */}
+        <div style={{ width: 420, flexShrink: 0, background: 'white', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '2.5rem 2.75rem', overflowY: 'auto' }}>
+
+          {/* Logo — idéntico al login */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: '2rem' }}>
+            <div style={{ width: 38, height: 38, borderRadius: 10, background: RP_ACCENT, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 3, padding: 8 }}>
+              {[...Array(4)].map((_, i) => <div key={i} style={{ background: 'rgba(255,255,255,0.85)', borderRadius: 2 }} />)}
+            </div>
+            <span style={{ fontWeight: 800, fontSize: '1.05rem', color: '#1e293b', letterSpacing: '-0.02em' }}>Seitra</span>
           </div>
-          <span style={{ fontSize: '1.1rem', fontWeight: 800, color: '#1e293b', letterSpacing: '-0.02em' }}>Seitra</span>
-        </div>
 
-        {success ? (
-          <div>
-            <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+          {success ? (
+            <div style={{ textAlign: 'center' }}>
               <div style={{ width: 56, height: 56, borderRadius: '50%', background: '#f0fdf4', border: '2px solid #86efac', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem' }}>
                 <CheckCircle size={28} color="#16a34a" />
               </div>
-              <h2 style={{ margin: '0 0 0.5rem', fontSize: '1.4rem', fontWeight: 700, color: '#1e293b' }}>¡Contraseña actualizada!</h2>
-              <p style={{ margin: 0, color: '#64748b', fontSize: '0.9rem' }}>Redirigiendo al inicio de sesión...</p>
+              <h2 style={{ margin: '0 0 0.5rem', fontSize: '1.4rem', fontWeight: 700, color: '#1e293b', letterSpacing: '-0.02em' }}>¡Contraseña actualizada!</h2>
+              <p style={{ margin: 0, color: '#64748b', fontSize: '0.875rem' }}>Redirigiendo al inicio de sesión...</p>
             </div>
-          </div>
-        ) : (
-          <>
-            <h2 style={{ margin: '0 0 0.5rem', fontSize: '1.5rem', fontWeight: 700, color: '#1e293b', letterSpacing: '-0.02em' }}>Nueva contraseña</h2>
-            <p style={{ margin: '0 0 1.75rem', color: '#64748b', fontSize: '0.9rem', lineHeight: 1.5 }}>
-              Ingresa tu nueva contraseña para recuperar el acceso a tu cuenta.
+          ) : (
+            <>
+              <h2 style={{ fontSize: '1.55rem', fontWeight: 700, color: '#1e293b', margin: '0 0 0.35rem', letterSpacing: '-0.02em' }}>
+                Nueva contraseña
+              </h2>
+              <p style={{ color: '#64748b', fontSize: '0.85rem', margin: '0 0 1.75rem', lineHeight: 1.5 }}>
+                Ingresa tu nueva contraseña para recuperar el acceso a tu cuenta.
+              </p>
+
+              <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+
+                {/* Nueva contraseña — floating label */}
+                <div className={`rp-input-wrap${newPassword ? ' rp-filled' : ''}`} style={{ position: 'relative' }}>
+                  <label className="rp-label">Nueva contraseña</label>
+                  <input type={showNew ? 'text' : 'password'} required value={newPassword}
+                    onChange={e => setNewPassword(e.target.value)}
+                    className="rp-inp" style={{ paddingRight: '3rem' }} autoFocus />
+                  <button type="button" onClick={() => setShowNew(!showNew)}
+                    style={{ position: 'absolute', right: '0.9rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', display: 'flex', padding: 0 }}>
+                    {showNew ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+
+                {/* Confirmar contraseña — floating label */}
+                <div className={`rp-input-wrap${confirmPassword ? ' rp-filled' : ''}`} style={{ position: 'relative' }}>
+                  <label className="rp-label">Confirmar contraseña</label>
+                  <input type={showConfirm ? 'text' : 'password'} required value={confirmPassword}
+                    onChange={e => setConfirmPassword(e.target.value)}
+                    className="rp-inp" style={{ paddingRight: '3rem' }} />
+                  <button type="button" onClick={() => setShowConfirm(!showConfirm)}
+                    style={{ position: 'absolute', right: '0.9rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', display: 'flex', padding: 0 }}>
+                    {showConfirm ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+
+                {error && (
+                  <div style={{ padding: '9px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, color: '#dc2626', fontSize: '0.82rem' }}>
+                    {error}
+                  </div>
+                )}
+
+                {/* Botón principal — idéntico al login */}
+                <button type="submit" disabled={isLoading}
+                  style={{
+                    width: '100%', padding: '0.85rem', border: 'none', borderRadius: 10,
+                    background: isLoading ? '#94a3b8' : `linear-gradient(135deg, ${RP_ACCENT} 0%, #6d28d9 100%)`,
+                    color: 'white', fontSize: '0.95rem', fontWeight: 700,
+                    cursor: isLoading ? 'not-allowed' : 'pointer',
+                    boxShadow: isLoading ? 'none' : `0 4px 18px ${RP_ACCENT}55`,
+                    transition: 'all 0.2s', marginTop: '0.15rem',
+                    fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                  }}>
+                  {isLoading ? 'Actualizando...' : 'Actualizar contraseña'}
+                </button>
+
+                <button type="button" onClick={onDone}
+                  style={{ width: '100%', padding: '0.75rem', border: '1.5px solid #e2e8f0', borderRadius: 10, background: 'none', color: '#64748b', fontSize: '0.875rem', fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
+                  Volver al inicio de sesión
+                </button>
+              </form>
+            </>
+          )}
+        </div>
+
+        {/* PANEL DERECHO — canvas animado idéntico al login */}
+        <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+          <canvas ref={canvasRPRef} style={{ width: '100%', height: '100%', display: 'block' }} />
+          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '2.5rem', background: 'linear-gradient(to top, rgba(5,5,26,0.92) 0%, transparent 100%)' }}>
+            <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.72rem', letterSpacing: '0.12em', textTransform: 'uppercase', margin: '0 0 0.6rem', fontWeight: 600 }}>
+              Acceso seguro
             </p>
-
-            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: '0.82rem', fontWeight: 600, color: '#374151' }}>Nueva contraseña</label>
-                <div style={{ position: 'relative' }}>
-                  <input
-                    type={showNew ? 'text' : 'password'} required value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="Mínimo 6 caracteres"
-                    className="rp-input"
-                    style={{ paddingRight: '3rem' }}
-                    autoFocus
-                  />
-                  <button type="button" onClick={() => setShowNew(!showNew)} style={{ position: 'absolute', right: '0.9rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', display: 'flex', padding: 0 }}>
-                    {showNew ? <EyeOff size={17} /> : <Eye size={17} />}
-                  </button>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: '0.82rem', fontWeight: 600, color: '#374151' }}>Confirmar contraseña</label>
-                <div style={{ position: 'relative' }}>
-                  <input
-                    type={showConfirm ? 'text' : 'password'} required value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="Repite la contraseña"
-                    className="rp-input"
-                    style={{ paddingRight: '3rem' }}
-                  />
-                  <button type="button" onClick={() => setShowConfirm(!showConfirm)} style={{ position: 'absolute', right: '0.9rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', display: 'flex', padding: 0 }}>
-                    {showConfirm ? <EyeOff size={17} /> : <Eye size={17} />}
-                  </button>
-                </div>
-              </div>
-
-              {error && (
-                <div style={{ padding: '10px 14px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', color: '#dc2626', fontSize: '0.85rem' }}>
-                  {error}
-                </div>
-              )}
-
-              <button
-                type="submit" disabled={isLoading}
-                style={{
-                  width: '100%', padding: '0.85rem', border: 'none', borderRadius: '10px',
-                  background: isLoading ? '#94a3b8' : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                  color: 'white', fontSize: '0.95rem', fontWeight: 700,
-                  cursor: isLoading ? 'not-allowed' : 'pointer',
-                  boxShadow: isLoading ? 'none' : '0 4px 16px rgba(102,126,234,0.4)',
-                  transition: 'all 0.2s', fontFamily: 'inherit',
-                }}
-              >
-                {isLoading ? 'Actualizando...' : 'Actualizar contraseña'}
-              </button>
-
-              <button
-                type="button" onClick={onDone}
-                style={{
-                  width: '100%', padding: '0.75rem', border: '1.5px solid #e2e8f0', borderRadius: '10px',
-                  background: 'none', color: '#64748b', fontSize: '0.875rem', fontWeight: 500,
-                  cursor: 'pointer', fontFamily: 'inherit',
-                }}
-              >
-                Volver al inicio de sesión
-              </button>
-            </form>
-          </>
-        )}
+            <h3 style={{ color: 'white', fontSize: '1.4rem', fontWeight: 700, margin: '0 0 0.5rem', lineHeight: 1.3, letterSpacing: '-0.02em' }}>
+              Tu cuenta, protegida.
+            </h3>
+            <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.85rem', margin: 0, lineHeight: 1.55 }}>
+              Crea una nueva contraseña segura para continuar.
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -2312,15 +2365,13 @@ function NotificationBell() {
   const handleApprove = async (req) => {
     setProcessingId(req.id);
     try {
-      await supabase.from('organization_members').insert({
-        organization_id: req.organization_id,
-        user_id: req.user_id,
-        role: 'member',
-        invited_by: currentUser?.id,
+      const { error } = await supabase.rpc('approve_join_request', {
+        p_request_id:      req.id,
+        p_organization_id: req.organization_id,
+        p_user_id:         req.user_id,
+        p_reviewed_by:     currentUser?.id,
       });
-      await supabase.from('organization_join_requests')
-        .update({ status: 'approved', reviewed_by: currentUser?.id, reviewed_at: new Date().toISOString() })
-        .eq('id', req.id);
+      if (error) throw error;
       setPendingRequestsCount(prev => Math.max(0, prev - 1));
       setRequests(prev => prev.filter(r => r.id !== req.id));
     } catch (err) {
@@ -3129,6 +3180,11 @@ function ProjectsView({ projects, createProject, deleteProject, updateProject, u
   const [showNewProject, setShowNewProject] = useState(false);
   const [editingProject, setEditingProject] = useState(null);
   const [filterStatus, setFilterStatus] = useState('in_progress');
+  const [filterPerson, setFilterPerson] = useState(() => {
+    try { return localStorage.getItem('seitra_fp_projects') || 'all'; } catch { return 'all'; }
+  });
+  const [showPersonDD, setShowPersonDD] = useState(false);
+  const personDDRef = useRef(null);
   const [sortBy, setSortBy] = useState('recent');
   const [viewMode, setViewMode] = useState('list'); // 'grid' | 'list'
   const [pendingDeleteProject, setPendingDeleteProject] = useState(null); // { id, name }
@@ -3152,6 +3208,23 @@ function ProjectsView({ projects, createProject, deleteProject, updateProject, u
     [users, envMemberSetPV]
   );
 
+  useEffect(() => {
+    try { localStorage.setItem('seitra_fp_projects', filterPerson); } catch {}
+  }, [filterPerson]);
+
+  useEffect(() => {
+    if (!showPersonDD) return;
+    const close = (e) => {
+      if (personDDRef.current && !personDDRef.current.contains(e.target)) setShowPersonDD(false);
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [showPersonDD]);
+
+  const selectedPersonUser = filterPerson !== 'all'
+    ? envUsers.find(u => String(u.id) === filterPerson) || null
+    : null;
+
   // Filtrar estrictamente por entorno activo — sin fallback null
   const environmentProjects = currentEnvironment
     ? projects.filter(p => p.environmentId === currentEnvironment.id)
@@ -3166,6 +3239,12 @@ function ProjectsView({ projects, createProject, deleteProject, updateProject, u
 
   const filteredProjects = environmentProjects
     .filter(p => filterStatus === 'all' || p.status === filterStatus)
+    .filter(p => {
+      if (filterPerson === 'all') return true;
+      const isLeader = String(p.leaderId) === filterPerson;
+      const isMember = Array.isArray(p.members) && p.members.some(m => String(m) === filterPerson);
+      return isLeader || isMember;
+    })
     .sort((a, b) => {
       if (sortBy === 'recent') return new Date(b.createdAt) - new Date(a.createdAt);
       if (sortBy === 'name') return a.name.localeCompare(b.name);
@@ -3196,62 +3275,135 @@ function ProjectsView({ projects, createProject, deleteProject, updateProject, u
         </div>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
-        <select
-          value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value)}
-          style={selectStyle}
-        >
-          <option value="all">Todos los estados</option>
-          {Object.entries(PROJECT_STATUS_DROPDOWN).map(([k, v]) => (
-            <option key={k} value={k}>{v.label}</option>
-          ))}
-        </select>
+      {/* ── FILTROS ── */}
+      <div style={{ marginBottom: '1.25rem' }}>
 
-        <select
-          value={sortBy}
-          onChange={(e) => setSortBy(e.target.value)}
-          style={selectStyle}
-        >
-          <option value="recent">Más recientes</option>
-          <option value="name">Nombre A-Z</option>
-          <option value="deadline">Próximos a vencer</option>
-        </select>
+        {/* Fila 1: selects + toggle vista */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
+          <select
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+            style={selectStyle}
+          >
+            <option value="all">Todos los estados</option>
+            {Object.entries(PROJECT_STATUS_DROPDOWN).map(([k, v]) => (
+              <option key={k} value={k}>{v.label}</option>
+            ))}
+          </select>
 
-        {/* Toggle vista */}
-        <div style={{ display: 'flex', border: '1px solid rgba(15,23,42,0.1)', borderRadius: '10px', overflow: 'hidden', marginLeft: 'auto' }}>
-          {[
-            { mode: 'grid', title: 'Vista tarjetas', icon: (
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <rect x="1" y="1" width="6" height="6" rx="1.5" fill="currentColor"/>
-                <rect x="9" y="1" width="6" height="6" rx="1.5" fill="currentColor"/>
-                <rect x="1" y="9" width="6" height="6" rx="1.5" fill="currentColor"/>
-                <rect x="9" y="9" width="6" height="6" rx="1.5" fill="currentColor"/>
-              </svg>
-            )},
-            { mode: 'list', title: 'Vista lista', icon: (
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <rect x="1" y="2" width="14" height="3" rx="1.5" fill="currentColor"/>
-                <rect x="1" y="6.5" width="14" height="3" rx="1.5" fill="currentColor"/>
-                <rect x="1" y="11" width="14" height="3" rx="1.5" fill="currentColor"/>
-              </svg>
-            )},
-          ].map(({ mode, title, icon }) => (
-            <button
-              key={mode}
-              title={title}
-              onClick={() => setViewMode(mode)}
-              style={{
-                padding: '8px 14px', border: 'none', cursor: 'pointer',
-                background: viewMode === mode ? DESIGN_TOKENS.primary.base : 'transparent',
-                color: viewMode === mode ? 'white' : DESIGN_TOKENS.neutral[400],
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                transition: 'all 0.15s',
-              }}
-            >
-              {icon}
-            </button>
-          ))}
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
+            style={selectStyle}
+          >
+            <option value="recent">Más recientes</option>
+            <option value="name">Nombre A-Z</option>
+            <option value="deadline">Próximos a vencer</option>
+          </select>
+
+          {/* Dropdown responsable */}
+          {envUsers.length > 0 && (
+            <div ref={personDDRef} style={{ position: 'relative' }}>
+              <button
+                onClick={() => setShowPersonDD(v => !v)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 5,
+                  padding: selectedPersonUser ? '0.28rem 0.6rem 0.28rem 0.3rem' : '0.375rem 0.875rem',
+                  borderRadius: '20px', border: '1px solid',
+                  borderColor: selectedPersonUser ? '#6366f1' : DESIGN_TOKENS.neutral[200],
+                  background: selectedPersonUser ? '#eef2ff' : 'white',
+                  color: selectedPersonUser ? '#6366f1' : DESIGN_TOKENS.neutral[700],
+                  fontSize: '0.8125rem', fontWeight: selectedPersonUser ? 700 : 500,
+                  fontFamily: DESIGN_TOKENS.typography.fontFamily, cursor: 'pointer', outline: 'none',
+                  transition: 'all 0.15s',
+                }}
+              >
+                {selectedPersonUser ? (() => {
+                  const isUrl = typeof selectedPersonUser.avatar === 'string' && (selectedPersonUser.avatar.startsWith('http') || selectedPersonUser.avatar.startsWith('data:'));
+                  const ini   = (selectedPersonUser.name || '?').split(' ').slice(0, 2).map(w => w[0] || '').join('').toUpperCase();
+                  return (
+                    <>
+                      <div style={{ width: 20, height: 20, borderRadius: '50%', flexShrink: 0, overflow: 'hidden', background: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 700, color: 'white' }}>
+                        {isUrl ? <img src={selectedPersonUser.avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : ini}
+                      </div>
+                      {(selectedPersonUser.name || '').split(' ')[0]}
+                      <span onClick={e => { e.stopPropagation(); setFilterPerson('all'); }} style={{ cursor: 'pointer', fontWeight: 400, fontSize: 15, lineHeight: 1, marginLeft: 1 }}>×</span>
+                    </>
+                  );
+                })() : <>Responsable <ChevronDown size={11} /></>}
+              </button>
+
+              {showPersonDD && (
+                <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 300, background: 'white', borderRadius: 14, border: '1px solid #e8edf3', boxShadow: '0 8px 24px rgba(15,23,42,0.12)', padding: '12px 14px', minWidth: 220 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
+                    Filtrar por responsable
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    <button
+                      onClick={() => { setFilterPerson('all'); setShowPersonDD(false); }}
+                      style={{ padding: '4px 12px', borderRadius: 20, border: 'none', cursor: 'pointer', background: filterPerson === 'all' ? '#1e293b' : '#f1f5f9', color: filterPerson === 'all' ? 'white' : '#475569', fontSize: 12, fontWeight: 600, fontFamily: 'inherit' }}
+                    >
+                      Todos
+                    </button>
+                    {envUsers.map(user => {
+                      const active = filterPerson === String(user.id);
+                      const isUrl  = typeof user.avatar === 'string' && (user.avatar.startsWith('http') || user.avatar.startsWith('data:'));
+                      const ini    = (user.name || user.email || '?').split(' ').slice(0, 2).map(w => w[0] || '').join('').toUpperCase() || '?';
+                      return (
+                        <button
+                          key={user.id}
+                          onClick={() => { setFilterPerson(active ? 'all' : String(user.id)); setShowPersonDD(false); }}
+                          title={user.name || user.email}
+                          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 10px 3px 4px', borderRadius: 20, border: 'none', cursor: 'pointer', background: active ? '#6366f1' : '#f1f5f9', color: active ? 'white' : '#475569', fontSize: 12, fontWeight: 600, fontFamily: 'inherit', boxShadow: active ? '0 2px 8px rgba(99,102,241,0.25)' : 'none' }}
+                        >
+                          <div style={{ width: 22, height: 22, borderRadius: '50%', flexShrink: 0, overflow: 'hidden', background: active ? 'rgba(255,255,255,0.25)' : '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: 'white' }}>
+                            {isUrl ? <img src={user.avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : ini}
+                          </div>
+                          {(user.name || user.email || '?').split(' ')[0]}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Toggle vista */}
+          <div style={{ display: 'flex', border: '1px solid rgba(15,23,42,0.1)', borderRadius: '20px', overflow: 'hidden', marginLeft: 'auto' }}>
+            {[
+              { mode: 'grid', title: 'Vista tarjetas', icon: (
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <rect x="1" y="1" width="6" height="6" rx="1.5" fill="currentColor"/>
+                  <rect x="9" y="1" width="6" height="6" rx="1.5" fill="currentColor"/>
+                  <rect x="1" y="9" width="6" height="6" rx="1.5" fill="currentColor"/>
+                  <rect x="9" y="9" width="6" height="6" rx="1.5" fill="currentColor"/>
+                </svg>
+              )},
+              { mode: 'list', title: 'Vista lista', icon: (
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <rect x="1" y="2" width="14" height="3" rx="1.5" fill="currentColor"/>
+                  <rect x="1" y="6.5" width="14" height="3" rx="1.5" fill="currentColor"/>
+                  <rect x="1" y="11" width="14" height="3" rx="1.5" fill="currentColor"/>
+                </svg>
+              )},
+            ].map(({ mode, title, icon }) => (
+              <button
+                key={mode}
+                title={title}
+                onClick={() => setViewMode(mode)}
+                style={{
+                  padding: '8px 14px', border: 'none', cursor: 'pointer',
+                  background: viewMode === mode ? DESIGN_TOKENS.primary.base : 'transparent',
+                  color: viewMode === mode ? 'white' : DESIGN_TOKENS.neutral[400],
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  transition: 'all 0.15s',
+                }}
+              >
+                {icon}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -3862,6 +4014,8 @@ function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTask
   const [editForm, setEditForm] = useState({});
   const [savingProject, setSavingProject] = useState(false);
 
+  const AREA_OPTIONS = ['TI', 'Crédito', 'Cartera', 'Riesgo', 'Datos', 'Transversal', 'Interno'];
+
   const startEditProject = () => {
     setEditForm({
       name:        project.name        || '',
@@ -3872,6 +4026,7 @@ function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTask
       endDate:     project.endDate     || '',
       color:       project.color       || '#6366f1',
       leaderId:    project.leaderId    || '',
+      area:        project.tags?.[0]   || '',
     });
     setHeaderCollapsed(false);
     setEditingProject(true);
@@ -3883,7 +4038,7 @@ function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTask
     if (!editForm.name?.trim()) return;
     setSavingProject(true);
     try {
-      await onProjectUpdate({ ...project, ...editForm, name: editForm.name.trim() });
+      await onProjectUpdate({ ...project, ...editForm, name: editForm.name.trim(), tags: editForm.area ? [editForm.area] : [] });
       setEditingProject(false);
     } catch (e) {
       // error ya manejado en onProjectUpdate
@@ -4191,8 +4346,8 @@ function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTask
                   </div>
                 </div>
 
-                {/* Fila 2: Estado + Prioridad + Responsable */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '14px' }}>
+                {/* Fila 2: Estado + Prioridad + Responsable + Área */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '12px', marginBottom: '14px' }}>
                   <div>
                     <label style={labelStyle}>Estado</label>
                     <select style={{ ...inputStyle, background: 'white', cursor: 'pointer' }} value={editForm.status} onChange={e => fld('status', e.target.value)}>
@@ -4210,6 +4365,13 @@ function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTask
                     <select style={{ ...inputStyle, background: 'white', cursor: 'pointer' }} value={editForm.leaderId || ''} onChange={e => fld('leaderId', e.target.value)}>
                       <option value="">— Sin asignar</option>
                       {envUsers.map(u => <option key={u.id} value={u.id}>{u.name || u.email}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Área</label>
+                    <select style={{ ...inputStyle, background: 'white', cursor: 'pointer' }} value={editForm.area || ''} onChange={e => fld('area', e.target.value)}>
+                      <option value="">— Seleccionar</option>
+                      {AREA_OPTIONS.map(a => <option key={a} value={a}>{a}</option>)}
                     </select>
                   </div>
                 </div>
@@ -6294,6 +6456,23 @@ function TaskDetailModal({ task, project, projects = [], users, comments, onClos
   const { addToast } = useToast();
   const { canEditTaskDates } = useApp();
 
+  // Filtrar usuarios al entorno del proyecto
+  const [envMemberIds, setEnvMemberIds] = useState(null);
+  useEffect(() => {
+    const envId = project?.environmentId;
+    if (!envId) { setEnvMemberIds(null); return; }
+    supabase
+      .from('environment_members')
+      .select('user_id')
+      .eq('environment_id', envId)
+      .then(({ data }) => {
+        if (data) setEnvMemberIds(new Set(data.map(r => String(r.user_id))));
+      });
+  }, [project?.environmentId]);
+  const projectUsers = envMemberIds
+    ? users.filter(u => envMemberIds.has(String(u.id)))
+    : users;
+
   useEffect(() => {
     setForm({ ...task });
     try { setChecklist(JSON.parse(task.checklist || '[]')); } catch { setChecklist([]); }
@@ -6493,7 +6672,7 @@ function TaskDetailModal({ task, project, projects = [], users, comments, onClos
                 </label>
                 <select value={form.assigneeId || ''} onChange={e => saveField({ assigneeId: e.target.value || null })} style={fld}>
                   <option value="">Sin asignar</option>
-                  {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                  {projectUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
                 </select>
               </div>
 
@@ -7768,10 +7947,10 @@ const inputStyle = {
 };
 
 const selectStyle = {
-  padding: '0.625rem 1rem',
+  padding: '0.375rem 0.875rem',
   border: `1px solid ${DESIGN_TOKENS.neutral[200]}`,
-  borderRadius: '8px',
-  fontSize: '0.875rem',
+  borderRadius: '20px',
+  fontSize: '0.8125rem',
   fontWeight: 500,
   color: DESIGN_TOKENS.neutral[700],
   background: 'white',

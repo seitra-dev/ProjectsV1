@@ -209,24 +209,13 @@ export default function OrgJoinRequestsView() {
   const handleApprove = async (request) => {
     setProcessing(request.id);
     try {
-      const { error: memberErr } = await supabase
-        .from('organization_members')
-        .insert({
-          organization_id: request.organization_id,
-          user_id:         request.user_id,
-          role:            'member',
-        });
-      if (memberErr) throw memberErr;
-
-      const { error: updateErr } = await supabase
-        .from('organization_join_requests')
-        .update({
-          status:      'approved',
-          reviewed_at: new Date().toISOString(),
-          reviewed_by: currentUser?.id,
-        })
-        .eq('id', request.id);
-      if (updateErr) throw updateErr;
+      const { error } = await supabase.rpc('approve_join_request', {
+        p_request_id:      request.id,
+        p_organization_id: request.organization_id,
+        p_user_id:         request.user_id,
+        p_reviewed_by:     currentUser?.id,
+      });
+      if (error) throw error;
 
       setRequests(prev => prev.filter(r => r.id !== request.id));
       setPendingRequestsCount(prev => Math.max(0, prev - 1));

@@ -93,7 +93,6 @@ const CreateEnvironmentModal = ({ isOpen, onClose }) => {
 
   return (
     <div
-      onClick={handleClose}
       style={{
         position: 'fixed',
         top: 0,
