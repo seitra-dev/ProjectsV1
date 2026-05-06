@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import { dbUsers, dbProjects, dbTasks, dbComments, dbEnvironmentMembers, hasExpediteActive } from './lib/database';
+import { dbUsers, dbProjects, dbTasks, dbComments, dbEnvironmentMembers, dbNotifications, hasExpediteActive } from './lib/database';
 import { supabase } from './lib/supabase';
 import { auth } from './lib/auth'; 
 
@@ -34,6 +34,7 @@ import CreateListModal from './components/Enviroments/CreateListModal';
 import UserSettingsDrawer from './components/UserSettingsDrawer';
 import SelectEnvironmentPrompt from './components/SelectEnvironmentPrompt';
 import EditProjectModal from './components/EditProjectModal';
+import NotificationCenter from './components/NotificationCenter';
 import NoOrgScreen from './components/NoOrgScreen';
 import OrgJoinRequestsView from './components/OrgJoinRequestsView';
 import MySpaceToDo from './components/MySpaceToDo';
@@ -1557,10 +1558,31 @@ useEffect(() => {
 
   const updateProject = async (id, updates) => {
     try {
+      const prev_snapshot = projects.find(p => p.id === id);
       const updated = await dbProjects.update(id, updates);
       setProjects(prev => prev.map(p => p.id === id ? updated : p));
       if (selectedProject?.id === id) setSelectedProject(updated);
       logActivity('project_updated', `Proyecto actualizado: ${updated.name}`);
+
+      // Fecha fin del proyecto cambiada → notificar a los miembros del proyecto
+      const newEnd = updates.endDate;
+      if (newEnd !== undefined && newEnd !== prev_snapshot?.endDate) {
+        const fmtEnd = newEnd
+          ? new Date(newEnd + 'T00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })
+          : 'sin fecha';
+        const memberIds = Array.isArray(updated.members) ? updated.members : [];
+        memberIds
+          .filter(mid => mid && mid !== user?.id)
+          .forEach(mid => {
+            dbNotifications.create({
+              userId: mid, organizationId: appOrgId,
+              type: 'project_date_changed', title: 'Fecha de proyecto actualizada',
+              body: `"${updated.name}" ahora finaliza el ${fmtEnd}`,
+              entityType: 'project', entityId: id,
+            }).catch(() => {});
+          });
+      }
+
       return updated;
     } catch (error) {
       console.error('Error actualizando proyecto:', error);
@@ -1601,20 +1623,49 @@ useEffect(() => {
   };
 
   const updateTask = async (id, updates) => {
-    // Snapshot para revertir si falla
     const prev_snapshot = tasks.find(t => t.id === id);
-    // Optimistic: reflect changes in UI immediately
     setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
     setSelectedTask(prev => prev?.id === id ? { ...prev, ...updates } : prev);
     try {
       const updated = await dbTasks.update(id, updates);
-      // Sync with actual DB result
       setTasks(prev => prev.map(t => t.id === id ? updated : t));
       setSelectedTask(prev => prev?.id === id ? updated : prev);
       logActivity('task_updated', `Tarea actualizada: ${updated.title}`);
+
+      // ── Notificaciones ──────────────────────────────────────────────────
+      const orgId = appOrgId;
+      const actorName = user?.name || 'Alguien';
+
+      // Tarea asignada a alguien nuevo
+      if (updates.assigneeId !== undefined
+          && updates.assigneeId !== (prev_snapshot?.assigneeId)
+          && updates.assigneeId
+          && updates.assigneeId !== user?.id) {
+        dbNotifications.create({
+          userId: updates.assigneeId, organizationId: orgId,
+          type: 'task_assigned', title: 'Nueva tarea asignada',
+          body: `${actorName} te asignó "${updated.title}"`,
+          entityType: 'task', entityId: id,
+        }).catch(() => {});
+      }
+
+      // Fecha de tarea cambiada → notificar al asignado (si no es el actor)
+      const newDue = updates.endDate ?? updates.dueDate;
+      if (newDue !== undefined && updated.assigneeId && updated.assigneeId !== user?.id) {
+        const fmtDue = newDue
+          ? new Date(newDue + 'T00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })
+          : 'sin fecha';
+        dbNotifications.create({
+          userId: updated.assigneeId, organizationId: orgId,
+          type: 'task_date_changed', title: 'Fecha de tarea actualizada',
+          body: `"${updated.title}" ahora vence el ${fmtDue}`,
+          entityType: 'task', entityId: id,
+        }).catch(() => {});
+      }
+      // ────────────────────────────────────────────────────────────────────
+
       return updated;
     } catch (error) {
-      // Revert only this task to its previous state (don't reload everything)
       if (prev_snapshot) {
         setTasks(prev => prev.map(t => t.id === id ? prev_snapshot : t));
         setSelectedTask(prev => prev?.id === id ? prev_snapshot : prev);
@@ -1627,7 +1678,18 @@ useEffect(() => {
 
   const deleteTask = async (id) => {
     try {
-      // Eliminar subtareas primero
+      const taskToDelete = tasks.find(t => t.id === id);
+
+      // Notificar al asignado si es diferente al actor
+      if (taskToDelete?.assigneeId && taskToDelete.assigneeId !== user?.id) {
+        dbNotifications.create({
+          userId: taskToDelete.assigneeId, organizationId: appOrgId,
+          type: 'task_deleted', title: 'Tarea eliminada',
+          body: `"${taskToDelete.title}" fue eliminada`,
+          entityType: 'task', entityId: id,
+        }).catch(() => {});
+      }
+
       const subtasks = tasks.filter(t => t.parentId === id);
       for (const sub of subtasks) {
         await deleteTask(sub.id);
@@ -1912,6 +1974,9 @@ useEffect(() => {
           isMobile={isMobile}
           onOpenUserSettings={() => setUserSettingsOpen(true)}
           searchInputRef={searchInputRef}
+          tasks={tasks}
+          projects={projects}
+          users={users}
         />
 
         {/* Search overlay — visible when there's a query */}
@@ -2499,7 +2564,7 @@ function NotificationBell() {
 // ============================================================================
 // TOP BAR
 // ============================================================================
-function TopBar({ user, onLogout, onMenuClick, searchQuery, onSearchChange, darkMode, toggleDarkMode, breadcrumbs, onBreadcrumbClick, onExportReport, isMobile, onOpenUserSettings, searchInputRef }) {
+function TopBar({ user, onLogout, onMenuClick, searchQuery, onSearchChange, darkMode, toggleDarkMode, breadcrumbs, onBreadcrumbClick, onExportReport, isMobile, onOpenUserSettings, searchInputRef, tasks = [], projects = [], users = [] }) {
   const [showCreateEnv, setShowCreateEnv] = useState(false);
   const [showEnvSettings, setShowEnvSettings] = useState(false);
   const [showMembersModal, setShowMembersModal] = useState(false);
@@ -2570,7 +2635,7 @@ function TopBar({ user, onLogout, onMenuClick, searchQuery, onSearchChange, dark
             onManageMembers={() => setShowMembersModal(true)}
           />
 
-          <NotificationBell />
+          <NotificationCenter tasks={tasks} projects={projects} users={users} />
 
           <button onClick={onExportReport} style={iconButtonStyle} title="Exportar reporte completo"
             onMouseEnter={e => { e.currentTarget.style.background = 'rgba(15,23,42,0.05)'; e.currentTarget.style.color = '#0f172a'; }}

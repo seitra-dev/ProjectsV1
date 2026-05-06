@@ -9,27 +9,30 @@ import { supabase } from './supabase';
 const SUPA_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPA_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-const getAuthToken = () => {
+const getAuthToken = async () => {
   try {
+    // Usar supabase.auth.getSession() garantiza que el token se refresca si expiró
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) return session.access_token;
+    // Fallback: leer directo de localStorage (por si getSession falla)
     const ref = SUPA_URL?.split('//')[1]?.split('.')[0];
     const raw = localStorage.getItem(`sb-${ref}-auth-token`);
     if (!raw) return SUPA_KEY;
-    const session = JSON.parse(raw);
-    return session?.access_token || SUPA_KEY;
+    const stored = JSON.parse(raw);
+    return stored?.access_token || SUPA_KEY;
   } catch { return SUPA_KEY; }
 };
 
-const restHeaders = () => ({
-  'Content-Type': 'application/json',
-  'apikey': SUPA_KEY,
-  'Authorization': `Bearer ${getAuthToken()}`,
-  'Prefer': 'return=representation',
-});
-
 const restFetch = async (path, method, body) => {
+  const token = await getAuthToken();
   const res = await fetch(`${SUPA_URL}/rest/v1/${path}`, {
     method,
-    headers: restHeaders(),
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': SUPA_KEY,
+      'Authorization': `Bearer ${token}`,
+      'Prefer': 'return=representation',
+    },
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) {
@@ -761,23 +764,21 @@ export const dbComments = {
 
 export const dbChatMessages = {
   getByEnvironment: async (environmentId, limit = 100) => {
-    const { data, error } = await supabase
-      .from('chat_messages')
-      .select(`*, user:users(id, name, avatar)`)
-      .eq('environment_id', environmentId)
-      .order('created_at', { ascending: true })
-      .limit(limit);
-    if (error) throw error;
-    return data;
+    const sel = encodeURIComponent('*,user:users(id,name,avatar)');
+    const data = await restFetch(
+      `chat_messages?select=${sel}&environment_id=eq.${environmentId}&order=created_at.asc&limit=${limit}`,
+      'GET'
+    );
+    return data || [];
   },
   create: async (messageData) => {
-    const { data, error } = await supabase
-      .from('chat_messages')
-      .insert(messageData)
-      .select(`*, user:users(id, name, avatar)`)
-      .single();
-    if (error) throw error;
-    return data;
+    const sel = encodeURIComponent('*,user:users(id,name,avatar)');
+    const data = await restFetch(
+      `chat_messages?select=${sel}`,
+      'POST',
+      messageData
+    );
+    return Array.isArray(data) ? data[0] : data;
   },
   subscribe: (environmentId, callback) => {
     const channel = supabase
@@ -892,6 +893,39 @@ export const dbProjectMembers = {
       .eq('project_id', projectId)
       .eq('user_id', userId);
     if (error) throw error;
+  },
+};
+
+// ============================================================================
+// NOTIFICACIONES
+// ============================================================================
+
+export const dbNotifications = {
+  getForUser: async (userId, limit = 60) => {
+    const data = await restFetch(
+      `notifications?user_id=eq.${userId}&order=created_at.desc&limit=${limit}`,
+      'GET'
+    );
+    return data || [];
+  },
+  create: async (n) => {
+    const data = await restFetch('notifications', 'POST', {
+      user_id:         n.userId,
+      organization_id: n.organizationId || null,
+      type:            n.type,
+      title:           n.title,
+      body:            n.body    || null,
+      entity_type:     n.entityType || null,
+      entity_id:       n.entityId   || null,
+      read:            false,
+    });
+    return Array.isArray(data) ? data[0] : data;
+  },
+  markRead: async (id) => {
+    await restFetch(`notifications?id=eq.${id}`, 'PATCH', { read: true });
+  },
+  markAllRead: async (userId) => {
+    await restFetch(`notifications?user_id=eq.${userId}&read=eq.false`, 'PATCH', { read: true });
   },
 };
 
