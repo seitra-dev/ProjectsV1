@@ -374,6 +374,7 @@ const toDbComment = (comment) => ({
   task_id: comment.taskId,
   user_id: comment.userId,
   text: comment.content,
+  organization_id: comment.organizationId || null,
 });
 
 // ============================================================================
@@ -714,7 +715,10 @@ export const dbTasks = {
   },
   delete: async (id, currentUser = null) => {
     if (currentUser) await setAuditUser(currentUser.id, currentUser.email, currentUser.name);
-    await restFetch(`tasks?id=eq.${id}`, 'DELETE');
+    await restFetch(`tasks?id=eq.${id}`, 'PATCH', {
+      is_deleted: true,
+      updated_at: new Date().toISOString(),
+    });
   },
   getDeleted: async () => {
     const { data, error } = await supabase

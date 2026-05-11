@@ -2206,6 +2206,7 @@ useEffect(() => {
               taskId: selectedTask.id,
               userId: user.id,
               content: comment.content || comment,
+              organizationId: appOrgId || user?.organizationId || null,
             });
             addToast('Comentario agregado', 'success');
           }}
