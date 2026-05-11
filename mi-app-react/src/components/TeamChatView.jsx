@@ -43,7 +43,7 @@ const INITIAL_CHAT_MESSAGES = [
 ];
 
 function TeamChatView({ user, isMobile = false }) {
-  const { currentEnvironment, db } = useApp();
+  const { currentEnvironment, db, organizationId } = useApp();
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -125,6 +125,7 @@ function TeamChatView({ user, isMobile = false }) {
         environment_id: currentEnvironment.id,
         user_id: user.id,
         text: content,
+        ...(organizationId ? { organization_id: organizationId } : {}),
       });
       // Reemplazar el optimistic con el mensaje real
       setMessages(prev => prev.map(m => m.id === optimisticMsg.id ? saved : m));
