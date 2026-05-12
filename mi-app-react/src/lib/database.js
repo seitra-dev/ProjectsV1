@@ -11,10 +11,14 @@ const SUPA_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 const getAuthToken = async () => {
   try {
-    // Usar supabase.auth.getSession() garantiza que el token se refresca si expiró
     const { data: { session } } = await supabase.auth.getSession();
     if (session?.access_token) return session.access_token;
-    // Fallback: leer directo de localStorage (por si getSession falla)
+
+    // Sesión expirada — intentar refresh antes de caer al anon key
+    const { data: refreshed } = await supabase.auth.refreshSession();
+    if (refreshed?.session?.access_token) return refreshed.session.access_token;
+
+    // Último recurso: leer directo de localStorage
     const ref = SUPA_URL?.split('//')[1]?.split('.')[0];
     const raw = localStorage.getItem(`sb-${ref}-auth-token`);
     if (!raw) return SUPA_KEY;
@@ -228,6 +232,7 @@ const mapProject = (row) => {
     leaderId: row.owner_id,
     workspaceId: row.workspace_id,
     environmentId: row.environment_id || row.workspace?.environment_id || null,
+    organizationId: row.organization_id || null,
     tags: row.tags || [],
     members: row.members || [],
     favorite: row.favorite || false,
@@ -563,10 +568,7 @@ export const dbEnvironmentMembers = {
 
 export const dbWorkspaces = {
   getByEnvironment: async (environmentId) => {
-    const url = `${SUPA_URL}/rest/v1/workspaces?environment_id=eq.${environmentId}&order=created_at.desc`;
-    const response = await fetch(url, { method: 'GET', headers: restHeaders() });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.message || data.hint || `HTTP ${response.status}`);
+    const data = await restFetch(`workspaces?environment_id=eq.${environmentId}&order=created_at.desc`, 'GET');
     return data || [];
   },
   getById: async (id) => {

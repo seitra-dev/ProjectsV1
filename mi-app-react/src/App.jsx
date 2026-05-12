@@ -1484,7 +1484,25 @@ useEffect(() => {
   useEffect(() => {
     loadData();
   }, [currentEnvironment?.id, currentWorkspace?.id]);
+
+  // Recargar datos cuando el tab vuelve a ser visible (evita blank después de inactividad)
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        loadData();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [currentEnvironment?.id, currentWorkspace?.id]);
+
   const loadData = async () => {
+    // Asegurar sesión activa antes de consultar (evita datos vacíos por token expirado)
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) await supabase.auth.refreshSession();
+    } catch {}
+
     // allSettled: cada recurso carga independientemente — un fallo no bloquea los demás
     const projectsPromise = currentWorkspace?.id
       ? dbProjects.getByWorkspace(currentWorkspace.id)
@@ -2206,7 +2224,12 @@ useEffect(() => {
               taskId: selectedTask.id,
               userId: user.id,
               content: comment.content || comment,
-              organizationId: appOrgId || user?.organizationId || null,
+              organizationId: appOrgId
+                || user?.organizationId
+                || projects.find(p => p.id === selectedTask.projectId)?.organizationId
+                || currentEnvironment?.organization_id
+                || currentWorkspace?.organization_id
+                || null,
             });
             addToast('Comentario agregado', 'success');
           }}

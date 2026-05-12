@@ -15,7 +15,7 @@ export default function AnalyticsDashboard() {
   const [activeTab, setActiveTab] = useState('general');
 
   return (
-    <div style={{ padding: '1.5rem 2rem', fontFamily: 'Inter, system-ui, sans-serif', maxWidth: '1100px' }}>
+    <div style={{ padding: '1.5rem 2rem', fontFamily: 'Inter, system-ui, sans-serif', width: '100%', boxSizing: 'border-box' }}>
 
       {/* ── HEADER ── */}
       <div style={{ marginBottom: '1.5rem' }}>
@@ -69,7 +69,11 @@ export default function AnalyticsDashboard() {
         ))}
       </div>
 
-      {activeTab === 'desempeno' && <PerformanceDashboard />}
+      {activeTab === 'desempeno' && (
+        <div style={{ maxWidth: '1100px' }}>
+          <PerformanceDashboard />
+        </div>
+      )}
 
       {activeTab === 'general' && <AnalyticsGeneralView />}
     </div>

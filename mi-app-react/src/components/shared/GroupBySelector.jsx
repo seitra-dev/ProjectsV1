@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  ChevronDown, Check, Circle, Flag, Folder, User,
+  ChevronDown, ChevronRight, Check, Circle, Flag, Folder, User,
   Calendar, Layers, X, ArrowUpAZ, ArrowDownZA
 } from 'lucide-react';
 import { TASK_STATUSES } from '../../constants/statuses';

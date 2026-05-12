@@ -219,7 +219,8 @@ export const getEnvironmentMetrics = async (environmentId) => {
 // TAREAS DE UNA SEMANA (por defecto: semana actual)
 // weekStart: Date (lunes de la semana deseada) — si null usa la semana actual
 // ============================================================================
-export const getWeeklyTasks = async (environmentId = null, weekStart = null) => {
+// envIds: array opcional de IDs de entorno para restringir cuando environmentId === 'all'
+export const getWeeklyTasks = async (environmentId = null, weekStart = null, envIds = null) => {
   try {
     let monday;
     if (weekStart) {
@@ -236,14 +237,11 @@ export const getWeeklyTasks = async (environmentId = null, weekStart = null) => 
     sunday.setDate(monday.getDate() + 6);
     sunday.setHours(23, 59, 59, 999);
 
-    // Usar fecha local para evitar desfase de zona horaria
     const toLocal = (d) =>
       `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
     const mondayStr = toLocal(monday);
     const sundayStr = toLocal(sunday);
 
-    // Cada tarea pertenece SOLO a la semana en que cae su end_date.
-    // Así una tarea no aparece en múltiples semanas por solapamiento.
     let query = supabase
       .from('tasks')
       .select('*, assignee:users(id, name, email, avatar), project:projects(id, name, workspace_id)')
@@ -251,18 +249,24 @@ export const getWeeklyTasks = async (environmentId = null, weekStart = null) => 
       .lte('end_date', sundayStr)
       .eq('is_deleted', false);
 
-    if (environmentId && environmentId !== 'all') {
-      const { data: workspaces } = await supabase
-        .from('workspaces')
-        .select('id')
-        .eq('environment_id', environmentId);
-      const wsIds = (workspaces || []).map(w => w.id);
+    // Determinar el conjunto de environment IDs a filtrar
+    const targetEnvIds =
+      environmentId && environmentId !== 'all'
+        ? [environmentId]          // entorno específico seleccionado
+        : Array.isArray(envIds) && envIds.length > 0
+          ? envIds                 // lista de entornos del usuario (no-PO con 'all')
+          : null;                  // platform_owner sin restricción
 
+    if (targetEnvIds) {
       const [wsProjRes, envProjRes] = await Promise.all([
-        wsIds.length > 0
-          ? supabase.from('projects').select('id').in('workspace_id', wsIds)
-          : Promise.resolve({ data: [] }),
-        supabase.from('projects').select('id').eq('environment_id', environmentId),
+        supabase.from('workspaces').select('id').in('environment_id', targetEnvIds)
+          .then(({ data: ws }) => {
+            const wsIds = (ws || []).map(w => w.id);
+            return wsIds.length > 0
+              ? supabase.from('projects').select('id').in('workspace_id', wsIds)
+              : Promise.resolve({ data: [] });
+          }),
+        supabase.from('projects').select('id').in('environment_id', targetEnvIds),
       ]);
 
       const seen = new Set();

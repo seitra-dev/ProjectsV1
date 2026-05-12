@@ -193,21 +193,27 @@ export default function AnalyticsGeneralView() {
 
   const [rangeId, setRangeId] = useState('30d');
   const [showRangeMenu, setShowRangeMenu] = useState(false);
+  const [selectedEnvId, setSelectedEnvId] = useState('all');
+  const [showEnvMenu, setShowEnvMenu] = useState(false);
   const [raw, setRaw] = useState({ allProjects: [], allTasks: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   const range = RANGES.find(r => r.id === rangeId) || RANGES[0];
+  const selectedEnv = environments.find(e => e.id === selectedEnvId) || null;
 
-  // Cargar datos una sola vez
+  // Cargar datos al cambiar entorno o lista de entornos
   useEffect(() => {
-    if (!environments.length) { setLoading(false); return; }
+    const envsToLoad = selectedEnvId === 'all'
+      ? environments
+      : environments.filter(e => e.id === selectedEnvId);
+    if (!envsToLoad.length) { setLoading(false); return; }
     setLoading(true);
-    loadAnalyticsData(environments)
+    loadAnalyticsData(envsToLoad)
       .then(data => { setRaw(data); setError(null); })
       .catch(e => setError(e.message || 'Error'))
       .finally(() => setLoading(false));
-  }, [environments]);
+  }, [environments, selectedEnvId]);
 
   // ── Métricas derivadas ────────────────────────────────────────────────────
   const metrics = useMemo(() => {
@@ -380,10 +386,93 @@ export default function AnalyticsGeneralView() {
     <div style={{ fontFamily: 'Inter, system-ui, sans-serif', color: C.slate900 }}>
 
       {/* ── TOOLBAR ──────────────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 24 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, gap: 12, flexWrap: 'wrap' }}>
+
+        {/* Selector de equipo */}
         <div style={{ position: 'relative' }}>
           <button
-            onClick={() => setShowRangeMenu(v => !v)}
+            onClick={() => { setShowEnvMenu(v => !v); setShowRangeMenu(false); }}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '8px 14px', background: selectedEnvId !== 'all' ? C.blueLight : C.white,
+              border: `1px solid ${selectedEnvId !== 'all' ? C.blueMid : C.slate200}`, borderRadius: 10,
+              cursor: 'pointer', fontSize: 13, fontWeight: 600,
+              color: selectedEnvId !== 'all' ? C.blue : C.slate700,
+              boxShadow: '0 1px 3px rgba(0,0,0,0.06)', transition: 'all .15s',
+            }}
+          >
+            <span style={{ fontSize: 15 }}>
+              {selectedEnv ? (selectedEnv.icon || '📊') : '🌐'}
+            </span>
+            <span style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {selectedEnv ? selectedEnv.name : 'Todos los equipos'}
+            </span>
+            <ChevronDown size={13} color={selectedEnvId !== 'all' ? C.blue : C.slate400}
+              style={{ transform: showEnvMenu ? 'rotate(180deg)' : 'none', transition: '.2s', flexShrink: 0 }} />
+          </button>
+          {showEnvMenu && (
+            <>
+              <div style={{ position: 'fixed', inset: 0, zIndex: 89 }} onClick={() => setShowEnvMenu(false)} />
+              <div style={{
+                position: 'absolute', top: 'calc(100% + 6px)', left: 0,
+                background: C.white, border: `1px solid ${C.slate200}`,
+                borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+                padding: 6, minWidth: 220, maxHeight: 280, overflowY: 'auto', zIndex: 90,
+              }}>
+                {/* Opción "Todos" */}
+                <button
+                  onClick={() => { setSelectedEnvId('all'); setShowEnvMenu(false); }}
+                  style={{
+                    width: '100%', textAlign: 'left', padding: '9px 12px',
+                    border: 'none', borderRadius: 8, cursor: 'pointer',
+                    fontSize: 13, fontWeight: selectedEnvId === 'all' ? 700 : 500,
+                    background: selectedEnvId === 'all' ? C.blueLight : 'none',
+                    color: selectedEnvId === 'all' ? C.blue : C.slate700,
+                    display: 'flex', alignItems: 'center', gap: 8,
+                  }}
+                  onMouseEnter={e => { if (selectedEnvId !== 'all') e.currentTarget.style.background = C.slate50; }}
+                  onMouseLeave={e => { if (selectedEnvId !== 'all') e.currentTarget.style.background = 'none'; }}
+                >
+                  <span>🌐</span>
+                  Todos los equipos
+                </button>
+                {/* Separador */}
+                {environments.length > 0 && (
+                  <div style={{ height: 1, background: C.slate100, margin: '4px 0' }} />
+                )}
+                {environments.map(env => (
+                  <button
+                    key={env.id}
+                    onClick={() => { setSelectedEnvId(env.id); setShowEnvMenu(false); }}
+                    style={{
+                      width: '100%', textAlign: 'left', padding: '9px 12px',
+                      border: 'none', borderRadius: 8, cursor: 'pointer',
+                      fontSize: 13, fontWeight: selectedEnvId === env.id ? 700 : 500,
+                      background: selectedEnvId === env.id ? C.blueLight : 'none',
+                      color: selectedEnvId === env.id ? C.blue : C.slate700,
+                      display: 'flex', alignItems: 'center', gap: 8,
+                    }}
+                    onMouseEnter={e => { if (selectedEnvId !== env.id) e.currentTarget.style.background = C.slate50; }}
+                    onMouseLeave={e => { if (selectedEnvId !== env.id) e.currentTarget.style.background = 'none'; }}
+                  >
+                    <span style={{
+                      width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+                      background: env.color || C.blue, display: 'inline-block',
+                    }} />
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {env.name}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Selector de rango de fecha */}
+        <div style={{ position: 'relative' }}>
+          <button
+            onClick={() => { setShowRangeMenu(v => !v); setShowEnvMenu(false); }}
             style={{
               display: 'flex', alignItems: 'center', gap: 8,
               padding: '8px 14px', background: C.white,
