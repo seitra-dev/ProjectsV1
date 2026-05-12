@@ -165,36 +165,29 @@ export const AppProvider = ({ children }) => {
         };
         try { localStorage.setItem('seitra_system_role', enriched.role); } catch {}
 
-        // Cargar membresía de org (salvo platform_owner que ve todo)
-        const isPO = enriched.role === 'platform_owner' || baseUser.id === 'e33a38dc-da51-4318-a01a-4f04da60291a';
-        if (!isPO) {
-          const { data: memberships, error: membershipError } = await supabase
-            .from('organization_members')
-            .select('organization_id, role')
-            .eq('user_id', baseUser.id)
-            .limit(1);
+        // Cargar membresía de org para todos los usuarios (incluido platform_owner,
+        // que igual necesita organization_id para crear entornos y otros registros)
+        const { data: memberships } = await supabase
+          .from('organization_members')
+          .select('organization_id, role')
+          .eq('user_id', baseUser.id)
+          .limit(1);
 
-          console.log('🔍 user.id:', baseUser.id);
-          console.log('🔍 organization_members query result:', memberships, membershipError);
-          console.log('🔍 organizationId (estado actual antes de setear):', organizationId);
+        const membership = memberships?.[0] ?? null;
 
-          const membership = memberships?.[0] ?? null;
+        if (membership) {
+          setOrganizationId(membership.organization_id);
+          setOrgRole(membership.role);
+          enriched.organizationId = membership.organization_id;
+          enriched.orgRole = membership.role;
 
-          if (membership) {
-            setOrganizationId(membership.organization_id);
-            setOrgRole(membership.role);
-            enriched.organizationId = membership.organization_id;
-            enriched.orgRole = membership.role;
-            console.log('🔍 membresía encontrada → organizationId:', membership.organization_id, '| role:', membership.role);
-
-            if (membership.role === 'org_admin') {
-              const { count } = await supabase
-                .from('organization_join_requests')
-                .select('id', { count: 'exact', head: true })
-                .eq('organization_id', membership.organization_id)
-                .eq('status', 'pending');
-              setPendingRequestsCount(count || 0);
-            }
+          if (membership.role === 'org_admin') {
+            const { count } = await supabase
+              .from('organization_join_requests')
+              .select('id', { count: 'exact', head: true })
+              .eq('organization_id', membership.organization_id)
+              .eq('status', 'pending');
+            setPendingRequestsCount(count || 0);
           }
         }
 
@@ -371,6 +364,37 @@ export const AppProvider = ({ children }) => {
       } catch {}
     }, 50 * 60 * 1000); // 50 minutos
     return () => clearInterval(interval);
+  }, []);
+
+  // Cuando el tab vuelve a ser visible, asegurarse de que la sesión sigue activa
+  // y recargar entornos si el estado fue limpiado (data disappeared bug)
+  useEffect(() => {
+    const handleVisibility = async () => {
+      if (document.visibilityState !== 'visible') return;
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        if (error || !session) {
+          // Intentar refrescar — si falla, la sesión ya expiró definitivamente
+          const { data: refreshed } = await supabase.auth.refreshSession();
+          if (!refreshed?.session) return;
+        }
+        // Si tenemos sesión pero los entornos se vaciaron, recargarlos
+        setEnvironments(prev => {
+          if (prev.length === 0 && session?.user) {
+            const uid = session.user.id;
+            const role = session.user.user_metadata?.system_role || session.user.user_metadata?.role || 'user';
+            enrichUserProfile({ id: uid, email: session.user.email, name: session.user.user_metadata?.name || session.user.email, role, system_role: role })
+              .then(enriched => {
+                setCurrentUser(enriched);
+                loadEnvironments(enriched.id, enriched.system_role);
+              });
+          }
+          return prev;
+        });
+      } catch {}
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
   }, []);
 
   // ============================================================================

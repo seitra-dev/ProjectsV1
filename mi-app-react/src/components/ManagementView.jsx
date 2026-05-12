@@ -937,21 +937,24 @@ function ManagementRoadmap({ selectedEnv = 'all' }) {
 export default function ManagementView() {
   const { currentUser, environments, orgRole, isPlatformOwner } = useApp();
 
+  const isPO = isPlatformOwner?.();
+
   // ── Tabs / entorno ────────────────────────────────────────────────────────
   const [activeTab,    setActiveTab]    = useState('week');
+  // Platform owners empiezan en 'all'; los demás en su primer entorno (o 'all' si aún no cargó)
   const [selectedEnv, setSelectedEnv] = useState('all');
 
   // ── Datos ─────────────────────────────────────────────────────────────────
   const [metrics,     setMetrics]     = useState(null);
   const [weeklyTasks, setWeeklyTasks] = useState([]);
   const [loading,     setLoading]     = useState(true);
-  const [refreshing,  setRefreshing]  = useState(false); // refresco silencioso (ya hay datos)
+  const [refreshing,  setRefreshing]  = useState(false);
   const [error,       setError]       = useState('');
   const [lastUpdated, setLastUpdated] = useState(null);
-  const hasDataRef    = useRef(false); // true en cuanto se carga por primera vez
+  const hasDataRef    = useRef(false);
 
   // ── Navegación de semana ──────────────────────────────────────────────────
-  const [weekOffset, setWeekOffset] = useState(0); // 0 = semana actual
+  const [weekOffset, setWeekOffset] = useState(0);
 
   const weekStart = useMemo(() => getMondayByOffset(weekOffset), [weekOffset]);
   const weekLabel = useMemo(() => formatWeekLabel(weekStart),    [weekStart]);
@@ -971,7 +974,17 @@ export default function ManagementView() {
   const [showCapModal, setShowCapModal] = useState(false);
 
   // ── Entornos visibles ─────────────────────────────────────────────────────
+  // El contexto ya filtra por membresía para usuarios normales,
+  // así que visibleEnvs siempre contiene solo los entornos accesibles.
   const visibleEnvs = useMemo(() => environments, [environments]);
+
+  // Para usuarios no-PO: forzar selección al primer entorno disponible
+  // y nunca dejar 'all' activo (evita que vean datos de otros equipos).
+  useEffect(() => {
+    if (!isPO && selectedEnv === 'all' && visibleEnvs.length > 0) {
+      setSelectedEnv(visibleEnvs[0].id);
+    }
+  }, [isPO, visibleEnvs, selectedEnv]);
 
   // ── Carga de datos ────────────────────────────────────────────────────────
   const loadData = useCallback(async () => {
@@ -981,11 +994,16 @@ export default function ManagementView() {
     else setLoading(true);
     setError('');
     try {
+      // Para no-PO con 'all': pasar los IDs de sus entornos para limitar la consulta
+      const weekEnvIds = (!isPO && selectedEnv === 'all')
+        ? visibleEnvs.map(e => e.id)
+        : null;
+
       const [metricsData, weekly] = await Promise.all([
         selectedEnv === 'all'
           ? getGlobalMetrics(currentUser.id, currentUser.system_role)
           : getEnvironmentMetrics(selectedEnv),
-        getWeeklyTasks(selectedEnv, weekStart),
+        getWeeklyTasks(selectedEnv, weekStart, weekEnvIds),
       ]);
       setMetrics(metricsData);
       setWeeklyTasks(weekly || []);
@@ -1119,7 +1137,7 @@ export default function ManagementView() {
               onChange={e => setSelectedEnv(e.target.value)}
               style={{ appearance: 'none', padding: '7px 30px 7px 12px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 12, fontWeight: 600, color: '#334155', background: 'white', cursor: 'pointer', outline: 'none', fontFamily: 'inherit' }}
             >
-              <option value="all">Todos los equipos</option>
+              {isPO && <option value="all">Todos los equipos</option>}
               {visibleEnvs.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
             </select>
             <ChevronDown size={13} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: '#94a3b8' }} />

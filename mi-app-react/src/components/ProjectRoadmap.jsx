@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import ConfirmModal from './ConfirmModal';
 import {
@@ -361,7 +361,16 @@ const ProjectRoadmap = ({ project, tasks = [], users = [], onProjectUpdate, onTa
             phases={roadmapData.phases || []}
             tasks={tasks}
             projectId={project.id}
-            users={users}
+            users={(() => {
+              // Solo mostrar miembros del proyecto (leaderId + members[])
+              const ids = new Set(
+                [
+                  project.leaderId ? String(project.leaderId) : null,
+                  ...((project.members || []).map(String)),
+                ].filter(Boolean)
+              );
+              return ids.size > 0 ? users.filter(u => ids.has(String(u.id))) : users;
+            })()}
             onUpdate={(phases) => updateRoadmap({ phases })}
             onTaskCreate={onTaskCreate}
             onTaskUpdate={onTaskUpdate}
@@ -1216,6 +1225,25 @@ const PhaseCard = ({ phase, phaseTasks = [], isOpen, isCreating, projectId, user
   const statusBtnRef = useRef(null);
 
   const phaseStatus = PHASE_STATUS[phase.status] || PHASE_STATUS.pending;
+
+  // Auto-asignar cuando hay exactamente un miembro y la fase es nueva
+  useEffect(() => {
+    if (isCreating && users.length === 1 && !editedResponsableId) {
+      setEditedResponsableId(String(users[0].id));
+    }
+  }, [isCreating, users]);
+
+  // Actualizar estado de la fase automáticamente según el estado de sus tareas
+  const taskStatusKey = phaseTasks.map(t => t.status).join(',');
+  useEffect(() => {
+    if (!phaseTasks.length) return;
+    const allDone = phaseTasks.every(t => t.status === 'completed' || t.status === 'done');
+    const anyInProgress = phaseTasks.some(t => t.status === 'in_progress');
+    const derived = allDone ? 'completed' : anyInProgress ? 'in_progress' : null;
+    if (derived && derived !== phase.status) {
+      onUpdate({ status: derived });
+    }
+  }, [taskStatusKey]);
 
   const handleOpenStatusMenu = (e) => {
     e.stopPropagation();
