@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { X, CheckSquare, Save } from 'lucide-react';
 import { dbTasks } from '../lib/database';
 import { TASK_STATUS_DROPDOWN } from '../constants/statuses';
+import SelectDropdown from './shared/SelectDropdown';
 
 // ============================================================================
 // ESTILOS
@@ -170,22 +171,18 @@ export default function CreateTaskModal({
           <div style={S.row}>
             <div>
               <label style={S.label}>Proyecto *</label>
-              <select style={S.select} value={form.projectId} onChange={e => handleProjectChange(e.target.value)}>
-                <option value="">— Seleccionar proyecto</option>
-                {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
+              <SelectDropdown style={{ width: '100%' }} value={form.projectId} onChange={e => handleProjectChange(e.target.value)}
+                options={[{ value: '', label: '— Seleccionar proyecto' }, ...projects.map(p => ({ value: p.id, label: p.name }))]} />
             </div>
             <div>
               <label style={S.label}>Hito / Fase</label>
-              <select
-                style={{ ...S.select, opacity: milestones.length === 0 ? 0.5 : 1 }}
+              <SelectDropdown
+                style={{ width: '100%' }}
                 value={form.milestoneId}
                 onChange={e => set('milestoneId', e.target.value)}
                 disabled={milestones.length === 0}
-              >
-                <option value="">— Sin hito</option>
-                {milestones.map(ph => <option key={ph.id} value={ph.id}>{ph.name}</option>)}
-              </select>
+                options={[{ value: '', label: '— Sin hito' }, ...milestones.map(ph => ({ value: ph.id, label: ph.name }))]}
+              />
               {form.projectId && milestones.length === 0 && (
                 <div style={S.hint}>Este proyecto no tiene hitos creados aún.</div>
               )}
@@ -195,10 +192,8 @@ export default function CreateTaskModal({
           {/* Responsable */}
           <div>
             <label style={S.label}>Responsable</label>
-            <select style={S.select} value={form.responsableId} onChange={e => set('responsableId', e.target.value)}>
-              <option value="">— Sin asignar</option>
-              {users.map(u => <option key={u.id} value={u.id}>{u.name || u.email}</option>)}
-            </select>
+            <SelectDropdown style={{ width: '100%' }} value={form.responsableId} onChange={e => set('responsableId', e.target.value)}
+              options={[{ value: '', label: '— Sin asignar' }, ...users.map(u => ({ value: u.id, label: u.name || u.email }))]} />
           </div>
 
           {/* Fechas */}
@@ -217,15 +212,13 @@ export default function CreateTaskModal({
           <div style={S.row}>
             <div>
               <label style={S.label}>Prioridad</label>
-              <select style={S.select} value={form.priority} onChange={e => set('priority', e.target.value)}>
-                {PRIORITY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
+              <SelectDropdown style={{ width: '100%' }} value={form.priority} onChange={e => set('priority', e.target.value)}
+                options={PRIORITY_OPTIONS.map(o => ({ ...o, dot: { low: '#64748b', medium: '#3b82f6', high: '#f59e0b', urgent: '#ef4444' }[o.value] }))} />
             </div>
             <div>
               <label style={S.label}>Estado</label>
-              <select style={S.select} value={form.status} onChange={e => set('status', e.target.value)}>
-                {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
+              <SelectDropdown style={{ width: '100%' }} value={form.status} onChange={e => set('status', e.target.value)}
+                options={STATUS_OPTIONS.map(o => ({ ...o, dot: TASK_STATUS_DROPDOWN[o.value]?.color }))} />
             </div>
           </div>
 

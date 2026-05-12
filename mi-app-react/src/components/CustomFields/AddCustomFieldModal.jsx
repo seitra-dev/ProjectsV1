@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Plus, Trash2 } from 'lucide-react';
 import { DESIGN_TOKENS } from '../../styles/tokens';
+import SelectDropdown from '../shared/SelectDropdown';
 
 // ============================================================================
 // ADD CUSTOM FIELD MODAL - Modal para crear nuevas columnas personalizadas
@@ -172,26 +173,16 @@ function AddCustomFieldModal({ isOpen, onClose, onSave }) {
             }}>
               Tipo de campo
             </label>
-            <select
-              value={fieldType}
-              onChange={(e) => setFieldType(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '10px 14px',
-                border: `1px solid ${DESIGN_TOKENS.border.color.normal}`,
-                borderRadius: '8px',
-                fontSize: '14px',
-                outline: 'none',
-                cursor: 'pointer'
-              }}
-            >
-              <option value="text">Texto</option>
-              <option value="select">Lista desplegable</option>
-              <option value="number">Número</option>
-              <option value="date">Fecha</option>
-              <option value="checkbox">Casilla de verificación</option>
-              <option value="url">URL / Enlace</option>
-            </select>
+            <SelectDropdown style={{ width: '100%' }} value={fieldType} onChange={(e) => setFieldType(e.target.value)}
+              options={[
+                { value: 'text', label: 'Texto' },
+                { value: 'select', label: 'Lista desplegable' },
+                { value: 'number', label: 'Número' },
+                { value: 'date', label: 'Fecha' },
+                { value: 'checkbox', label: 'Casilla de verificación' },
+                { value: 'url', label: 'URL / Enlace' },
+              ]}
+            />
           </div>
 
           {/* Opciones (solo para tipo select) */}

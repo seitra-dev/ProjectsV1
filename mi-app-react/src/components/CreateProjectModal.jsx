@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { X, Briefcase, Save, ChevronDown, Check } from 'lucide-react';
 import { dbProjects, dbEnvironmentMembers } from '../lib/database';
+import SelectDropdown from './shared/SelectDropdown';
 import { PROJECT_STATUS_DROPDOWN } from '../constants/statuses';
 
 // ============================================================================
@@ -388,22 +389,15 @@ export default function CreateProjectModal({
           {environments.length > 0 && (
             <div style={S.group}>
               <label style={S.label}>Equipo</label>
-              <select
-                style={{
-                  ...S.select,
-                  borderColor: form.environmentId ? '#6366f1' : '#d1d5db',
-                  background: form.environmentId ? '#fafafe' : 'white',
-                }}
+              <SelectDropdown
                 value={form.environmentId}
                 onChange={e => set('environmentId', e.target.value)}
-              >
-                <option value="">— Seleccionar equipo</option>
-                {environments.map(env => (
-                  <option key={env.id} value={env.id}>
-                    {env.icon ? `${env.icon} ` : ''}{env.name}
-                  </option>
-                ))}
-              </select>
+                style={{ width: '100%' }}
+                options={[
+                  { value: '', label: '— Seleccionar equipo' },
+                  ...environments.map(env => ({ value: env.id, label: `${env.icon ? env.icon + ' ' : ''}${env.name}` })),
+                ]}
+              />
             </div>
           )}
 
@@ -441,25 +435,21 @@ export default function CreateProjectModal({
           <div style={S.row}>
             <div>
               <label style={S.label}>Prioridad</label>
-              <select style={S.select} value={form.priority} onChange={e => set('priority', e.target.value)}>
-                {PRIORITY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
+              <SelectDropdown value={form.priority} onChange={e => set('priority', e.target.value)} style={{ width: '100%' }}
+                options={PRIORITY_OPTIONS.map(o => ({ ...o, dot: { low: '#64748b', medium: '#3b82f6', high: '#f59e0b', urgent: '#ef4444' }[o.value] }))} />
             </div>
             <div>
               <label style={S.label}>Estado</label>
-              <select style={S.select} value={form.status} onChange={e => set('status', e.target.value)}>
-                {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
+              <SelectDropdown value={form.status} onChange={e => set('status', e.target.value)} style={{ width: '100%' }}
+                options={STATUS_OPTIONS.map(o => ({ ...o, dot: PROJECT_STATUS_DROPDOWN[o.value]?.color }))} />
             </div>
           </div>
 
           {/* Área */}
           <div style={S.group}>
             <label style={S.label}>Área <span style={{ fontWeight: 400, color: '#9ca3af' }}>(opcional)</span></label>
-            <select style={S.select} value={form.area} onChange={e => set('area', e.target.value)}>
-              <option value="">— Seleccionar</option>
-              {AREA_OPTIONS.map(a => <option key={a} value={a}>{a}</option>)}
-            </select>
+            <SelectDropdown value={form.area} onChange={e => set('area', e.target.value)} style={{ width: '100%' }}
+              options={[{ value: '', label: '— Seleccionar' }, ...AREA_OPTIONS.map(a => ({ value: a, label: a }))]} />
           </div>
 
           {/* Descripción */}

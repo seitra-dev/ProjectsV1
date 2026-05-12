@@ -6,6 +6,8 @@ import {
   RefreshCw, Search, Globe, Globe2,
 } from 'lucide-react';
 import { dbUsers, dbProjects } from '../lib/database';
+import AppSelect from './shared/AppSelect';
+import SelectDropdown from './shared/SelectDropdown';
 import { useApp } from '../context/AppContext';
 import { getGlobalMetrics, getEnvironmentMetrics } from './metrics';
 import CreateProjectModal   from './CreateProjectModal';
@@ -699,40 +701,30 @@ export default function ProjectsView({ selectedEnvironment, onRefresh: externalR
 
             {/* Filtro entorno (solo si hay más de 1) */}
             {envList.length > 1 && (
-              <select
-                value={filterEnv}
-                onChange={e => setFilterEnv(e.target.value)}
-                style={{ padding: '5px 12px', border: '1px solid #e2e8f0', borderRadius: 20, fontSize: 12, outline: 'none', fontFamily: 'inherit', background: 'white', cursor: 'pointer', color: '#475569', fontWeight: 500 }}
-              >
-                <option value="all">Equipo: Todos</option>
-                {envList.map(env => (
-                  <option key={env.id} value={env.id}>{env.icon || '📁'} {env.name}</option>
-                ))}
-              </select>
+              <SelectDropdown size="sm" value={filterEnv} onChange={e => setFilterEnv(e.target.value)}
+                options={[
+                  { value: 'all', label: 'Equipo: Todos' },
+                  ...envList.map(env => ({ value: env.id, label: `${env.icon || '📁'} ${env.name}` })),
+                ]}
+              />
             )}
 
-            <select
-              value={filterStatus}
-              onChange={e => setFilterStatus(e.target.value)}
-              style={{ padding: '5px 12px', border: '1px solid #e2e8f0', borderRadius: 20, fontSize: 12, outline: 'none', fontFamily: 'inherit', background: 'white', cursor: 'pointer', color: '#475569', fontWeight: 500 }}
-            >
-              <option value="all">Estado: Todos</option>
-              {Object.entries(PROJECT_STATUS_DROPDOWN).map(([k, v]) => (
-                <option key={k} value={k}>{v.label}</option>
-              ))}
-            </select>
+            <SelectDropdown size="sm" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
+              options={[
+                { value: 'all', label: 'Estado: Todos' },
+                ...Object.entries(PROJECT_STATUS_DROPDOWN).map(([k, v]) => ({ value: k, label: v.label, dot: v.color })),
+              ]}
+            />
 
-            <select
-              value={filterPriority}
-              onChange={e => setFilterPriority(e.target.value)}
-              style={{ padding: '5px 12px', border: '1px solid #e2e8f0', borderRadius: 20, fontSize: 12, outline: 'none', fontFamily: 'inherit', background: 'white', cursor: 'pointer', color: '#475569', fontWeight: 500 }}
-            >
-              <option value="all">Prioridad: Todas</option>
-              <option value="urgent">Urgente</option>
-              <option value="high">Alta</option>
-              <option value="medium">Media</option>
-              <option value="low">Baja</option>
-            </select>
+            <SelectDropdown size="sm" value={filterPriority} onChange={e => setFilterPriority(e.target.value)}
+              options={[
+                { value: 'all', label: 'Prioridad: Todas' },
+                { value: 'urgent', label: 'Urgente', dot: '#ef4444' },
+                { value: 'high', label: 'Alta', dot: '#f59e0b' },
+                { value: 'medium', label: 'Media', dot: '#3b82f6' },
+                { value: 'low', label: 'Baja', dot: '#64748b' },
+              ]}
+            />
 
             {/* Dropdown responsable */}
             {projectPersons.length > 0 && (
