@@ -935,14 +935,14 @@ function ManagementRoadmap({ selectedEnv = 'all' }) {
 // MAIN VIEW
 // ============================================================================
 export default function ManagementView() {
-  const { currentUser, environments, orgRole, isPlatformOwner } = useApp();
+  const { currentUser, environments, currentEnvironment, orgRole, isPlatformOwner } = useApp();
 
   const isPO = isPlatformOwner?.();
 
   // ── Tabs / entorno ────────────────────────────────────────────────────────
   const [activeTab,    setActiveTab]    = useState('week');
-  // Platform owners empiezan en 'all'; los demás en su primer entorno (o 'all' si aún no cargó)
-  const [selectedEnv, setSelectedEnv] = useState('all');
+  // Inicializar con el entorno activo del usuario; 'all' solo si no hay ninguno
+  const [selectedEnv, setSelectedEnv] = useState(currentEnvironment?.id || 'all');
 
   // ── Datos ─────────────────────────────────────────────────────────────────
   const [metrics,     setMetrics]     = useState(null);
@@ -978,13 +978,17 @@ export default function ManagementView() {
   // así que visibleEnvs siempre contiene solo los entornos accesibles.
   const visibleEnvs = useMemo(() => environments, [environments]);
 
-  // Para usuarios no-PO: forzar selección al primer entorno disponible
-  // y nunca dejar 'all' activo (evita que vean datos de otros equipos).
+  // Si el estado aún es 'all' cuando carga el entorno activo, aplicar el default correcto:
+  // - PO: su currentEnvironment (puede cambiar a 'all' manualmente)
+  // - No-PO: su primer entorno accesible (nunca puede elegir 'all')
   useEffect(() => {
-    if (!isPO && selectedEnv === 'all' && visibleEnvs.length > 0) {
+    if (selectedEnv !== 'all') return;
+    if (currentEnvironment?.id) {
+      setSelectedEnv(currentEnvironment.id);
+    } else if (!isPO && visibleEnvs.length > 0) {
       setSelectedEnv(visibleEnvs[0].id);
     }
-  }, [isPO, visibleEnvs, selectedEnv]);
+  }, [isPO, currentEnvironment?.id, visibleEnvs, selectedEnv]);
 
   // ── Carga de datos ────────────────────────────────────────────────────────
   const loadData = useCallback(async () => {

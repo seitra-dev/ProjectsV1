@@ -451,6 +451,9 @@ export default function ProjectsView({ selectedEnvironment, onRefresh: externalR
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  // Cuando cambia el entorno seleccionado desde ManagementView, reiniciar filtros cliente
+  useEffect(() => { setFilterEnv('all'); }, [selectedEnvironment]);
+
   useEffect(() => {
     try { localStorage.setItem('seitra_fp_mgmt', filterPerson); } catch {}
   }, [filterPerson]);
@@ -551,7 +554,7 @@ export default function ProjectsView({ selectedEnvironment, onRefresh: externalR
     if (filterEnv      !== 'all') list = list.filter(p => {
       const envId   = p._environment?.id || p.environment_id;
       const wsEnvId = p._workspace?.environment_id;
-      return envId === filterEnv || wsEnvId === filterEnv || isGeneral(p);
+      return envId === filterEnv || wsEnvId === filterEnv;
     });
     if (filterPerson !== 'all') list = list.filter(p => {
       const uid = String(p.owner_id || p.leaderId || '');
@@ -835,7 +838,7 @@ export default function ProjectsView({ selectedEnvironment, onRefresh: externalR
       {loading ? (
         <div style={{ textAlign: 'center', padding: 60, color: '#94a3b8', fontSize: 14 }}>
           <RefreshCw size={24} style={{ animation: 'spin 1s linear infinite', marginBottom: 12, display: 'block', margin: '0 auto 12px' }} />
-          Cargando proyectos de todos los equipos…
+          Cargando proyectos…
         </div>
       ) : filtered.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '48px 16px', background: 'white', borderRadius: 12, border: '1px solid #f1f5f9', color: '#9ca3af', fontSize: 14 }}>
@@ -948,7 +951,8 @@ export default function ProjectsView({ selectedEnvironment, onRefresh: externalR
         open={modal === 'project'}
         onClose={() => setModal(null)}
         users={users}
-        workspaces={workspaces}
+        environments={envList}
+        defaultEnvironmentId={selectedEnvironment !== 'all' ? selectedEnvironment : null}
         onSuccess={() => { setModal(null); loadData(); }}
       />
       <CreateMilestoneModal
