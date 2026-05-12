@@ -4,6 +4,8 @@ import {
   BarChart2, Calendar, ChevronLeft, ChevronRight, Settings, X,
   Map, Flag, CheckSquare, User,
 } from 'lucide-react';
+import AppSelect from './shared/AppSelect';
+import SelectDropdown from './shared/SelectDropdown';
 import { TASK_STATUSES, PROJECT_STATUSES, getTaskStatus, getProjectStatus } from '../constants/statuses';
 import StatusBadge from './shared/StatusBadge';
 import { DESIGN_TOKENS } from '../styles/tokens';
@@ -728,11 +730,7 @@ function ManagementRoadmap({ selectedEnv = 'all' }) {
     : rangePreset === '2025-2026' ? 'Ene 2025 → Dic 2026'
     : `Año ${rangePreset}`;
 
-  const selStyle = {
-    padding: '7px 10px', border: '1px solid #e2e8f0', borderRadius: 8,
-    fontSize: 12, fontFamily: 'inherit', color: '#334155',
-    background: 'white', cursor: 'pointer', outline: 'none',
-  };
+  // selStyle reemplazado por AppSelect
 
   if (loading) return (
     <div style={{ padding: '60px 0', textAlign: 'center', color: '#94a3b8', fontSize: 14 }}>
@@ -761,47 +759,47 @@ function ManagementRoadmap({ selectedEnv = 'all' }) {
         {rangePreset === 'custom' && (
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', background: 'white',
             padding: '6px 12px', borderRadius: 10, boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
-            <select value={customStart.month} onChange={e => setCustomStart(s => ({ ...s, month: +e.target.value }))}
-              style={{ border: 'none', outline: 'none', fontSize: 12, fontFamily: 'inherit', color: '#334155', cursor: 'pointer' }}>
+            <AppSelect size="sm" value={customStart.month} onChange={e => setCustomStart(s => ({ ...s, month: +e.target.value }))}>
               {MONTHS_FULL.map((m, i) => <option key={i} value={i}>{m}</option>)}
-            </select>
-            <select value={customStart.year} onChange={e => setCustomStart(s => ({ ...s, year: +e.target.value }))}
-              style={{ border: 'none', outline: 'none', fontSize: 12, fontFamily: 'inherit', color: '#334155', cursor: 'pointer' }}>
+            </AppSelect>
+            <AppSelect size="sm" value={customStart.year} onChange={e => setCustomStart(s => ({ ...s, year: +e.target.value }))}>
               {RANGE_YEARS.map(y => <option key={y} value={y}>{y}</option>)}
-            </select>
+            </AppSelect>
             <span style={{ color: '#94a3b8', fontSize: 14 }}>→</span>
-            <select value={customEnd.month} onChange={e => setCustomEnd(s => ({ ...s, month: +e.target.value }))}
-              style={{ border: 'none', outline: 'none', fontSize: 12, fontFamily: 'inherit', color: '#334155', cursor: 'pointer' }}>
+            <AppSelect size="sm" value={customEnd.month} onChange={e => setCustomEnd(s => ({ ...s, month: +e.target.value }))}>
               {MONTHS_FULL.map((m, i) => <option key={i} value={i}>{m}</option>)}
-            </select>
-            <select value={customEnd.year} onChange={e => setCustomEnd(s => ({ ...s, year: +e.target.value }))}
-              style={{ border: 'none', outline: 'none', fontSize: 12, fontFamily: 'inherit', color: '#334155', cursor: 'pointer' }}>
+            </AppSelect>
+            <AppSelect size="sm" value={customEnd.year} onChange={e => setCustomEnd(s => ({ ...s, year: +e.target.value }))}>
               {RANGE_YEARS.map(y => <option key={y} value={y}>{y}</option>)}
-            </select>
+            </AppSelect>
           </div>
         )}
 
         <div style={{ flex: 1 }} />
 
-        <select value={filterType} onChange={e => setFilterType(e.target.value)} style={selStyle}>
-          <option value="all">Proyectos, Hitos y Tareas</option>
-          <option value="projects">Solo Proyectos</option>
-          <option value="milestones">Solo Hitos</option>
-          <option value="tasks">Solo Tareas</option>
-        </select>
-        <select value={filterPriority} onChange={e => setFilterPriority(e.target.value)} style={selStyle}>
-          <option value="all">Todas las prioridades</option>
-          <option value="urgent">Urgente</option>
-          <option value="high">Alta</option>
-          <option value="medium">Media</option>
-          <option value="low">Baja</option>
-        </select>
-        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={selStyle}>
-          <option value="all">Todos los estados</option>
-          {Object.entries(RM_STATUS_CFG).filter(([k]) => !['todo','done','review','active'].includes(k)).map(([k, v]) => (
-            <option key={k} value={k}>{v.label}</option>
-          ))}
-        </select>
+        <SelectDropdown size="sm" value={filterType} onChange={e => setFilterType(e.target.value)}
+          options={[
+            { value: 'all', label: 'Proyectos, Hitos y Tareas' },
+            { value: 'projects', label: 'Solo Proyectos' },
+            { value: 'milestones', label: 'Solo Hitos' },
+            { value: 'tasks', label: 'Solo Tareas' },
+          ]}
+        />
+        <SelectDropdown size="sm" value={filterPriority} onChange={e => setFilterPriority(e.target.value)}
+          options={[
+            { value: 'all', label: 'Todas las prioridades' },
+            { value: 'urgent', label: 'Urgente', dot: '#ef4444' },
+            { value: 'high', label: 'Alta', dot: '#f59e0b' },
+            { value: 'medium', label: 'Media', dot: '#3b82f6' },
+            { value: 'low', label: 'Baja', dot: '#64748b' },
+          ]}
+        />
+        <SelectDropdown size="sm" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
+          options={[
+            { value: 'all', label: 'Todos los estados' },
+            ...Object.entries(RM_STATUS_CFG).filter(([k]) => !['todo','done','review','active'].includes(k)).map(([k, v]) => ({ value: k, label: v.label, dot: v.color })),
+          ]}
+        />
       </div>
 
       {/* ── STATS (compacto, integrado) ── */}
@@ -935,14 +933,14 @@ function ManagementRoadmap({ selectedEnv = 'all' }) {
 // MAIN VIEW
 // ============================================================================
 export default function ManagementView() {
-  const { currentUser, environments, orgRole, isPlatformOwner } = useApp();
+  const { currentUser, environments, currentEnvironment, orgRole, isPlatformOwner } = useApp();
 
   const isPO = isPlatformOwner?.();
 
   // ── Tabs / entorno ────────────────────────────────────────────────────────
   const [activeTab,    setActiveTab]    = useState('week');
-  // Platform owners empiezan en 'all'; los demás en su primer entorno (o 'all' si aún no cargó)
-  const [selectedEnv, setSelectedEnv] = useState('all');
+  // Inicializar con el entorno activo del usuario; 'all' solo si no hay ninguno
+  const [selectedEnv, setSelectedEnv] = useState(currentEnvironment?.id || 'all');
 
   // ── Datos ─────────────────────────────────────────────────────────────────
   const [metrics,     setMetrics]     = useState(null);
@@ -978,13 +976,17 @@ export default function ManagementView() {
   // así que visibleEnvs siempre contiene solo los entornos accesibles.
   const visibleEnvs = useMemo(() => environments, [environments]);
 
-  // Para usuarios no-PO: forzar selección al primer entorno disponible
-  // y nunca dejar 'all' activo (evita que vean datos de otros equipos).
+  // Si el estado aún es 'all' cuando carga el entorno activo, aplicar el default correcto:
+  // - PO: su currentEnvironment (puede cambiar a 'all' manualmente)
+  // - No-PO: su primer entorno accesible (nunca puede elegir 'all')
   useEffect(() => {
-    if (!isPO && selectedEnv === 'all' && visibleEnvs.length > 0) {
+    if (selectedEnv !== 'all') return;
+    if (currentEnvironment?.id) {
+      setSelectedEnv(currentEnvironment.id);
+    } else if (!isPO && visibleEnvs.length > 0) {
       setSelectedEnv(visibleEnvs[0].id);
     }
-  }, [isPO, visibleEnvs, selectedEnv]);
+  }, [isPO, currentEnvironment?.id, visibleEnvs, selectedEnv]);
 
   // ── Carga de datos ────────────────────────────────────────────────────────
   const loadData = useCallback(async () => {
@@ -1131,17 +1133,12 @@ export default function ManagementView() {
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           {/* Dropdown entorno */}
-          <div style={{ position: 'relative' }}>
-            <select
-              value={selectedEnv}
-              onChange={e => setSelectedEnv(e.target.value)}
-              style={{ appearance: 'none', padding: '7px 30px 7px 12px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 12, fontWeight: 600, color: '#334155', background: 'white', cursor: 'pointer', outline: 'none', fontFamily: 'inherit' }}
-            >
-              {isPO && <option value="all">Todos los equipos</option>}
-              {visibleEnvs.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
-            </select>
-            <ChevronDown size={13} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: '#94a3b8' }} />
-          </div>
+          <SelectDropdown size="sm" value={selectedEnv} onChange={e => setSelectedEnv(e.target.value)}
+            options={[
+              ...(isPO ? [{ value: 'all', label: 'Todos los equipos' }] : []),
+              ...visibleEnvs.map(env => ({ value: env.id, label: env.name })),
+            ]}
+          />
 
           {/* Botón refrescar */}
           <button onClick={loadData} disabled={loading || refreshing} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 11px', border: '1px solid #e2e8f0', borderRadius: 8, background: 'white', cursor: (loading || refreshing) ? 'wait' : 'pointer', fontSize: 12, fontWeight: 600, color: '#475569', fontFamily: 'inherit' }}>
@@ -1219,14 +1216,12 @@ export default function ManagementView() {
               </span>
 
               {/* Dropdown personas */}
-              <div style={{ position: 'relative' }}>
-                <select value={selectedPerson} onChange={e => setSelectedPerson(e.target.value)}
-                  style={{ appearance: 'none', padding: '7px 30px 7px 12px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 12, fontWeight: 600, color: '#334155', background: 'white', cursor: 'pointer', outline: 'none', fontFamily: 'inherit' }}>
-                  <option value="all">Todas las personas</option>
-                  {allPersons.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
-                <ChevronDown size={12} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: '#94a3b8' }} />
-              </div>
+              <SelectDropdown size="sm" value={selectedPerson} onChange={e => setSelectedPerson(e.target.value)}
+                options={[
+                  { value: 'all', label: 'Todas las personas' },
+                  ...allPersons.map(p => ({ value: p.id, label: p.name })),
+                ]}
+              />
 
               {/* Botón capacidades */}
               <button onClick={() => setShowCapModal(true)}

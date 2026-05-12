@@ -10,6 +10,7 @@ import {
 import { useApp } from '../context/AppContext';
 import { dbPerformance } from '../lib/database';
 import { supabase } from '../lib/supabase';
+import SelectDropdown from './shared/SelectDropdown';
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
@@ -251,11 +252,8 @@ const WeeklyChart = ({ rows, capacities, chartPerson, setChartPerson, startDate,
           <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a' }}>{periodTitle}</div>
           <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{periodLabel} · {rangePoints.length} {periodUnit}{rangePoints.length !== 1 ? 's' : ''}</div>
         </div>
-        <select value={chartPerson} onChange={e => setChartPerson(e.target.value)}
-          style={{ padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 12, color: '#334155', background: 'white', cursor: 'pointer', outline: 'none' }}>
-          <option value="all">Todas las personas</option>
-          {persons.map(r => <option key={r.assignee_id} value={String(r.assignee_id)}>{r.assignee_name}</option>)}
-        </select>
+        <SelectDropdown size="sm" value={chartPerson} onChange={e => setChartPerson(e.target.value)}
+          options={[{ value: 'all', label: 'Todas las personas' }, ...persons.map(r => ({ value: String(r.assignee_id), label: r.assignee_name }))]} />
       </div>
       <ResponsiveContainer width="100%" height={220}>
         <LineChart data={chartData} margin={{ top: 8, right: 40, bottom: 0, left: -10 }}>
@@ -658,10 +656,8 @@ export default function PerformanceDashboard() {
       {/* ── Filtros ── */}
       <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap', background: 'white', padding: '14px 16px', borderRadius: 12, border: '1px solid #e2e8f0', marginBottom: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
         <FF label="Equipo">
-          <select value={filters.equipo} onChange={e => set('equipo', e.target.value)} style={SEL}>
-            <option value="">Todos</option>
-            {equipoOpts.map(e => <option key={e.id} value={String(e.id)}>{e.name}</option>)}
-          </select>
+          <SelectDropdown size="sm" value={filters.equipo} onChange={e => set('equipo', e.target.value)}
+            options={[{ value: '', label: 'Todos' }, ...equipoOpts.map(eq => ({ value: String(eq.id), label: eq.name }))]} />
         </FF>
         <FF label="Ini.">
           <input type="date" value={filters.startDate} onChange={e => set('startDate', e.target.value)} style={SEL} />

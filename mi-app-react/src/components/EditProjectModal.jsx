@@ -3,6 +3,7 @@ import { X, Edit2, Save, Lock } from 'lucide-react';
 import { dbProjects } from '../lib/database';
 import { PROJECT_STATUS_DROPDOWN } from '../constants/statuses';
 import { useApp } from '../context/AppContext';
+import SelectDropdown from './shared/SelectDropdown';
 
 const S = {
   overlay: {
@@ -181,15 +182,13 @@ export default function EditProjectModal({ project, onClose, users = [], current
           <div style={S.row}>
             <div>
               <label style={S.label}>Estado</label>
-              <select style={S.select} value={form.status} onChange={e => set('status', e.target.value)}>
-                {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
+              <SelectDropdown style={{ width: '100%' }} value={form.status} onChange={e => set('status', e.target.value)}
+                options={STATUS_OPTIONS.map(o => ({ ...o, dot: PROJECT_STATUS_DROPDOWN[o.value]?.color }))} />
             </div>
             <div>
               <label style={S.label}>Prioridad</label>
-              <select style={S.select} value={form.priority} onChange={e => set('priority', e.target.value)}>
-                {PRIORITY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
+              <SelectDropdown style={{ width: '100%' }} value={form.priority} onChange={e => set('priority', e.target.value)}
+                options={PRIORITY_OPTIONS.map(o => ({ ...o, dot: { low: '#64748b', medium: '#3b82f6', high: '#f59e0b', urgent: '#ef4444' }[o.value] }))} />
             </div>
           </div>
 
@@ -197,17 +196,13 @@ export default function EditProjectModal({ project, onClose, users = [], current
           <div style={S.row}>
             <div>
               <label style={S.label}>Responsable</label>
-              <select style={S.select} value={form.responsableId} onChange={e => set('responsableId', e.target.value)}>
-                <option value="">— Sin asignar</option>
-                {users.map(u => <option key={u.id} value={u.id}>{u.name || u.email}</option>)}
-              </select>
+              <SelectDropdown style={{ width: '100%' }} value={form.responsableId} onChange={e => set('responsableId', e.target.value)}
+                options={[{ value: '', label: '— Sin asignar' }, ...users.map(u => ({ value: u.id, label: u.name || u.email }))]} />
             </div>
             <div>
               <label style={S.label}>Área</label>
-              <select style={S.select} value={form.area} onChange={e => set('area', e.target.value)}>
-                <option value="">— Seleccionar</option>
-                {AREA_OPTIONS.map(a => <option key={a} value={a}>{a}</option>)}
-              </select>
+              <SelectDropdown style={{ width: '100%' }} value={form.area} onChange={e => set('area', e.target.value)}
+                options={[{ value: '', label: '— Seleccionar' }, ...AREA_OPTIONS.map(a => ({ value: a, label: a }))]} />
             </div>
           </div>
 

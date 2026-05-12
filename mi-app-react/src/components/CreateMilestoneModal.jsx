@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Flag, Save } from 'lucide-react';
 import { dbProjects } from '../lib/database';
+import SelectDropdown from './shared/SelectDropdown';
 
 // ============================================================================
 // ESTILOS (compartidos con otros modales)
@@ -145,20 +146,16 @@ export default function CreateMilestoneModal({ open, onClose, projects = [], use
           {/* Proyecto padre */}
           <div>
             <label style={S.label}>Proyecto padre *</label>
-            <select style={S.select} value={form.projectId} onChange={e => set('projectId', e.target.value)}>
-              <option value="">— Seleccionar proyecto</option>
-              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
+            <SelectDropdown style={{ width: '100%' }} value={form.projectId} onChange={e => set('projectId', e.target.value)}
+              options={[{ value: '', label: '— Seleccionar proyecto' }, ...projects.map(p => ({ value: p.id, label: p.name }))]} />
           </div>
 
           {/* Responsable + Color */}
           <div style={S.row}>
             <div>
               <label style={S.label}>Responsable</label>
-              <select style={S.select} value={form.responsableId} onChange={e => set('responsableId', e.target.value)}>
-                <option value="">— Sin asignar</option>
-                {users.map(u => <option key={u.id} value={u.id}>{u.name || u.email}</option>)}
-              </select>
+              <SelectDropdown style={{ width: '100%' }} value={form.responsableId} onChange={e => set('responsableId', e.target.value)}
+                options={[{ value: '', label: '— Sin asignar' }, ...users.map(u => ({ value: u.id, label: u.name || u.email }))]} />
             </div>
             <div>
               <label style={S.label}>Color del hito</label>

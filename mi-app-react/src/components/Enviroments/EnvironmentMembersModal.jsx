@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { X, Users, UserPlus, Trash2, Crown, ShieldCheck, User, Eye, Search, ChevronDown, Loader, ArrowRightLeft } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { dbEnvironmentMembers, dbUsers } from '../../lib/database';
+import SelectDropdown from '../shared/SelectDropdown';
 
 // ============================================================================
 // CONSTANTS
@@ -320,20 +321,12 @@ const EnvironmentMembersModal = ({ isOpen, onClose }) => {
 
                         {/* Role selector / badge */}
                         {canManage && !isThisOwner && !isMe ? (
-                          <select
+                          <SelectDropdown
+                            size="sm"
                             value={member.role}
                             onChange={e => handleChangeRole(member.user_id, e.target.value)}
-                            style={{
-                              border: '1.5px solid #e2e8f0', borderRadius: '7px',
-                              padding: '4px 8px', fontSize: '0.78rem', fontWeight: 600,
-                              color: '#374151', background: 'white', cursor: 'pointer',
-                              fontFamily: 'inherit',
-                            }}
-                          >
-                            {ASSIGNABLE_ROLES.map(r => (
-                              <option key={r} value={r}>{ROLE_CONFIG[r]?.label || r}</option>
-                            ))}
-                          </select>
+                            options={ASSIGNABLE_ROLES.map(r => ({ value: r, label: ROLE_CONFIG[r]?.label || r, dot: ROLE_CONFIG[r]?.color }))}
+                          />
                         ) : (
                           <RoleBadge role={member.role} />
                         )}
@@ -469,24 +462,12 @@ const EnvironmentMembersModal = ({ isOpen, onClose }) => {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <label style={{ fontSize: '0.82rem', fontWeight: 600, color: '#374151' }}>Rol a asignar</label>
                 <div style={{ position: 'relative' }}>
-                  <select
+                  <SelectDropdown
+                    style={{ width: '100%' }}
                     value={inviteRole}
                     onChange={e => setInviteRole(e.target.value)}
-                    style={{
-                      width: '100%', padding: '0.7rem 2rem 0.7rem 0.9rem',
-                      border: '1.5px solid #e2e8f0', borderRadius: '10px',
-                      fontSize: '0.875rem', fontFamily: 'inherit', color: '#1e293b',
-                      background: 'white', cursor: 'pointer', appearance: 'none',
-                      outline: 'none',
-                    }}
-                    onFocus={e => e.target.style.borderColor = '#667eea'}
-                    onBlur={e => e.target.style.borderColor = '#e2e8f0'}
-                  >
-                    {ASSIGNABLE_ROLES.map(r => (
-                      <option key={r} value={r}>{ROLE_CONFIG[r]?.label || r}</option>
-                    ))}
-                  </select>
-                  <ChevronDown size={15} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none' }} />
+                    options={ASSIGNABLE_ROLES.map(r => ({ value: r, label: ROLE_CONFIG[r]?.label || r, dot: ROLE_CONFIG[r]?.color }))}
+                  />
                 </div>
                 <p style={{ margin: 0, fontSize: '0.75rem', color: '#94a3b8' }}>
                   {inviteRole === 'admin' && 'Puede gestionar miembros y configurar el entorno.'}

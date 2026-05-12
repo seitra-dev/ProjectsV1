@@ -40,6 +40,7 @@ import OrgJoinRequestsView from './components/OrgJoinRequestsView';
 import MySpaceToDo from './components/MySpaceToDo';
 import { TASK_STATUSES, TASK_STATUS_DROPDOWN, PROJECT_STATUS_DROPDOWN, getTaskStatus, getProjectStatus } from './constants/statuses';
 import StatusBadge from './components/shared/StatusBadge';
+import SelectDropdown from './components/shared/SelectDropdown';
 
 // ============================================================================
 // TOAST NOTIFICATION SYSTEM
@@ -3374,26 +3375,26 @@ function ProjectsView({ projects, createProject, deleteProject, updateProject, u
 
         {/* Fila 1: selects + toggle vista */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
-          <select
+          <SelectDropdown
+            size="sm"
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
-            style={selectStyle}
-          >
-            <option value="all">Todos los estados</option>
-            {Object.entries(PROJECT_STATUS_DROPDOWN).map(([k, v]) => (
-              <option key={k} value={k}>{v.label}</option>
-            ))}
-          </select>
+            options={[
+              { value: 'all', label: 'Todos los estados' },
+              ...Object.entries(PROJECT_STATUS_DROPDOWN).map(([k, v]) => ({ value: k, label: v.label, dot: v.color })),
+            ]}
+          />
 
-          <select
+          <SelectDropdown
+            size="sm"
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value)}
-            style={selectStyle}
-          >
-            <option value="recent">Más recientes</option>
-            <option value="name">Nombre A-Z</option>
-            <option value="deadline">Próximos a vencer</option>
-          </select>
+            options={[
+              { value: 'recent', label: 'Más recientes' },
+              { value: 'name', label: 'Nombre A-Z' },
+              { value: 'deadline', label: 'Próximos a vencer' },
+            ]}
+          />
 
           {/* Dropdown responsable */}
           {envUsers.length > 0 && (
@@ -4444,29 +4445,23 @@ function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTask
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '12px', marginBottom: '14px' }}>
                   <div>
                     <label style={labelStyle}>Estado</label>
-                    <select style={{ ...inputStyle, background: 'white', cursor: 'pointer' }} value={editForm.status} onChange={e => fld('status', e.target.value)}>
-                      {STATUS_OPTS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                    </select>
+                    <SelectDropdown style={{ width: '100%' }} value={editForm.status} onChange={e => fld('status', e.target.value)}
+                      options={STATUS_OPTS.map(o => ({ ...o, dot: PROJECT_STATUS_DROPDOWN[o.value]?.color }))} />
                   </div>
                   <div>
                     <label style={labelStyle}>Prioridad</label>
-                    <select style={{ ...inputStyle, background: 'white', cursor: 'pointer' }} value={editForm.priority} onChange={e => fld('priority', e.target.value)}>
-                      {PRIO_OPTS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                    </select>
+                    <SelectDropdown style={{ width: '100%' }} value={editForm.priority} onChange={e => fld('priority', e.target.value)}
+                      options={PRIO_OPTS.map(o => ({ ...o, dot: { low: '#64748b', medium: '#3b82f6', high: '#f59e0b', urgent: '#ef4444' }[o.value] }))} />
                   </div>
                   <div>
                     <label style={labelStyle}>Responsable</label>
-                    <select style={{ ...inputStyle, background: 'white', cursor: 'pointer' }} value={editForm.leaderId || ''} onChange={e => fld('leaderId', e.target.value)}>
-                      <option value="">— Sin asignar</option>
-                      {envUsers.map(u => <option key={u.id} value={u.id}>{u.name || u.email}</option>)}
-                    </select>
+                    <SelectDropdown style={{ width: '100%' }} value={editForm.leaderId || ''} onChange={e => fld('leaderId', e.target.value)}
+                      options={[{ value: '', label: '— Sin asignar' }, ...envUsers.map(u => ({ value: u.id, label: u.name || u.email }))]} />
                   </div>
                   <div>
                     <label style={labelStyle}>Área</label>
-                    <select style={{ ...inputStyle, background: 'white', cursor: 'pointer' }} value={editForm.area || ''} onChange={e => fld('area', e.target.value)}>
-                      <option value="">— Seleccionar</option>
-                      {AREA_OPTIONS.map(a => <option key={a} value={a}>{a}</option>)}
-                    </select>
+                    <SelectDropdown style={{ width: '100%' }} value={editForm.area || ''} onChange={e => fld('area', e.target.value)}
+                      options={[{ value: '', label: '— Seleccionar' }, ...AREA_OPTIONS.map(a => ({ value: a, label: a }))]} />
                   </div>
                 </div>
 
@@ -6034,19 +6029,28 @@ function AllTasksView({ tasks, projects, users, currentUser, onTaskClick }) {
       </div>
 
       <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem', flexWrap: 'wrap' }}>
-        <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} style={selectStyle}>
-          <option value="all">Todos los estados</option>
-          {Object.entries(TASK_STATUS_DROPDOWN).map(([key, { label }]) => (
-            <option key={key} value={key}>{label}</option>
-          ))}
-        </select>
+        <SelectDropdown
+          size="sm"
+          value={filterStatus}
+          onChange={(e) => setFilterStatus(e.target.value)}
+          options={[
+            { value: 'all', label: 'Todos los estados' },
+            ...Object.entries(TASK_STATUS_DROPDOWN).map(([k, v]) => ({ value: k, label: v.label, dot: v.color })),
+          ]}
+        />
 
-        <select value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)} style={selectStyle}>
-          <option value="all">Todas las prioridades</option>
-          {Object.entries(PRIORITY_OPTIONS).map(([key, { label }]) => (
-            <option key={key} value={key}>{label}</option>
-          ))}
-        </select>
+        <SelectDropdown
+          size="sm"
+          value={filterPriority}
+          onChange={(e) => setFilterPriority(e.target.value)}
+          options={[
+            { value: 'all', label: 'Todas las prioridades' },
+            { value: 'low', label: 'Baja', dot: '#64748b' },
+            { value: 'medium', label: 'Media', dot: '#3b82f6' },
+            { value: 'high', label: 'Alta', dot: '#f59e0b' },
+            { value: 'urgent', label: 'Urgente', dot: '#ef4444' },
+          ]}
+        />
 
         <ProjectPillDropdown
           projects={environmentProjects}
@@ -6054,11 +6058,16 @@ function AllTasksView({ tasks, projects, users, currentUser, onTaskClick }) {
           onChange={setFilterProject}
         />
 
-        <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} style={selectStyle}>
-          <option value="recent">Más recientes</option>
-          <option value="deadline">Próximos a vencer</option>
-          <option value="priority">Mayor prioridad</option>
-        </select>
+        <SelectDropdown
+          size="sm"
+          value={sortBy}
+          onChange={(e) => setSortBy(e.target.value)}
+          options={[
+            { value: 'recent', label: 'Más recientes' },
+            { value: 'deadline', label: 'Próximos a vencer' },
+            { value: 'priority', label: 'Mayor prioridad' },
+          ]}
+        />
       </div>
 
       <TableView
@@ -6661,21 +6670,12 @@ function TaskDetailModal({ task, project, projects = [], users, comments, onClos
           {/* Top row: status badge + actions */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
             {/* Status selector */}
-            <select
+            <SelectDropdown
+              size="sm"
               value={form.status || 'todo'}
               onChange={e => saveField({ status: e.target.value })}
-              style={{
-                border: 'none', outline: 'none', cursor: 'pointer',
-                background: statusDef.bg, color: statusDef.color,
-                fontWeight: 700, fontSize: '0.7rem', padding: '4px 10px',
-                borderRadius: 20, fontFamily: 'inherit',
-                textTransform: 'uppercase', letterSpacing: '0.06em',
-              }}
-            >
-              {Object.entries(TASK_STATUS_DROPDOWN).map(([k, { label }]) => (
-                <option key={k} value={k}>{label}</option>
-              ))}
-            </select>
+              options={Object.entries(TASK_STATUS_DROPDOWN).map(([k, v]) => ({ value: k, label: v.label, dot: v.color }))}
+            />
 
             {/* Priority badge */}
             {form.priority && (
@@ -6764,10 +6764,8 @@ function TaskDetailModal({ task, project, projects = [], users, comments, onClos
                 <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 5 }}>
                   Persona asignada
                 </label>
-                <select value={form.assigneeId || ''} onChange={e => saveField({ assigneeId: e.target.value || null })} style={fld}>
-                  <option value="">Sin asignar</option>
-                  {projectUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-                </select>
+                <SelectDropdown style={{ width: '100%' }} value={form.assigneeId || ''} onChange={e => saveField({ assigneeId: e.target.value || null })}
+                  options={[{ value: '', label: 'Sin asignar' }, ...projectUsers.map(u => ({ value: u.id, label: u.name }))]} />
               </div>
 
               {/* Prioridad */}
@@ -6775,10 +6773,14 @@ function TaskDetailModal({ task, project, projects = [], users, comments, onClos
                 <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 5 }}>
                   Prioridad
                 </label>
-                <select value={form.priority || ''} onChange={e => saveField({ priority: e.target.value || null })} style={fld}>
-                  <option value="">Sin prioridad</option>
-                  {Object.entries(PRIORITY_OPTIONS).map(([k, { label }]) => <option key={k} value={k}>{label}</option>)}
-                </select>
+                <SelectDropdown style={{ width: '100%' }} value={form.priority || ''} onChange={e => saveField({ priority: e.target.value || null })}
+                  options={[
+                    { value: '', label: 'Sin prioridad' },
+                    { value: 'low', label: 'Baja', dot: '#64748b' },
+                    { value: 'medium', label: 'Media', dot: '#3b82f6' },
+                    { value: 'high', label: 'Alta', dot: '#f59e0b' },
+                    { value: 'urgent', label: 'Urgente', dot: '#ef4444' },
+                  ]} />
               </div>
 
               {/* Fecha inicio */}
@@ -6816,10 +6818,8 @@ function TaskDetailModal({ task, project, projects = [], users, comments, onClos
                 <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 5 }}>
                   Proyecto
                 </label>
-                <select value={form.projectId || ''} onChange={e => saveField({ projectId: e.target.value || null })} style={fld}>
-                  <option value="">Sin proyecto</option>
-                  {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
+                <SelectDropdown style={{ width: '100%' }} value={form.projectId || ''} onChange={e => saveField({ projectId: e.target.value || null })}
+                  options={[{ value: '', label: 'Sin proyecto' }, ...projects.map(p => ({ value: p.id, label: p.name }))]} />
               </div>
 
               {/* Progreso */}
@@ -7322,16 +7322,12 @@ function TaskFormModal({ initialTask, users, tasks, projects = [], currentProjec
         {projects.length > 0 && (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
             <FormField label="Proyecto">
-              <select
+              <SelectDropdown
+                style={{ width: '100%' }}
                 value={formData.projectId || ''}
                 onChange={(e) => setFormData(p => ({ ...p, projectId: e.target.value || null, roadmapPhaseId: null }))}
-                style={selectStyle}
-              >
-                <option value="">Sin proyecto</option>
-                {projects.map(p => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
+                options={[{ value: '', label: 'Sin proyecto' }, ...projects.map(p => ({ value: p.id, label: p.name }))]}
+              />
             </FormField>
 
             <FormField label="Fase del roadmap">
@@ -7344,16 +7340,12 @@ function TaskFormModal({ initialTask, users, tasks, projects = [], currentProjec
                   Este proyecto no tiene fases en el roadmap
                 </div>
               ) : (
-                <select
+                <SelectDropdown
+                  style={{ width: '100%' }}
                   value={formData.roadmapPhaseId || ''}
                   onChange={(e) => setFormData(p => ({ ...p, roadmapPhaseId: e.target.value || null }))}
-                  style={selectStyle}
-                >
-                  <option value="">Sin fase específica</option>
-                  {roadmapPhases.map(phase => (
-                    <option key={phase.id} value={phase.id}>{phase.name}</option>
-                  ))}
-                </select>
+                  options={[{ value: '', label: 'Sin fase específica' }, ...roadmapPhases.map(ph => ({ value: ph.id, label: ph.name }))]}
+                />
               )}
             </FormField>
           </div>
@@ -7361,16 +7353,15 @@ function TaskFormModal({ initialTask, users, tasks, projects = [], currentProjec
 
         {tasks && tasks.length > 0 && (
           <FormField label="Tarea padre (para crear subtarea)">
-            <select
+            <SelectDropdown
+              style={{ width: '100%' }}
               value={formData.parentId || ''}
               onChange={(e) => setFormData(p => ({ ...p, parentId: e.target.value ? Number(e.target.value) : null }))}
-              style={selectStyle}
-            >
-              <option value="">Sin tarea padre</option>
-              {tasks.filter(t => !t.parentId && t.id !== initialTask?.id).map(t => (
-                <option key={t.id} value={t.id}>{t.title}</option>
-              ))}
-            </select>
+              options={[
+                { value: '', label: 'Sin tarea padre' },
+                ...tasks.filter(t => !t.parentId && t.id !== initialTask?.id).map(t => ({ value: t.id, label: t.title })),
+              ]}
+            />
           </FormField>
         )}
 
@@ -7400,43 +7391,36 @@ function TaskFormModal({ initialTask, users, tasks, projects = [], currentProjec
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
           <FormField label="Prioridad">
-            <select
+            <SelectDropdown
+              style={{ width: '100%' }}
               value={formData.priority}
               onChange={(e) => setFormData(p => ({ ...p, priority: e.target.value }))}
-              style={selectStyle}
-            >
-              {Object.entries(PRIORITY_OPTIONS).map(([key, { label }]) => (
-                <option key={key} value={key}>{label}</option>
-              ))}
-            </select>
+              options={[
+                { value: 'low', label: 'Baja', dot: '#64748b' },
+                { value: 'medium', label: 'Media', dot: '#3b82f6' },
+                { value: 'high', label: 'Alta', dot: '#f59e0b' },
+                { value: 'urgent', label: 'Urgente', dot: '#ef4444' },
+              ]}
+            />
           </FormField>
 
           <FormField label="Estado">
-            <select
+            <SelectDropdown
+              style={{ width: '100%' }}
               value={formData.status}
               onChange={(e) => setFormData(p => ({ ...p, status: e.target.value }))}
-              style={selectStyle}
-            >
-              {Object.entries(TASK_STATUS_DROPDOWN).map(([key, { label }]) => (
-                <option key={key} value={key}>{label}</option>
-              ))}
-            </select>
+              options={Object.entries(TASK_STATUS_DROPDOWN).map(([k, v]) => ({ value: k, label: v.label, dot: v.color }))}
+            />
           </FormField>
         </div>
 
         <FormField label="Asignado a" required>
-          <select
+          <SelectDropdown
+            style={{ width: '100%' }}
             value={formData.assigneeId}
             onChange={(e) => { const v = e.target.value; setFormData(p => ({ ...p, assigneeId: isNaN(Number(v)) ? v : Number(v) })); }}
-            style={selectStyle}
-            required
-          >
-            {users.map(u => (
-              <option key={u.id} value={u.id}>
-                {u.avatar} {u.name}
-              </option>
-            ))}
-          </select>
+            options={users.map(u => ({ value: u.id, label: `${u.avatar || ''} ${u.name}`.trim() }))}
+          />
         </FormField>
 
         <FormField label={`Progreso: ${formData.progress}%`}>

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { DESIGN_TOKENS } from '../../styles/tokens';
+import SelectDropdown from '../shared/SelectDropdown';
 
 const CreateListModal = ({ isOpen, onClose, onSave, preselectedWorkspaceId }) => {
   const { currentWorkspace, currentEnvironment, environments, createList, currentUser } = useApp();
@@ -255,42 +256,18 @@ const CreateListModal = ({ isOpen, onClose, onSave, preselectedWorkspaceId }) =>
             }}>
               Equipo (ubicación)
             </label>
-            <select
+            <SelectDropdown
+              style={{ width: '100%' }}
               value={formData.environmentId || ''}
               onChange={(e) => {
                 setFormData({ ...formData, environmentId: e.target.value, workspaceId: null });
                 setErrors({ ...errors, environment: null });
               }}
-              style={{
-                width: '100%',
-                padding: '10px 12px',
-                border: `1px solid ${errors.environment ? DESIGN_TOKENS.danger.base : DESIGN_TOKENS.border.color.normal}`,
-                borderRadius: '6px',
-                fontSize: '14px',
-                outline: 'none',
-                background: 'white',
-                cursor: 'pointer',
-                fontFamily: DESIGN_TOKENS.typography.fontFamily,
-                boxSizing: 'border-box'
-              }}
-              onFocus={(e) => {
-                if (!errors.environment) {
-                  e.currentTarget.style.borderColor = DESIGN_TOKENS.primary.base;
-                }
-              }}
-              onBlur={(e) => {
-                if (!errors.environment) {
-                  e.currentTarget.style.borderColor = DESIGN_TOKENS.border.color.normal;
-                }
-              }}
-            >
-              <option value="">Seleccionar entorno...</option>
-              {environments?.map(env => (
-                <option key={env.id} value={env.id}>
-                  {env.icon} {env.name}
-                </option>
-              ))}
-            </select>
+              options={[
+                { value: '', label: 'Seleccionar entorno...' },
+                ...(environments || []).map(env => ({ value: env.id, label: `${env.icon ? env.icon + ' ' : ''}${env.name}` })),
+              ]}
+            />
             {errors.environment && (
               <div style={{
                 fontSize: '12px',
@@ -314,29 +291,15 @@ const CreateListModal = ({ isOpen, onClose, onSave, preselectedWorkspaceId }) =>
               }}>
                 Espacio
               </label>
-              <select
+              <SelectDropdown
+                style={{ width: '100%' }}
                 value={formData.workspaceId || ''}
                 onChange={(e) => setFormData({ ...formData, workspaceId: e.target.value || null })}
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  border: `1px solid ${DESIGN_TOKENS.border.color.normal}`,
-                  borderRadius: '6px',
-                  fontSize: '14px',
-                  outline: 'none',
-                  background: 'white',
-                  cursor: 'pointer',
-                  fontFamily: DESIGN_TOKENS.typography.fontFamily,
-                  boxSizing: 'border-box'
-                }}
-                onFocus={(e) => e.currentTarget.style.borderColor = DESIGN_TOKENS.primary.base}
-                onBlur={(e) => e.currentTarget.style.borderColor = DESIGN_TOKENS.border.color.normal}
-              >
-                <option value="">Sin espacio específico</option>
-                {getWorkspacesForEnv(formData.environmentId).map(ws => (
-                  <option key={ws.id} value={ws.id}>{ws.name}</option>
-                ))}
-              </select>
+                options={[
+                  { value: '', label: 'Sin espacio específico' },
+                  ...getWorkspacesForEnv(formData.environmentId).map(ws => ({ value: ws.id, label: ws.name })),
+                ]}
+              />
             </div>
           )}
 

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import ConfirmModal from './ConfirmModal';
+import SelectDropdown from './shared/SelectDropdown';
 import {
   Plus, ChevronDown, ChevronRight, ChevronLeft, Edit, Trash2, Check, X,
   Home, Clipboard, FileText, AlertTriangle, Calendar, Target, CheckCircle2, AlertCircle, Users, TrendingUp, Map
@@ -1374,28 +1375,13 @@ const PhaseCard = ({ phase, phaseTasks = [], isOpen, isCreating, projectId, user
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                 {/* Responsable selector */}
                 {users.length > 0 && (
-                  <select
+                  <SelectDropdown
+                    size="sm"
+                    style={{ minWidth: '160px' }}
                     value={editedResponsableId}
                     onChange={(e) => setEditedResponsableId(e.target.value)}
-                    onClick={(e) => e.stopPropagation()}
-                    style={{
-                      border: `1px solid ${DESIGN_TOKENS.border.color.normal}`,
-                      borderRadius: '8px',
-                      padding: '7px 10px',
-                      fontSize: '13px',
-                      fontFamily: DESIGN_TOKENS.typography.fontFamily,
-                      color: DESIGN_TOKENS.neutral[700],
-                      background: 'white',
-                      cursor: 'pointer',
-                      outline: 'none',
-                      minWidth: '160px',
-                    }}
-                  >
-                    <option value="">— Sin responsable</option>
-                    {users.map(u => (
-                      <option key={u.id} value={u.id}>{u.name || u.email}</option>
-                    ))}
-                  </select>
+                    options={[{ value: '', label: '— Sin responsable' }, ...users.map(u => ({ value: u.id, label: u.name || u.email }))]}
+                  />
                 )}
                 <div style={{ display: 'flex', gap: '4px' }}>
                   <button
@@ -2132,17 +2118,11 @@ const RisksTab = ({ risks, onUpdate }) => {
               fontFamily: DESIGN_TOKENS.typography.fontFamily,
             }}
           />
-          <select
+          <SelectDropdown
             value={newRisk.level}
             onChange={e => setNewRisk(p => ({ ...p, level: e.target.value }))}
-            style={{
-              padding: '10px 12px', border: `1px solid ${DESIGN_TOKENS.border.color.normal}`,
-              borderRadius: '10px', fontSize: '13px', outline: 'none',
-              fontFamily: DESIGN_TOKENS.typography.fontFamily, background: 'white', cursor: 'pointer',
-            }}
-          >
-            {RISK_LEVELS.map(l => <option key={l.key} value={l.key}>{l.label}</option>)}
-          </select>
+            options={RISK_LEVELS.map(l => ({ value: l.key, label: l.label, dot: l.color }))}
+          />
           <button onClick={handleAdd} style={{
             padding: '10px 16px', background: DESIGN_TOKENS.primary.base, color: 'white',
             border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '13px', fontWeight: 600,
