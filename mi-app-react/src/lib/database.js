@@ -498,13 +498,11 @@ export const dbEnvironmentMembers = {
   add: async (environmentId, userId, role = 'member', invitedBy = null) => {
     const payload = { environment_id: environmentId, user_id: userId, role };
     if (invitedBy) payload.invited_by = invitedBy;
-    const { data, error } = await supabase
+    // Sin .select() para evitar la política SELECT recursiva (error 42P17)
+    const { error } = await supabase
       .from('environment_members')
-      .insert(payload)
-      .select()
-      .single();
+      .insert(payload);
     if (error) throw error;
-    return data;
   },
   getByEnvironment: async (environmentId) => {
     const { data, error } = await supabase
