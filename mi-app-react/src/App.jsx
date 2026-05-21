@@ -2706,46 +2706,6 @@ function TopBar({ user, onLogout, onMenuClick, searchQuery, onSearchChange, dark
             )}
           </button>
 
-          {/* ── DARK MODE SWITCH ── */}
-          <div
-            onClick={toggleDarkMode}
-            title={darkMode ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              cursor: 'pointer',
-              userSelect: 'none',
-              padding: '4px 2px',
-            }}
-          >
-            <Sun size={13} style={{ color: darkMode ? '#4a5068' : '#f59e0b', transition: 'color 0.3s', flexShrink: 0 }} />
-            <div style={{
-              width: '40px',
-              height: '22px',
-              borderRadius: '11px',
-              background: darkMode
-                ? 'linear-gradient(135deg, #4f7cff 0%, #3b63e0 100%)'
-                : 'rgba(15,23,42,0.12)',
-              position: 'relative',
-              transition: 'background 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
-              boxShadow: darkMode ? '0 0 12px rgba(79,124,255,0.35)' : 'inset 0 1px 3px rgba(0,0,0,0.1)',
-              flexShrink: 0,
-            }}>
-              <div style={{
-                position: 'absolute',
-                top: '3px',
-                left: darkMode ? '21px' : '3px',
-                width: '16px',
-                height: '16px',
-                borderRadius: '50%',
-                background: '#f0f2f8',
-                transition: 'left 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
-                boxShadow: '0 1px 4px rgba(0,0,0,0.3)',
-              }} />
-            </div>
-            <Moon size={13} style={{ color: darkMode ? '#4f7cff' : '#64748b', transition: 'color 0.3s', flexShrink: 0 }} />
-          </div>
 
           <button onClick={onLogout} style={iconButtonStyle} title="Cerrar sesión"
             onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.07)'; e.currentTarget.style.color = '#dc2626'; }}
@@ -4637,6 +4597,7 @@ function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTask
           onProjectUpdate={patchProjectInState || (() => {})}
           onTasksChange={isFiltered ? undefined : setLiveTasks}
           onTaskSaved={onTaskStateUpdate}
+          defaultTaskStatus={filterStatus !== 'all' ? filterStatus : 'in_progress'}
           onTaskDeleted={(taskId) => {
             setTasks(prev => prev.filter(t => t.id !== taskId));
             setLiveTasks(prev => prev ? prev.filter(t => t.id !== taskId) : null);
