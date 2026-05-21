@@ -4637,6 +4637,7 @@ function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTask
           onProjectUpdate={patchProjectInState || (() => {})}
           onTasksChange={isFiltered ? undefined : setLiveTasks}
           onTaskSaved={onTaskStateUpdate}
+          defaultTaskStatus={filterStatus !== 'all' ? filterStatus : 'in_progress'}
           onTaskDeleted={(taskId) => {
             setTasks(prev => prev.filter(t => t.id !== taskId));
             setLiveTasks(prev => prev ? prev.filter(t => t.id !== taskId) : null);

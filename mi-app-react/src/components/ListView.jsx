@@ -796,9 +796,10 @@ function ListView({
   onListDelete = () => {},
   onError = () => {},
   hideTitle = false,
-  globalExpediteCheck = null,   // { active, task, tasks } — viene de MainApp (todos los tasks del usuario)
+  globalExpediteCheck = null,
   onProjectUpdate = () => {},
   onTaskClick = null,
+  defaultTaskStatus = 'in_progress',
 }) {
   const { currentEnvironment, currentWorkspace, currentUser, canEditTaskDates, membershipMap, organizationId } = useApp();
   const [listName, setListName] = useState(initialListName);
@@ -1368,6 +1369,7 @@ function ListView({
                       users={users}
                       weeks={weeks}
                       defaultData={newTaskDefaultData}
+                      defaultTaskStatus={defaultTaskStatus}
                       projectError={newTaskProjectError}
                       onProjectChange={() => setNewTaskProjectError(false)}
                       onSave={handleSaveNewTask}
@@ -1387,6 +1389,7 @@ function ListView({
               projects={workspaceProjects}
               users={users}
               weeks={weeks}
+              defaultTaskStatus={defaultTaskStatus}
               projectError={newTaskProjectError}
               onProjectChange={() => setNewTaskProjectError(false)}
               onSave={handleSaveNewTask}
@@ -1512,11 +1515,11 @@ function ListView({
 // ============================================================================
 // NEW TASK ROW
 // ============================================================================
-const NewTaskRow = ({ projects = [], users = [], weeks = [], defaultData = {}, projectError = false, onProjectChange, onSave, onCancel, columns = [], visibleColumns = [], lockedProject = null }) => {
+const NewTaskRow = ({ projects = [], users = [], weeks = [], defaultData = {}, defaultTaskStatus = 'in_progress', projectError = false, onProjectChange, onSave, onCancel, columns = [], visibleColumns = [], lockedProject = null }) => {
   const [taskData, setTaskData] = useState({
     title: '',
     projectId: lockedProject?.id || defaultData.projectId || null,
-    status: defaultData.status || 'pending',
+    status: defaultData.status || defaultTaskStatus,
     priority: defaultData.priority || 'medium',
     startDate: '',
     endDate: '',
