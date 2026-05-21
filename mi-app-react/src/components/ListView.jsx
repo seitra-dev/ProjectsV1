@@ -58,10 +58,12 @@ const STATUS_OPTIONS = TASK_STATUS_DROPDOWN;
 // CUSTOM PILL SELECTS
 // ============================================================================
 
-// Hook compartido para cerrar al clickear fuera + posición fixed
+const DROPDOWN_MAX_HEIGHT = 220;
+
+// Hook compartido para cerrar al clickear fuera + posición fixed con flip vertical
 const useDropdown = () => {
   const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState({ top: 0, left: 0, width: 0 });
+  const [pos, setPos] = useState({ top: 0, left: 0, width: 0, openUp: false });
   const ref = useRef(null);
   const btnRef = useRef(null);
 
@@ -75,7 +77,10 @@ const useDropdown = () => {
     e.stopPropagation();
     if (!open && btnRef.current) {
       const rect = btnRef.current.getBoundingClientRect();
-      setPos({ top: rect.bottom + 4, left: rect.left, width: rect.width });
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const spaceAbove = rect.top;
+      const openUp = spaceBelow < DROPDOWN_MAX_HEIGHT && spaceAbove > spaceBelow;
+      setPos({ top: openUp ? rect.top : rect.bottom + 4, left: rect.left, width: rect.width, openUp });
     }
     setOpen(o => !o);
   };
@@ -112,6 +117,8 @@ const PillSelect = ({ value, options, onChange, placeholder = '—' }) => {
           background: 'white', border: '1px solid #e5e7eb', borderRadius: '8px',
           boxShadow: '0 4px 16px rgba(0,0,0,0.12)', padding: '4px',
           minWidth: Math.max(pos.width, 140),
+          maxHeight: `${DROPDOWN_MAX_HEIGHT}px`, overflowY: 'auto',
+          transform: pos.openUp ? 'translateY(-100%)' : undefined,
         }}>
           {Object.entries(options).map(([key, opt]) => (
             <button
@@ -164,7 +171,8 @@ const ArrayPillSelect = ({ value, items, idKey = 'id', labelKey = 'name', colorK
           position: 'fixed', top: pos.top, left: pos.left, zIndex: 9999,
           background: 'white', border: '1px solid #e5e7eb', borderRadius: '8px',
           boxShadow: '0 4px 16px rgba(0,0,0,0.12)', padding: '4px',
-          minWidth: Math.max(pos.width, 160), maxHeight: '200px', overflowY: 'auto',
+          minWidth: Math.max(pos.width, 160), maxHeight: `${DROPDOWN_MAX_HEIGHT}px`, overflowY: 'auto',
+          transform: pos.openUp ? 'translateY(-100%)' : undefined,
         }}>
           <button
             onClick={(e) => { e.stopPropagation(); onChange(null); setOpen(false); }}
@@ -233,6 +241,7 @@ const SortableTaskRow = ({
   isBlocked = false,
   isExpedite = false,
   customFieldDefinitions = [],
+  lockedProject = null,
 }) => {
   const {
     attributes,
@@ -362,7 +371,7 @@ const SortableTaskRow = ({
               );
             }
             case 'proyecto':
-              return isEditing ? (
+              return isEditing && !lockedProject?.id ? (
                 <ArrayPillSelect
                   value={editedTask.projectId}
                   items={projects}
@@ -643,14 +652,14 @@ const SortableTaskRow = ({
               gridTemplateColumns: dynGrid,
               gap: '8px',
               padding: '12px 32px',
-              background: isDragging ? DESIGN_TOKENS.primary.lightest : 'white',
-              borderTop: isEditing ? '1px solid #e2e8f0' : 'none',
-              borderRight: isEditing ? '1px solid #e2e8f0' : 'none',
-              borderBottom: isEditing ? '1px solid #e2e8f0' : `1px solid ${DESIGN_TOKENS.border.color.subtle}`,
+              background: isDragging ? DESIGN_TOKENS.primary.lightest : (isEditing ? '#f5f8ff' : 'white'),
+              borderTop: 'none',
+              borderRight: 'none',
+              borderBottom: `1px solid ${DESIGN_TOKENS.border.color.subtle}`,
               borderLeft: isEditing ? `3px solid ${DESIGN_TOKENS.primary.base}` : 'none',
-              borderRadius: isEditing ? '8px' : '0',
-              boxShadow: isEditing ? '0 2px 10px rgba(0,102,255,0.08)' : (isDragging ? DESIGN_TOKENS.shadows.lg : 'none'),
-              margin: isEditing ? '4px 0' : '0',
+              borderRadius: '0',
+              boxShadow: isDragging ? DESIGN_TOKENS.shadows.lg : 'none',
+              margin: '0',
               outline: isDragging ? `2px solid ${DESIGN_TOKENS.primary.base}` : 'none',
               alignItems: 'center',
               fontSize: '13px',
@@ -782,6 +791,7 @@ function ListView({
   users = [],
   onTasksChange = () => {},
   onTaskSaved = null,       // callback(savedTask) tras save exitoso en DB — para sincronizar estado global
+  onTaskDeleted = null,     // callback(taskId) tras delete exitoso — para sincronizar estado global
   onListNameChange = () => {},
   onListDelete = () => {},
   onError = () => {},
@@ -956,7 +966,9 @@ function ListView({
         organizationId: organizationId || currentEnvironment?.organization_id || currentWorkspace?.organization_id || null,
         progress: 0,
       });
-      onTasksChange([{ ...created, listId, endDate: created.dueDate }, ...tasks]);
+      const newTask = { ...created, listId, endDate: created.dueDate };
+      onTasksChange([newTask, ...tasks]);
+      onTaskSaved?.(newTask);
       setShowNewTaskRow(false);
     } catch (err) {
       console.error('[ListView] Error creando tarea:', err);
@@ -969,6 +981,7 @@ function ListView({
     try {
       await dbTasks.delete(taskId, currentUser);
       onTasksChange(tasks.filter(t => t.id !== taskId));
+      onTaskDeleted?.(taskId);
     } catch (err) {
       console.error('[ListView] Error eliminando tarea:', err);
       onError(err.message || 'Error al eliminar la tarea');
@@ -1177,11 +1190,12 @@ function ListView({
           overflowX: 'auto',
           overflowY: 'auto',
           width: '100%',
+          background: 'white',
           WebkitOverflowScrolling: 'touch',
           scrollbarWidth: 'thin',
           scrollbarColor: '#e5e7eb transparent',
         }}>
-          <div style={{ minWidth: minTableWidth, width: '100%' }}>
+          <div style={{ minWidth: minTableWidth, width: '100%', minHeight: '100%', background: 'white' }}>
           {/* TABLE HEADER — dynamic columns with drag-and-drop */}
           {(() => {
             const visibleCols = columns.filter(c => visibleColumns.includes(c.key));
@@ -1308,6 +1322,7 @@ function ListView({
                         isBlocked={hasActiveExpedite && task.status !== 'expedite'}
                         onTaskClick={onTaskClick}
                         customFieldDefinitions={currentProject?.customFieldDefinitions || []}
+                        lockedProject={currentProject?.id ? currentProject : null}
                         onUpdate={async (updated) => {
                           const assigneeIdValue = typeof updated.assigneeId === 'object' ? updated.assigneeId?.id : updated.assigneeId;
                           const dbPayload = {
@@ -1359,6 +1374,7 @@ function ListView({
                       onCancel={() => { setShowNewTaskRow(false); setNewTaskGroupKey(null); setNewTaskProjectError(false); }}
                       columns={columns}
                       visibleColumns={visibleColumns}
+                      lockedProject={currentProject?.id ? currentProject : null}
                     />
                   )}
                 </GenericGroup>
@@ -1377,6 +1393,7 @@ function ListView({
               onCancel={() => { setShowNewTaskRow(false); setNewTaskProjectError(false); }}
               columns={columns}
               visibleColumns={visibleColumns}
+              lockedProject={currentProject?.id ? currentProject : null}
             />
           )}
 
@@ -1495,10 +1512,10 @@ function ListView({
 // ============================================================================
 // NEW TASK ROW
 // ============================================================================
-const NewTaskRow = ({ projects = [], users = [], weeks = [], defaultData = {}, projectError = false, onProjectChange, onSave, onCancel, columns = [], visibleColumns = [] }) => {
+const NewTaskRow = ({ projects = [], users = [], weeks = [], defaultData = {}, projectError = false, onProjectChange, onSave, onCancel, columns = [], visibleColumns = [], lockedProject = null }) => {
   const [taskData, setTaskData] = useState({
     title: '',
-    projectId: defaultData.projectId || null,
+    projectId: lockedProject?.id || defaultData.projectId || null,
     status: defaultData.status || 'pending',
     priority: defaultData.priority || 'medium',
     startDate: '',
@@ -1540,14 +1557,14 @@ const NewTaskRow = ({ projects = [], users = [], weeks = [], defaultData = {}, p
       gridTemplateColumns: `24px ${columns.filter(c => visibleColumns.includes(c.key)).map(c => c.width).join(' ')} auto`,
       gap: '8px',
       padding: '10px 32px',
-      background: '#ffffff',
-      borderTop: '1px solid #e2e8f0',
-      borderRight: '1px solid #e2e8f0',
-      borderBottom: '1px solid #e2e8f0',
+      background: '#f5f8ff',
+      borderTop: 'none',
+      borderRight: 'none',
+      borderBottom: `1px solid ${DESIGN_TOKENS.border.color.subtle}`,
       borderLeft: `3px solid ${DESIGN_TOKENS.primary.base}`,
-      borderRadius: '8px',
-      boxShadow: '0 2px 10px rgba(0,102,255,0.08)',
-      margin: '4px 0',
+      borderRadius: '0',
+      boxShadow: 'none',
+      margin: '0',
       alignItems: 'center',
     }}>
       {/* Placeholder drag */}
@@ -1570,20 +1587,33 @@ const NewTaskRow = ({ projects = [], users = [], weeks = [], defaultData = {}, p
 
       {/* PROYECTO */}
       <div>
-        <ArrayPillSelect
-          value={taskData.projectId}
-          items={projects}
-          onChange={(id) => {
-            // Al cambiar proyecto, limpiar el asignado (puede no ser miembro del nuevo)
-            setTaskData({ ...taskData, projectId: id, assigneeId: null });
-            onProjectChange?.();
-          }}
-          placeholder="Proyecto *"
-        />
-        {projectError && (
-          <div style={{ fontSize: '11px', color: '#ef4444', marginTop: '2px' }}>
-            Selecciona un proyecto
+        {lockedProject?.id ? (
+          <div style={{
+            padding: '4px 10px',
+            background: lockedProject.color ? lockedProject.color + '20' : '#f1f5f9',
+            color: lockedProject.color || '#64748b',
+            borderRadius: '4px', fontSize: '12px', textAlign: 'center',
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+          }}>
+            {lockedProject.name}
           </div>
+        ) : (
+          <>
+            <ArrayPillSelect
+              value={taskData.projectId}
+              items={projects}
+              onChange={(id) => {
+                setTaskData({ ...taskData, projectId: id, assigneeId: null });
+                onProjectChange?.();
+              }}
+              placeholder="Proyecto *"
+            />
+            {projectError && (
+              <div style={{ fontSize: '11px', color: '#ef4444', marginTop: '2px' }}>
+                Selecciona un proyecto
+              </div>
+            )}
+          </>
         )}
       </div>
 

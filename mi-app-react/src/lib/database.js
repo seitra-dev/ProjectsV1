@@ -937,19 +937,8 @@ export const dbNotifications = {
 // AUDITORÍA - Configurar usuario actual para triggers
 // ============================================================================
 
-export const setAuditUser = async (userId, userEmail, userName) => {
-  try {
-    await supabase.rpc('set_audit_user', {
-      user_id: userId,
-      user_email: userEmail,
-      user_name: userName,
-    });
-  } catch (err) {
-    // No bloquear la operación si falla; los triggers de Supabase
-    // siguen funcionando con auth.uid() como fallback.
-    console.warn('[setAuditUser] No se pudo establecer contexto de auditoría:', err?.message);
-  }
-};
+// set_audit_user RPC no existe en el servidor — no-op para evitar 404s.
+export const setAuditUser = async (_userId, _userEmail, _userName) => {};
 
 // ============================================================================
 // HISTORIAL - Consultar audit_log

@@ -2145,7 +2145,10 @@ useEffect(() => {
               onTaskCreate={createTask}
               onTaskUpdate={updateTask}
               onTaskDelete={deleteTask}
-              onTaskStateUpdate={(saved) => setTasks(prev => prev.map(t => t.id === saved.id ? saved : t))}
+              onTaskStateUpdate={(saved) => setTasks(prev => {
+                const exists = prev.some(t => t.id === saved.id);
+                return exists ? prev.map(t => t.id === saved.id ? saved : t) : [saved, ...prev];
+              })}
               users={users}
               comments={comments}
               onCommentsChange={saveComments}
@@ -4080,7 +4083,17 @@ function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTask
   const [showNewTask, setShowNewTask] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
   const [expandedTasks, setExpandedTasks] = useState({});
-  const [filterStatus, setFilterStatus] = useState('all');
+  const lsStatusKey = `pv_filter_status_${project?.id || 'default'}`;
+  const [filterStatus, setFilterStatus] = useState(() => {
+    try {
+      const stored = localStorage.getItem(lsStatusKey);
+      return stored !== null ? stored : 'in_progress';
+    } catch { return 'in_progress'; }
+  });
+  const setFilterStatusPersisted = (val) => {
+    setFilterStatus(val);
+    try { localStorage.setItem(lsStatusKey, val); } catch {}
+  };
   const [filterAssignee, setFilterAssignee] = useState('all');
   const [headerCollapsed, setHeaderCollapsed] = useState(false);
   const [pendingDeleteTask, setPendingDeleteTask] = useState(null);
@@ -4556,7 +4569,7 @@ function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTask
         <div style={{ display: 'flex', gap: '0.75rem' }}>
           <FilterSelect
             value={filterStatus}
-            onChange={setFilterStatus}
+            onChange={setFilterStatusPersisted}
             placeholder="Todos los estados"
             options={Object.entries(TASK_STATUS_DROPDOWN).map(([key, { label, color }]) => ({ key, label, color }))}
           />
@@ -4624,6 +4637,10 @@ function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTask
           onProjectUpdate={patchProjectInState || (() => {})}
           onTasksChange={isFiltered ? undefined : setLiveTasks}
           onTaskSaved={onTaskStateUpdate}
+          onTaskDeleted={(taskId) => {
+            setTasks(prev => prev.filter(t => t.id !== taskId));
+            setLiveTasks(prev => prev ? prev.filter(t => t.id !== taskId) : null);
+          }}
           onListNameChange={() => {}}
           onListDelete={() => {}}
           onError={(msg) => addToast(msg, 'error')}
