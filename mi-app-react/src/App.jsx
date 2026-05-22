@@ -7035,6 +7035,326 @@ function KeyboardShortcutsModal({ onClose }) {
 // ============================================================================
 // FORMS AND MODALS
 // ============================================================================
+
+function ResponsableDropdown({ users, value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setSearch('');
+    const close = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [open]);
+
+  const filtered = useMemo(() => {
+    if (!search.trim()) return users;
+    const q = search.toLowerCase();
+    return users.filter(u => (u.name || u.email || '').toLowerCase().includes(q));
+  }, [users, search]);
+
+  const selected = users.find(u => String(u.id) === String(value)) || null;
+
+  const avatarBg = (u) => {
+    const colors = ['#6366f1','#0ea5e9','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899'];
+    const idx = (u.name || u.email || '').charCodeAt(0) % colors.length;
+    return colors[idx];
+  };
+
+  const Avatar = ({ user, size = 28 }) => {
+    const letter = (user.name || user.email || '?').charAt(0).toUpperCase();
+    return (
+      <div style={{
+        width: size, height: size, borderRadius: '50%',
+        background: avatarBg(user),
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        color: 'white', fontWeight: 700, fontSize: size * 0.42, flexShrink: 0,
+      }}>{letter}</div>
+    );
+  };
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        style={{
+          width: '100%', padding: '10px 14px',
+          border: `2px solid ${open ? '#6366f1' : DESIGN_TOKENS.neutral[200]}`,
+          borderRadius: '8px', background: 'white', cursor: 'pointer',
+          fontFamily: 'inherit', fontSize: '0.875rem',
+          display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left',
+          boxShadow: open ? '0 0 0 3px rgba(99,102,241,0.12)' : 'none',
+          transition: 'border-color 0.2s, box-shadow 0.2s',
+        }}
+      >
+        {selected ? (
+          <>
+            <Avatar user={selected} size={26} />
+            <span style={{ flex: 1, color: DESIGN_TOKENS.neutral[800], fontWeight: 500 }}>
+              {selected.name || selected.email}
+            </span>
+          </>
+        ) : (
+          <>
+            <div style={{ width: 26, height: 26, borderRadius: '50%', background: DESIGN_TOKENS.neutral[100], display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <span style={{ fontSize: 14, color: DESIGN_TOKENS.neutral[400] }}>—</span>
+            </div>
+            <span style={{ flex: 1, color: DESIGN_TOKENS.neutral[400] }}>Sin asignar</span>
+          </>
+        )}
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={DESIGN_TOKENS.neutral[400]} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+          style={{ transition: 'transform 0.2s', transform: open ? 'rotate(180deg)' : 'none', flexShrink: 0 }}>
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </button>
+
+      {open && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0, zIndex: 600,
+          background: 'white', border: `1px solid ${DESIGN_TOKENS.neutral[200]}`,
+          borderRadius: '12px', boxShadow: '0 8px 24px rgba(15,23,42,0.13)', overflow: 'hidden',
+        }}>
+          <div style={{ padding: '10px 12px', borderBottom: `1px solid ${DESIGN_TOKENS.neutral[100]}` }}>
+            <input
+              autoFocus
+              placeholder="Buscar persona…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              style={{
+                width: '100%', padding: '7px 12px', border: `1px solid ${DESIGN_TOKENS.neutral[200]}`,
+                borderRadius: '8px', fontSize: '0.8rem', outline: 'none',
+                fontFamily: 'inherit', color: DESIGN_TOKENS.neutral[700], boxSizing: 'border-box',
+              }}
+            />
+          </div>
+          <div style={{ maxHeight: 220, overflowY: 'auto' }}>
+            <button type="button" onClick={() => { onChange(null); setOpen(false); }}
+              style={{
+                width: '100%', padding: '9px 14px', border: 'none',
+                background: !value ? '#f5f3ff' : 'transparent', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: 10,
+                fontFamily: 'inherit', fontSize: '0.85rem',
+                color: !value ? '#6366f1' : DESIGN_TOKENS.neutral[500], textAlign: 'left',
+              }}
+              onMouseEnter={e => { if (value) e.currentTarget.style.background = DESIGN_TOKENS.neutral[50]; }}
+              onMouseLeave={e => { if (value) e.currentTarget.style.background = 'transparent'; }}
+            >
+              <div style={{ width: 30, height: 30, borderRadius: '50%', background: DESIGN_TOKENS.neutral[100], display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <span style={{ fontSize: 16, color: DESIGN_TOKENS.neutral[400] }}>—</span>
+              </div>
+              <span style={{ fontWeight: !value ? 600 : 400 }}>Sin asignar</span>
+              {!value && (
+                <svg style={{ marginLeft: 'auto', color: '#6366f1' }} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+              )}
+            </button>
+            {filtered.length === 0 ? (
+              <div style={{ padding: '16px', textAlign: 'center', color: DESIGN_TOKENS.neutral[400], fontSize: '0.8rem' }}>
+                Sin resultados
+              </div>
+            ) : filtered.map(u => {
+              const active = String(u.id) === String(value);
+              return (
+                <button key={u.id} type="button" onClick={() => { onChange(u.id); setOpen(false); }}
+                  style={{
+                    width: '100%', padding: '8px 14px', border: 'none',
+                    background: active ? '#eef2ff' : 'transparent', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    fontFamily: 'inherit', fontSize: '0.85rem',
+                    color: active ? '#4f46e5' : DESIGN_TOKENS.neutral[700], textAlign: 'left',
+                    transition: 'background 0.1s',
+                  }}
+                  onMouseEnter={e => { if (!active) e.currentTarget.style.background = DESIGN_TOKENS.neutral[50]; }}
+                  onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; }}
+                >
+                  <Avatar user={u} size={30} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: active ? 600 : 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {u.name || u.email}
+                    </div>
+                    {u.name && u.email && (
+                      <div style={{ fontSize: '0.75rem', color: DESIGN_TOKENS.neutral[400], overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {u.email}
+                      </div>
+                    )}
+                  </div>
+                  {active && (
+                    <svg style={{ flexShrink: 0 }} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MiembrosDropdown({ users, value = [], onChange }) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setSearch('');
+    const close = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [open]);
+
+  const filtered = useMemo(() => {
+    if (!search.trim()) return users;
+    const q = search.toLowerCase();
+    return users.filter(u => (u.name || u.email || '').toLowerCase().includes(q));
+  }, [users, search]);
+
+  const toggle = (id) => {
+    onChange(value.includes(id) ? value.filter(v => v !== id) : [...value, id]);
+  };
+
+  const avatarColors = ['#6366f1','#0ea5e9','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899'];
+  const avatarBg = (u) => avatarColors[(u.name || u.email || '').charCodeAt(0) % avatarColors.length];
+
+  const AvatarChip = ({ user, size = 26 }) => (
+    <div style={{
+      width: size, height: size, borderRadius: '50%', background: avatarBg(user),
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      color: 'white', fontWeight: 700, fontSize: size * 0.42, flexShrink: 0,
+    }}>
+      {(user.name || user.email || '?').charAt(0).toUpperCase()}
+    </div>
+  );
+
+  const selectedUsers = users.filter(u => value.includes(u.id));
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        style={{
+          width: '100%', minHeight: '44px', padding: '8px 14px',
+          border: `2px solid ${open ? '#6366f1' : DESIGN_TOKENS.neutral[200]}`,
+          borderRadius: '8px', background: 'white', cursor: 'pointer',
+          fontFamily: 'inherit', fontSize: '0.875rem',
+          display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left', flexWrap: 'wrap',
+          boxShadow: open ? '0 0 0 3px rgba(99,102,241,0.12)' : 'none',
+          transition: 'border-color 0.2s, box-shadow 0.2s',
+        }}
+      >
+        {selectedUsers.length === 0 ? (
+          <span style={{ flex: 1, color: DESIGN_TOKENS.neutral[400] }}>Sin miembros asignados</span>
+        ) : (
+          <>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, flex: 1 }}>
+              {selectedUsers.map(u => (
+                <div key={u.id} style={{
+                  display: 'flex', alignItems: 'center', gap: 5,
+                  background: '#eef2ff', borderRadius: '20px', padding: '3px 10px 3px 4px',
+                }}>
+                  <AvatarChip user={u} size={20} />
+                  <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#4f46e5' }}>
+                    {u.name || u.email}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={DESIGN_TOKENS.neutral[400]} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+          style={{ transition: 'transform 0.2s', transform: open ? 'rotate(180deg)' : 'none', flexShrink: 0, marginLeft: 'auto' }}>
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </button>
+
+      {open && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0, zIndex: 600,
+          background: 'white', border: `1px solid ${DESIGN_TOKENS.neutral[200]}`,
+          borderRadius: '12px', boxShadow: '0 8px 24px rgba(15,23,42,0.13)', overflow: 'hidden',
+        }}>
+          <div style={{ padding: '10px 12px', borderBottom: `1px solid ${DESIGN_TOKENS.neutral[100]}` }}>
+            <input
+              autoFocus
+              placeholder="Buscar persona…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              style={{
+                width: '100%', padding: '7px 12px', border: `1px solid ${DESIGN_TOKENS.neutral[200]}`,
+                borderRadius: '8px', fontSize: '0.8rem', outline: 'none',
+                fontFamily: 'inherit', color: DESIGN_TOKENS.neutral[700], boxSizing: 'border-box',
+              }}
+            />
+          </div>
+          <div style={{ maxHeight: 220, overflowY: 'auto' }}>
+            {filtered.length === 0 ? (
+              <div style={{ padding: '16px', textAlign: 'center', color: DESIGN_TOKENS.neutral[400], fontSize: '0.8rem' }}>
+                Sin resultados
+              </div>
+            ) : filtered.map(u => {
+              const active = value.includes(u.id);
+              return (
+                <button key={u.id} type="button" onClick={() => toggle(u.id)}
+                  style={{
+                    width: '100%', padding: '8px 14px', border: 'none',
+                    background: active ? '#eef2ff' : 'transparent', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    fontFamily: 'inherit', fontSize: '0.85rem',
+                    color: active ? '#4f46e5' : DESIGN_TOKENS.neutral[700], textAlign: 'left',
+                    transition: 'background 0.1s',
+                  }}
+                  onMouseEnter={e => { if (!active) e.currentTarget.style.background = DESIGN_TOKENS.neutral[50]; }}
+                  onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; }}
+                >
+                  <AvatarChip user={u} size={30} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: active ? 600 : 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {u.name || u.email}
+                    </div>
+                    {u.name && u.email && (
+                      <div style={{ fontSize: '0.75rem', color: DESIGN_TOKENS.neutral[400], overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {u.email}
+                      </div>
+                    )}
+                  </div>
+                  <div style={{
+                    width: 18, height: 18, borderRadius: '4px', flexShrink: 0,
+                    border: `2px solid ${active ? '#6366f1' : DESIGN_TOKENS.neutral[300]}`,
+                    background: active ? '#6366f1' : 'white',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    transition: 'all 0.15s',
+                  }}>
+                    {active && (
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+          {value.length > 0 && (
+            <div style={{ padding: '8px 14px', borderTop: `1px solid ${DESIGN_TOKENS.neutral[100]}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.78rem', color: DESIGN_TOKENS.neutral[500] }}>
+                {value.length} seleccionado{value.length !== 1 ? 's' : ''}
+              </span>
+              <button type="button" onClick={() => onChange([])}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.78rem', color: '#ef4444', fontFamily: 'inherit', padding: 0 }}>
+                Limpiar
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ProjectFormModal({ users = [], onSave, onClose, currentUser }) {
   const safeUsers = Array.isArray(users) ? users : [];
   const displayUsers = safeUsers.length > 0 ? safeUsers : (currentUser ? [currentUser] : []);
@@ -7064,6 +7384,10 @@ function ProjectFormModal({ users = [], onSave, onClose, currentUser }) {
       addToast('El nombre es requerido', 'error');
       return false;
     }
+    if (!formData.leaderId) {
+      addToast('El responsable es requerido', 'error');
+      return false;
+    }
     if (!formData.endDate) {
       addToast('La fecha de fin es requerida', 'error');
       return false;
@@ -7080,8 +7404,11 @@ function ProjectFormModal({ users = [], onSave, onClose, currentUser }) {
     if (e?.stopPropagation) e.stopPropagation();
     console.log('[ProjectForm] handleSubmit ejecutado, formData:', formData);
     if (validateForm()) {
-      console.log('[ProjectForm] onSave llamado con:', formData);
-      onSave(formData);
+      const finalMembers = formData.members.length > 0
+        ? formData.members
+        : (formData.leaderId ? [formData.leaderId] : []);
+      console.log('[ProjectForm] onSave llamado con:', { ...formData, members: finalMembers });
+      onSave({ ...formData, members: finalMembers });
     }
   };
 
@@ -7098,6 +7425,24 @@ function ProjectFormModal({ users = [], onSave, onClose, currentUser }) {
             style={inputStyle}
           />
         </FormField>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+          <FormField label="Responsable" required>
+            <ResponsableDropdown
+              users={displayUsers}
+              value={formData.leaderId}
+              onChange={(id) => setFormData(p => ({ ...p, leaderId: id }))}
+            />
+          </FormField>
+
+          <FormField label="Miembros del equipo">
+            <MiembrosDropdown
+              users={displayUsers}
+              value={formData.members}
+              onChange={(members) => setFormData(p => ({ ...p, members }))}
+            />
+          </FormField>
+        </div>
 
         <FormField label="Descripción">
           <textarea
@@ -7156,45 +7501,6 @@ function ProjectFormModal({ users = [], onSave, onClose, currentUser }) {
                 onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
               />
             ))}
-          </div>
-        </FormField>
-
-        <FormField label="Miembros del equipo">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            {displayUsers.length === 0 ? (
-              <p style={{ margin: 0, fontSize: '0.85rem', color: DESIGN_TOKENS.neutral[400], fontStyle: 'italic' }}>
-                No hay usuarios disponibles
-              </p>
-            ) : (
-              displayUsers.map(u => (
-                <label key={u.id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.625rem', cursor: 'pointer', borderRadius: '6px', transition: 'background 0.2s' }}
-                  onMouseEnter={(e) => e.currentTarget.style.background = DESIGN_TOKENS.neutral[50]}
-                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
-                  <input
-                    type="checkbox"
-                    checked={formData.members.includes(u.id)}
-                    onChange={() => setFormData(p => ({
-                      ...p,
-                      members: p.members.includes(u.id)
-                        ? p.members.filter(id => id !== u.id)
-                        : [...p.members, u.id]
-                    }))}
-                    style={checkboxStyle}
-                  />
-                  <div style={{
-                    width: '28px', height: '28px', borderRadius: '8px',
-                    background: 'linear-gradient(135deg, #15066c 0%, #0455c7 100%)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    color: 'white', fontWeight: 700, fontSize: '12px', flexShrink: 0
-                  }}>
-                    {(u.name || u.email || '?').charAt(0).toUpperCase()}
-                  </div>
-                  <span style={{ fontSize: '0.875rem', fontWeight: 500, color: DESIGN_TOKENS.neutral[800] }}>
-                    {u.name || u.email}
-                  </span>
-                </label>
-              ))
-            )}
           </div>
         </FormField>
 

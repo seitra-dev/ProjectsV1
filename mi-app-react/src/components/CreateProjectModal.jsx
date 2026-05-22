@@ -290,12 +290,11 @@ export default function CreateProjectModal({
     return () => document.removeEventListener('keydown', handler);
   }, [open, defaultEnvironmentId, saving, onClose]);
 
-  // Cargar miembros del equipo: mismo patrón que EnvironmentMembersModal
-  // 1) Traer registros de environment_members (user_id, role)
-  // 2) Cruzar con el array `users` ya cargado (el mismo que usa toda la app)
+  // Cuando hay equipo seleccionado, filtrar solo sus miembros; si no, mostrar todos los usuarios
   const envId = form.environmentId;
   useEffect(() => {
-    if (!open || !envId) { setTeamUsers([]); setLoadingMembers(false); return; }
+    if (!open) { setTeamUsers([]); setLoadingMembers(false); return; }
+    if (!envId) { setTeamUsers(users); setLoadingMembers(false); return; }
     let cancelled = false;
     setLoadingMembers(true);
     setTeamUsers([]);
@@ -309,7 +308,7 @@ export default function CreateProjectModal({
       .catch(err => {
         if (cancelled) return;
         console.warn('[CreateProjectModal] Error cargando miembros:', err.message);
-        setTeamUsers([]);
+        setTeamUsers(users);
       })
       .finally(() => { if (!cancelled) setLoadingMembers(false); });
     return () => { cancelled = true; };
@@ -405,11 +404,13 @@ export default function CreateProjectModal({
           <div style={S.group}>
             <label style={S.label}>
               Responsable
-              {form.environmentId && (
-                <span style={{ fontWeight: 400, color: '#94a3b8', marginLeft: 6, fontSize: 12 }}>
-                  {loadingMembers ? '(cargando…)' : `(${teamUsers.length} miembros del equipo)`}
-                </span>
-              )}
+              <span style={{ fontWeight: 400, color: '#94a3b8', marginLeft: 6, fontSize: 12 }}>
+                {loadingMembers
+                  ? '(cargando…)'
+                  : form.environmentId
+                    ? `(${teamUsers.length} miembros del equipo)`
+                    : `(${teamUsers.length} usuarios)`}
+              </span>
             </label>
             <PersonDropdown
               users={teamUsers}
