@@ -789,6 +789,7 @@ function ListView({
   tasks = [],
   projects = [],
   users = [],
+  currentProjectId = null,  // ID del proyecto activo (para fijar el proyecto en la fila de nueva tarea)
   onTasksChange = () => {},
   onTaskSaved = null,       // callback(savedTask) tras save exitoso en DB — para sincronizar estado global
   onTaskDeleted = null,     // callback(taskId) tras delete exitoso — para sincronizar estado global
@@ -894,7 +895,9 @@ function ListView({
     : projects;
 
   const listTasks = listId != null ? tasks.filter(t => t.listId === listId) : tasks;
-  const currentProject = workspaceProjects.length === 1 ? workspaceProjects[0] : workspaceProjects[0] || {};
+  const currentProject = currentProjectId
+    ? (workspaceProjects.find(p => p.id === currentProjectId) || {})
+    : (workspaceProjects.length === 1 ? workspaceProjects[0] : null) || {};
 
   // Sincronizar columnas de campos personalizados desde el proyecto (persisten en Supabase)
   // Se usa una clave estable para evitar re-renders innecesarios
