@@ -4119,9 +4119,13 @@ function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTask
   // Sync liveTasks with global tasks when they change externally (e.g. modal updates)
   useEffect(() => {
     if (liveTasks === null) return;
-    setLiveTasks(prev =>
-      prev.map(lt => tasks.find(t => t.id === lt.id) ?? lt)
-    );
+    setLiveTasks(prev => {
+      const prevIds = new Set(prev.map(t => t.id));
+      const updated = prev.map(lt => tasks.find(t => t.id === lt.id) ?? lt);
+      // Also incorporate tasks added to global state (e.g. via onTaskSaved) that aren't in liveTasks yet
+      const added = tasks.filter(t => t.projectId === project.id && !prevIds.has(t.id));
+      return added.length > 0 ? [...added, ...updated] : updated;
+    });
   }, [tasks]);
 
   const [showMembersModal, setShowMembersModal] = useState(false);
