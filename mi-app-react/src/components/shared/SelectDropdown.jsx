@@ -24,7 +24,9 @@ export default function SelectDropdown({
   disabled = false,
 }) {
   const [open, setOpen] = useState(false);
+  const [panelPos, setPanelPos] = useState({ top: 0, left: 0, width: 0 });
   const ref = useRef(null);
+  const btnRef = useRef(null);
   const panelRef = useRef(null);
   const isSmall = size === 'sm';
 
@@ -32,7 +34,7 @@ export default function SelectDropdown({
   useEffect(() => {
     if (!open) return;
     const handler = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+      if (ref.current && !ref.current.contains(e.target) && panelRef.current && !panelRef.current.contains(e.target)) setOpen(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -44,6 +46,15 @@ export default function SelectDropdown({
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
   }, []);
+
+  const handleToggle = () => {
+    if (disabled) return;
+    if (!open && btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect();
+      setPanelPos({ top: rect.bottom + 6, left: rect.left, width: rect.width });
+    }
+    setOpen(v => !v);
+  };
 
   const selected = options.find(o => String(o.value) === String(value));
 
@@ -65,9 +76,10 @@ export default function SelectDropdown({
     >
       {/* ── Trigger ── */}
       <button
+        ref={btnRef}
         type="button"
         disabled={disabled}
-        onClick={() => !disabled && setOpen(v => !v)}
+        onClick={handleToggle}
         onMouseEnter={e => { if (!disabled && !open) e.currentTarget.style.borderColor = '#a5b4fc'; }}
         onMouseLeave={e => { if (!open) e.currentTarget.style.borderColor = '#e2e8f0'; }}
         style={{
@@ -128,11 +140,11 @@ export default function SelectDropdown({
         <div
           ref={panelRef}
           style={{
-            position: 'absolute',
-            top: 'calc(100% + 6px)',
-            left: 0,
-            minWidth: '100%',
-            zIndex: 600,
+            position: 'fixed',
+            top: panelPos.top,
+            left: panelPos.left,
+            minWidth: Math.max(panelPos.width, 160),
+            zIndex: 9999,
             background: 'white',
             borderRadius: '14px',
             border: '1px solid #e8ecf0',

@@ -4593,6 +4593,7 @@ function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTask
           tasks={filteredEffectiveTasks}
           projects={projects}
           users={users}
+          currentProjectId={project.id}
           customFieldsProjectId={project.id}
           onProjectUpdate={patchProjectInState || (() => {})}
           onTasksChange={isFiltered ? undefined : setLiveTasks}
