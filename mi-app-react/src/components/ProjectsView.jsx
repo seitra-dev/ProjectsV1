@@ -484,10 +484,19 @@ export default function ProjectsView({ selectedEnvironment, onRefresh: externalR
       const rootTasks    = projectTasks.filter(t => !t.parent_id);
 
       const phases = (project.roadmap?.phases || []).map(phase => {
-        const phaseTasks  = rootTasks.filter(t => t.roadmap_phase_id === phase.id);
+        const phaseTasks  = rootTasks.filter(t => String(t.roadmap_phase_id) === String(phase.id));
         const completedPh = phaseTasks.filter(t => t.status === 'completed').length;
+
+        // Derivar fechas desde las tareas: mínimo start_date y máximo end_date
+        const startDates = phaseTasks.map(t => t.start_date).filter(Boolean).sort();
+        const endDates   = phaseTasks.map(t => t.end_date).filter(Boolean).sort();
+        const derivedStart = startDates[0] || null;
+        const derivedEnd   = endDates[endDates.length - 1] || null;
+
         return {
           ...phase,
+          startDate: derivedStart,
+          endDate:   derivedEnd,
           _tasks: phaseTasks.map(task => ({
             ...task,
             _subtasks: projectTasks.filter(s => s.parent_id === task.id),
