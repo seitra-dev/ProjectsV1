@@ -308,6 +308,7 @@ function Sidebar({ isOpen, activeView, onViewChange, projects, onProjectSelect, 
           {(!collapsed || isMobile) && (
             <div style={{ marginBottom: '20px', marginTop: '10px' }}>
               <WorkspaceList
+                activeView={activeView}
                 onCreateWorkspace={() => setShowCreateWorkspace(true)}
                 onSelectWorkspace={handleSelectWorkspace}
                 onOpenChat={() => onViewChange('chat', 'Chat del Equipo')}

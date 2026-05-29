@@ -558,7 +558,7 @@ const SortableWorkspaceItem = ({
 // ============================================================================
 // WORKSPACE LIST WITH DRAG AND DROP
 // ============================================================================
-const WorkspaceList = ({ onCreateWorkspace, onSelectWorkspace, onOpenChat, onOpenBacklog, onCreateList, onSelectList, onOpenMySpaceToDo }) => {
+const WorkspaceList = ({ activeView, onCreateWorkspace, onSelectWorkspace, onOpenChat, onOpenBacklog, onCreateList, onSelectList, onOpenMySpaceToDo }) => {
   const { currentEnvironment, currentWorkspace, deleteWorkspace, updateWorkspace, lists, deleteList, updateList } = useApp();
   const workspaces = currentEnvironment?.workspaces || [];
   const [expandedWorkspaces, setExpandedWorkspaces] = useState({});
@@ -1135,6 +1135,57 @@ const handleAddOption = (type) => {
             document.body
           )}
         </div>
+      </div>
+
+      {/* MI ESPACIO TO DO — ítem fijo siempre visible */}
+      <div style={{ margin: '4px 4px 8px' }}>
+        <button
+          onClick={() => onOpenMySpaceToDo && onOpenMySpaceToDo()}
+          style={{
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '7px 10px',
+            borderRadius: '8px',
+            border: 'none',
+            borderLeft: `3px solid ${activeView === 'my-space-todo' ? '#B45309' : 'transparent'}`,
+            background: activeView === 'my-space-todo' ? 'rgba(180,83,9,0.10)' : 'transparent',
+            cursor: 'pointer',
+            transition: 'all 0.15s',
+            textAlign: 'left',
+            fontFamily: 'inherit',
+          }}
+          onMouseEnter={(e) => {
+            if (activeView !== 'my-space-todo') {
+              e.currentTarget.style.background = 'rgba(180,83,9,0.06)';
+              e.currentTarget.style.borderLeftColor = 'rgba(180,83,9,0.4)';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (activeView !== 'my-space-todo') {
+              e.currentTarget.style.background = 'transparent';
+              e.currentTarget.style.borderLeftColor = 'transparent';
+            }
+          }}
+        >
+          <ClipboardList
+            size={14}
+            color={activeView === 'my-space-todo' ? '#B45309' : DESIGN_TOKENS.neutral[500]}
+            style={{ flexShrink: 0 }}
+          />
+          <span style={{
+            fontSize: '13px',
+            fontWeight: activeView === 'my-space-todo' ? 600 : 500,
+            color: activeView === 'my-space-todo' ? '#B45309' : 'var(--text-primary, #0f172a)',
+            flex: 1,
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}>
+            Mi espacio to do
+          </span>
+        </button>
       </div>
 
       {/* WORKSPACE LIST WITH DND */}

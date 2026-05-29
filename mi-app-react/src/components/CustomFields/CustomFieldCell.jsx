@@ -30,10 +30,19 @@ function CustomFieldCell({
     return () => document.removeEventListener('mousedown', handler);
   }, [dropdownOpen]);
 
+  const DROPDOWN_MAX_H = 240;
   const openDropdown = () => {
     if (triggerRef.current) {
       const rect = triggerRef.current.getBoundingClientRect();
-      setDropPos({ top: rect.bottom + 4, left: rect.left, width: Math.max(rect.width, 160) });
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const spaceAbove = rect.top;
+      const openUp = spaceBelow < DROPDOWN_MAX_H && spaceAbove > spaceBelow;
+      setDropPos({
+        top: openUp ? rect.top : rect.bottom + 4,
+        left: rect.left,
+        width: Math.max(rect.width, 160),
+        openUp,
+      });
     }
     setDropdownOpen(true);
   };
@@ -107,6 +116,7 @@ function CustomFieldCell({
             boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
             zIndex: 9999,
             overflow: 'hidden',
+            transform: dropPos.openUp ? 'translateY(-100%)' : undefined,
           }}>
             <button
               onClick={() => { onChange(null); onSave?.(null); setDropdownOpen(false); }}
@@ -202,8 +212,9 @@ function CustomFieldCell({
               borderRadius: '8px',
               boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
               zIndex: 9999,
-              maxHeight: '220px',
+              maxHeight: `${DROPDOWN_MAX_H}px`,
               overflowY: 'auto',
+              transform: dropPos.openUp ? 'translateY(-100%)' : undefined,
             }}
           >
             <button
@@ -314,8 +325,9 @@ function CustomFieldCell({
               borderRadius: '8px',
               boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
               zIndex: 9999,
-              maxHeight: '240px',
+              maxHeight: `${DROPDOWN_MAX_H}px`,
               overflowY: 'auto',
+              transform: dropPos.openUp ? 'translateY(-100%)' : undefined,
             }}
           >
             {roadmapPhases.map((phase) => (
