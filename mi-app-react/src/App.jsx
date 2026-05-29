@@ -2149,6 +2149,7 @@ useEffect(() => {
                 const exists = prev.some(t => t.id === saved.id);
                 return exists ? prev.map(t => t.id === saved.id ? saved : t) : [saved, ...prev];
               })}
+              onTaskRemovedFromState={(id) => setTasks(prev => prev.filter(t => t.id !== id))}
               users={users}
               comments={comments}
               onCommentsChange={saveComments}
@@ -4037,7 +4038,7 @@ function FilterSelect({ value, onChange, options = [], placeholder, avatarMode =
 // ============================================================================
 // PROJECT DETAIL VIEW
 // ============================================================================
-function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTaskUpdate, onTaskDelete, onTaskStateUpdate, users, comments, onCommentsChange, tags, onTaskClick, onProjectUpdate, patchProjectInState, globalExpediteCheck, onEnsureUserInPool }) {
+function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTaskUpdate, onTaskDelete, onTaskStateUpdate, onTaskRemovedFromState, users, comments, onCommentsChange, tags, onTaskClick, onProjectUpdate, patchProjectInState, globalExpediteCheck, onEnsureUserInPool }) {
   const { currentEnvironment } = useApp();
   const [viewMode, setViewMode] = useState('list');
   const [showNewTask, setShowNewTask] = useState(false);
@@ -4082,7 +4083,10 @@ function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTask
   const [editForm, setEditForm] = useState({});
   const [savingProject, setSavingProject] = useState(false);
 
-  const AREA_OPTIONS = ['TI', 'Crédito', 'Cartera', 'Riesgo', 'Datos', 'Transversal', 'Interno'];
+  const AREA_OPTIONS = [
+    'Automotores', 'Cartera', 'Crédito', 'Comercial Alkosto', 'Comercial Alkomprar',
+    'Compras', 'Mercadeo', 'Talento Humano', 'Caja', 'Logística', 'Interno',
+  ];
 
   const startEditProject = () => {
     setEditForm({
@@ -4604,7 +4608,7 @@ function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTask
           onTaskSaved={onTaskStateUpdate}
           defaultTaskStatus={filterStatus !== 'all' ? filterStatus : 'in_progress'}
           onTaskDeleted={(taskId) => {
-            setTasks(prev => prev.filter(t => t.id !== taskId));
+            onTaskRemovedFromState?.(taskId);
             setLiveTasks(prev => prev ? prev.filter(t => t.id !== taskId) : null);
           }}
           onListNameChange={() => {}}
@@ -7364,6 +7368,11 @@ function ProjectFormModal({ users = [], onSave, onClose, currentUser }) {
   const safeUsers = Array.isArray(users) ? users : [];
   const displayUsers = safeUsers.length > 0 ? safeUsers : (currentUser ? [currentUser] : []);
   const defaultEndDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const PROJ_AREA_OPTIONS = [
+    'Automotores', 'Cartera', 'Crédito', 'Comercial Alkosto', 'Comercial Alkomprar',
+    'Compras', 'Mercadeo', 'Talento Humano', 'Caja', 'Logística', 'Interno',
+  ];
+
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -7372,6 +7381,7 @@ function ProjectFormModal({ users = [], onSave, onClose, currentUser }) {
     endDate: defaultEndDate,
     leaderId: safeUsers[0]?.id || null,
     members: safeUsers[0]?.id ? [safeUsers[0].id] : [],
+    area: '',
     tags: [],
     roadmap: {
       phases: [],
@@ -7413,7 +7423,7 @@ function ProjectFormModal({ users = [], onSave, onClose, currentUser }) {
         ? formData.members
         : (formData.leaderId ? [formData.leaderId] : []);
       console.log('[ProjectForm] onSave llamado con:', { ...formData, members: finalMembers });
-      onSave({ ...formData, members: finalMembers });
+      onSave({ ...formData, members: finalMembers, tags: formData.area ? [formData.area] : [] });
     }
   };
 
@@ -7478,6 +7488,18 @@ function ProjectFormModal({ users = [], onSave, onClose, currentUser }) {
             />
           </FormField>
         </div>
+
+        <FormField label="Área">
+          <SelectDropdown
+            value={formData.area}
+            onChange={(e) => setFormData(p => ({ ...p, area: e.target.value }))}
+            style={{ width: '100%' }}
+            options={[
+              { value: '', label: '— Seleccionar área' },
+              ...PROJ_AREA_OPTIONS.map(a => ({ value: a, label: a })),
+            ]}
+          />
+        </FormField>
 
         <FormField label="Color del proyecto">
           <div style={{ display: 'flex', gap: '0.75rem' }}>
