@@ -117,6 +117,12 @@ const weeksInPeriod = (s, e) => {
   return Math.max(1, Math.ceil(ms / (7 * 24 * 3600 * 1000)));
 };
 
+// Semanas ISO únicas en las que hay al menos un cierre en trend_data
+const activeWeeksCount = (trendData) => {
+  const seen = new Set((trendData || []).map(({ t }) => getIsoWeekKey(t)));
+  return Math.max(1, seen.size);
+};
+
 // Agrega N filas en una sola fila resumen
 const agg = (rows, weeks) => {
   const total = rows.reduce((s, r) => s + r.total_closed, 0);
@@ -314,11 +320,12 @@ const SkeletonRow = ({ bg = 'white', pl = 0 }) => (
 
 // ─── Nivel 3: Colaborador ─────────────────────────────────────────────────────
 
-const PersonRow = ({ row, weeks, capacities, startDate, endDate }) => {
+const PersonRow = ({ row, capacities, startDate, endDate }) => {
   const trend      = useMemo(() => aggregateTrend(row.trend_data, startDate, endDate), [row.trend_data, startDate, endDate]);
   const isUnassign = !row.assignee_id;
   const capTarget  = isUnassign ? null : (capacities[String(row.assignee_id)] || null);
-  const capReal    = Math.round((row.total_closed / weeks) * 10) / 10;
+  const activeWks  = useMemo(() => activeWeeksCount(row.trend_data), [row.trend_data]);
+  const capReal    = Math.round((row.total_closed / activeWks) * 10) / 10;
   const color      = personColor(row.assignee_id);
 
   return (
@@ -392,7 +399,7 @@ const EnvironmentSection = ({ env, weeks, capacities, startDate, endDate }) => {
         </TD>
       </tr>
       {expanded && env.rows.map(r => (
-        <PersonRow key={r.assignee_id} row={r} weeks={weeks} capacities={capacities} startDate={startDate} endDate={endDate} />
+        <PersonRow key={r.assignee_id} row={r} capacities={capacities} startDate={startDate} endDate={endDate} />
       ))}
     </>
   );
