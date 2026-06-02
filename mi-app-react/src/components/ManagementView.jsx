@@ -1033,13 +1033,9 @@ export default function ManagementView() {
   useEffect(() => { setWeeklyTasks([]); }, [weekOffset]);
 
   // ── Procesamiento de tareas semanales ─────────────────────────────────────
-  // Semana actual: solo tareas con estado "in_progress" que solapan con esta semana.
-  // Semanas pasadas/futuras: todas las no completadas que solapan con esa semana.
-  const activeTasks = useMemo(() => {
-    const tasks = weeklyTasks || [];
-    if (isCurrentWeek) return tasks.filter(t => t.status === 'in_progress');
-    return tasks.filter(t => !['completed', 'done', 'cancelled'].includes(t.status));
-  }, [weeklyTasks, isCurrentWeek]);
+  // Sin filtro por estado: se muestran todas las tareas que solapan con la semana
+  // seleccionada sin importar si están completadas, pendientes, etc.
+  const activeTasks = useMemo(() => weeklyTasks || [], [weeklyTasks]);
 
   // Agrupar por persona + calcular saturación basada en capacidad
   const weeklyByPerson = useMemo(() => {

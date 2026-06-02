@@ -242,11 +242,13 @@ export const getWeeklyTasks = async (environmentId = null, weekStart = null, env
     const mondayStr = toLocal(monday);
     const sundayStr = toLocal(sunday);
 
+    // Condición de solapamiento: la tarea cubre algún día de la semana si
+    // termina después del lunes Y (no tiene inicio O empieza antes del domingo).
     let query = supabase
       .from('tasks')
       .select('*, assignee:users(id, name, email, avatar), project:projects(id, name, workspace_id)')
       .gte('end_date', mondayStr)
-      .lte('end_date', sundayStr)
+      .or(`start_date.is.null,start_date.lte.${sundayStr}`)
       .eq('is_deleted', false);
 
     // Determinar el conjunto de environment IDs a filtrar
