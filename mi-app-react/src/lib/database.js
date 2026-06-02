@@ -167,7 +167,10 @@ export const hasExpediteActive = (tasks = [], userId = null, projectId = null) =
       'completed',
       'blocked',
       'todo',
-      'done'
+      'waiting',
+      'backlog',
+      'cancelled',
+      'archived'
     ));
 
   -- 2. Trigger: bloquear cambio a 'in_progress' o 'completed'
