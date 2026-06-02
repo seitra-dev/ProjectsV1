@@ -200,7 +200,7 @@ function CapacitiesModal({ persons, capacities, onSave, onClose }) {
 const PersonCard = ({ person }) => {
   const [expanded, setExpanded] = useState(person.overloaded);
   const total    = person.tasks.length;
-  const active   = person.inProgress + person.pending;
+  const active   = person.inProgress;
   const progress = total > 0 ? Math.round((person.completed / total) * 100) : 0;
   const cap      = person.capacity;
   const sc       = satColor(active, cap);
@@ -343,7 +343,7 @@ const PersonCard = ({ person }) => {
 // ============================================================================
 const PersonRow = ({ person, index, capacities }) => {
   const total    = person.tasks.length;
-  const active   = person.inProgress + person.pending;
+  const active   = person.inProgress;
   const progress = total > 0 ? Math.round((person.completed / total) * 100) : 0;
   const cap      = capacities[person.id];
   const sc       = satColor(active, cap);
@@ -1057,9 +1057,8 @@ export default function ManagementView() {
       else if (task.status === 'in_progress') map[uid].inProgress++;
       else map[uid].pending++;
 
-      const active = map[uid].inProgress + map[uid].pending;
-      const cap    = map[uid].capacity;
-      map[uid].overloaded = cap ? (active >= cap) : (active > 10);
+      const cap = map[uid].capacity;
+      map[uid].overloaded = cap ? (map[uid].inProgress >= cap) : (map[uid].inProgress > 10);
     });
     return Object.values(map).sort((a, b) => b.tasks.length - a.tasks.length);
   }, [activeTasks, capacities]);
