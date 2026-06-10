@@ -1509,16 +1509,12 @@ useEffect(() => {
       ? dbProjects.getByWorkspace(currentWorkspace.id)
       : currentEnvironment?.id
         ? dbProjects.getByEnvironment(currentEnvironment.id)
-        : dbProjects.getAll();
+        : dbProjects.getAll(appOrgId);
 
-    // Usuarios: siempre cargamos TODOS los del sistema para poder resolver
-    // nombres de asignados independientemente del equipo activo.
-    // El filtro por proyecto/equipo se aplica solo en el dropdown de asignación
-    // (ya lo hace projectMemberUsers en ListView/SortableTaskRow).
     const [projectsResult, tasksResult, usersResult] = await Promise.allSettled([
       projectsPromise,
-      dbTasks.getAll(),
-      dbUsers.getAll(),
+      dbTasks.getAll(appOrgId),
+      appOrgId ? dbUsers.getByOrganization(appOrgId) : dbUsers.getAll(),
     ]);
 
     if (projectsResult.status === 'fulfilled') {

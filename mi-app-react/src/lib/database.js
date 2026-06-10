@@ -395,6 +395,15 @@ export const dbUsers = {
     if (error) throw error;
     return (data || []).map(mapUser);
   },
+  getByOrganization: async (organizationId) => {
+    if (!organizationId) return dbUsers.getAll();
+    const { data, error } = await supabase
+      .from('organization_members')
+      .select('user:users(*)')
+      .eq('organization_id', organizationId);
+    if (error) throw error;
+    return (data || []).filter(m => m.user).map(m => mapUser(m.user));
+  },
   // Devuelve solo los usuarios miembros de un entorno específico, con su rol
   getByEnvironment: async (environmentId) => {
     if (!environmentId) return [];
@@ -594,11 +603,13 @@ export const dbWorkspaces = {
 // ============================================================================
 
 export const dbProjects = {
-  getAll: async () => {
-    const { data, error } = await supabase
+  getAll: async (organizationId) => {
+    let query = supabase
       .from('projects')
       .select('*, workspace:workspaces(environment_id)')
       .order('created_at', { ascending: false });
+    if (organizationId) query = query.eq('organization_id', organizationId);
+    const { data, error } = await query;
     if (error) throw error;
     return (data || []).map(mapProject);
   },
@@ -656,12 +667,14 @@ export const dbProjects = {
 // ============================================================================
 
 export const dbTasks = {
-  getAll: async () => {
-    const { data, error } = await supabase
+  getAll: async (organizationId) => {
+    let query = supabase
       .from('tasks')
       .select('*')
       .eq('is_deleted', false)
       .order('created_at', { ascending: false });
+    if (organizationId) query = query.eq('organization_id', organizationId);
+    const { data, error } = await query;
     if (error) throw error;
     return (data || []).map(mapTask);
   },
