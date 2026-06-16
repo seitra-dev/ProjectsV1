@@ -114,6 +114,7 @@ export default function EditProjectModal({ project, onClose, users = [], current
     name:          project.name        || '',
     description:   project.description || '',
     status:        project.status      || 'backlog',
+    statusAuto:    project.statusAuto !== false,
     priority:      project.priority    || 'medium',
     startDate:     project.startDate   || '',
     endDate:       project.endDate     || '',
@@ -140,7 +141,11 @@ export default function EditProjectModal({ project, onClose, users = [], current
       const updates = {
         name:        form.name.trim(),
         description: form.description,
-        status:      form.status,
+        statusAuto:  form.statusAuto,
+        // Si está en modo automático no enviamos `status`: lo recalcula el
+        // trigger de Supabase y no queremos pisarlo con un valor que pudo
+        // quedar desactualizado mientras el modal estaba abierto.
+        ...(form.statusAuto ? {} : { status: form.status }),
         priority:    form.priority,
         tags:        form.area ? [form.area] : [],
         leaderId:    form.responsableId || null,
@@ -193,9 +198,26 @@ export default function EditProjectModal({ project, onClose, users = [], current
           {/* Estado + Prioridad */}
           <div style={S.row}>
             <div>
-              <label style={S.label}>Estado</label>
-              <SelectDropdown style={{ width: '100%' }} value={form.status} onChange={e => set('status', e.target.value)}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <label style={S.label}>Estado</label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#6b7280', cursor: 'pointer', marginBottom: 8 }}>
+                  <input
+                    type="checkbox"
+                    checked={form.statusAuto}
+                    onChange={e => set('statusAuto', e.target.checked)}
+                  />
+                  Automático
+                </label>
+              </div>
+              <SelectDropdown style={{ width: '100%' }} value={form.status}
+                onChange={e => set('status', e.target.value)}
+                disabled={form.statusAuto}
                 options={STATUS_OPTIONS.map(o => ({ ...o, dot: PROJECT_STATUS_DROPDOWN[o.value]?.color }))} />
+              {form.statusAuto && (
+                <p style={{ margin: '6px 0 0', fontSize: 11, color: '#9ca3af' }}>
+                  Se calcula según el estado de las tareas. Desmarca "Automático" para fijarlo manualmente.
+                </p>
+              )}
             </div>
             <div>
               <label style={S.label}>Prioridad</label>
