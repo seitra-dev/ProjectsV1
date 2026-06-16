@@ -497,6 +497,17 @@ function BacklogView() {
   const [dragOverCol, setDragOverCol] = useState(null);
   const [colMenu, setColMenu] = useState(null);
 
+  // El estado del proyecto se recalcula vía trigger en Supabase (ver
+  // migrations/005_project_status_auto.sql). Releemos el proyecto tras
+  // mutar una tarea para reflejar ese estado sin esperar un recargue completo.
+  const refreshProjectStatus = async (projectId) => {
+    if (!projectId) return;
+    try {
+      const fresh = await dbProjects.getById(projectId);
+      if (fresh) setProjects(prev => prev.map(p => p.id === fresh.id ? fresh : p));
+    } catch {}
+  };
+
   // ── Cargar datos cuando cambia el workspace ──────────────────────────────
   // String() normaliza número/string para evitar disparos dobles por coerción de tipo
   useEffect(() => {
@@ -603,6 +614,7 @@ function BacklogView() {
       if (currentTask && currentTask.status !== activeTask.status) {
         try {
           await dbTasks.update(active.id, { status: currentTask.status });
+          refreshProjectStatus(currentTask.projectId);
         } catch (error) {
           console.error('Error actualizando status:', error);
           setTasks(prev => prev.map(t => t.id === active.id ? activeTask : t));
@@ -635,6 +647,7 @@ function BacklogView() {
       const newTask = await dbTasks.create(payload);
       setTasks(prev => [newTask, ...prev]);
       setNewTaskRow({ groupKey: null, defaultData: {} });
+      refreshProjectStatus(newTask.projectId);
     } catch (error) {
       console.error('[handleSaveNewTask] Error creando tarea:', error);
     }
@@ -808,6 +821,10 @@ function BacklogView() {
                           try {
                             const result = await dbTasks.update(task.id, payload);
                             console.log('[updateTask] respuesta Supabase:', result);
+                            refreshProjectStatus(result.projectId);
+                            if (task.projectId && task.projectId !== result.projectId) {
+                              refreshProjectStatus(task.projectId);
+                            }
                           } catch (error) {
                             console.log('[updateTask] error si hay:', error);
                             // Revert on error

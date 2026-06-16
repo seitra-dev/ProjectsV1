@@ -816,6 +816,17 @@ function ListView({
   const [collapsedGroups, setCollapsedGroups] = useState({});
   const savingTaskRef = useRef(false);
 
+  // El estado del proyecto se recalcula vía trigger en Supabase (ver
+  // migrations/005_project_status_auto.sql). Releemos el proyecto tras
+  // mutar una tarea para reflejar ese estado sin esperar un recargue completo.
+  const refreshProjectStatus = async (projectId) => {
+    if (!projectId) return;
+    try {
+      const fresh = await dbProjects.getById(projectId);
+      if (fresh) onProjectUpdate(fresh);
+    } catch {}
+  };
+
   const [columns, setColumns] = useState([
     { key: 'nombre',       label: 'NOMBRE',       width: 'minmax(300px, 1fr)' },
     { key: 'tipo_tarea',   label: 'TIPO',         width: '120px' },
@@ -974,6 +985,7 @@ function ListView({
       onTasksChange([newTask, ...tasks]);
       onTaskSaved?.(newTask);
       setShowNewTaskRow(false);
+      refreshProjectStatus(created.projectId);
     } catch (err) {
       console.error('[ListView] Error creando tarea:', err);
     } finally {
@@ -983,9 +995,11 @@ function ListView({
 
   const handleDeleteTask = async (taskId) => {
     try {
+      const taskToDelete = tasks.find(t => t.id === taskId);
       await dbTasks.delete(taskId, currentUser);
       onTasksChange(tasks.filter(t => t.id !== taskId));
       onTaskDeleted?.(taskId);
+      refreshProjectStatus(taskToDelete?.projectId);
     } catch (err) {
       console.error('[ListView] Error eliminando tarea:', err);
       onError(err.message || 'Error al eliminar la tarea');
@@ -1352,6 +1366,11 @@ function ListView({
                             onTasksChange(prevTasks.map(t => t.id === result.id ? result : t));
                             // Sync global tasks state (needed for roadmap, gantt, etc.)
                             onTaskSaved?.(result);
+                            refreshProjectStatus(result.projectId);
+                            const prevTask = prevTasks.find(t => t.id === updated.id);
+                            if (prevTask?.projectId && prevTask.projectId !== result.projectId) {
+                              refreshProjectStatus(prevTask.projectId);
+                            }
                           } catch (err) {
                             // Revert on error
                             onTasksChange(prevTasks);

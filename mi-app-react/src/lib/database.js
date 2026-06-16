@@ -2,6 +2,7 @@
 // SEITRA - SERVICIO DE BASE DE DATOS CON SUPABASE
 
 import { supabase } from './supabase';
+import { countBusinessDaysAfter } from './colombianHolidays';
 
 // ============================================================================
 // HELPER: fetch directo al REST API (evita Web Locks del SDK)
@@ -217,6 +218,14 @@ export const hasExpediteActive = (tasks = [], userId = null, projectId = null) =
 */
 
 // ============================================================================
+// ESTADO DINÁMICO DE PROYECTO
+// Ver migrations/005_project_status_auto.sql (ejecutar en Supabase SQL Editor).
+// El estado del proyecto se recalcula vía trigger en la tabla `tasks` según la
+// prioridad: in_progress > waiting > paused > blocked > pending > completed >
+// cancelled, salvo que projects.status_auto = false (override manual).
+// ============================================================================
+
+// ============================================================================
 // MAPPERS: DB (snake_case) <-> Frontend (camelCase)
 // ============================================================================
 
@@ -227,6 +236,10 @@ const mapProject = (row) => {
     name: row.name,
     description: row.description || '',
     status: row.status || 'active',
+    // status_auto: si es true, el estado se recalcula solo desde las tareas
+    // (ver migración 005_project_status_auto.sql). Si es false, el usuario
+    // lo fijó manualmente y el trigger no lo toca.
+    statusAuto: row.status_auto !== false,
     priority: row.priority || 'medium',
     color: row.color || '#6366f1',
     startDate: row.start_date,
@@ -251,6 +264,7 @@ const toDbProject = (project) => {
   if (project.name !== undefined) db.name = project.name;
   if (project.description !== undefined) db.description = project.description;
   if (project.status !== undefined) db.status = project.status;
+  if (project.statusAuto !== undefined) db.status_auto = project.statusAuto;
   if (project.priority !== undefined) db.priority = project.priority;
   if (project.color !== undefined) db.color = project.color;
   if (project.startDate !== undefined) db.start_date = project.startDate || null;
@@ -394,6 +408,15 @@ export const dbUsers = {
     const { data, error } = await supabase.from('users').select('*').order('created_at', { ascending: false });
     if (error) throw error;
     return (data || []).map(mapUser);
+  },
+  getByOrganization: async (organizationId) => {
+    if (!organizationId) return dbUsers.getAll();
+    const { data, error } = await supabase
+      .from('organization_members')
+      .select('user:users(*)')
+      .eq('organization_id', organizationId);
+    if (error) throw error;
+    return (data || []).filter(m => m.user).map(m => mapUser(m.user));
   },
   // Devuelve solo los usuarios miembros de un entorno específico, con su rol
   getByEnvironment: async (environmentId) => {
@@ -594,11 +617,13 @@ export const dbWorkspaces = {
 // ============================================================================
 
 export const dbProjects = {
-  getAll: async () => {
-    const { data, error } = await supabase
+  getAll: async (organizationId) => {
+    let query = supabase
       .from('projects')
       .select('*, workspace:workspaces(environment_id)')
       .order('created_at', { ascending: false });
+    if (organizationId) query = query.eq('organization_id', organizationId);
+    const { data, error } = await query;
     if (error) throw error;
     return (data || []).map(mapProject);
   },
@@ -656,12 +681,14 @@ export const dbProjects = {
 // ============================================================================
 
 export const dbTasks = {
-  getAll: async () => {
-    const { data, error } = await supabase
+  getAll: async (organizationId) => {
+    let query = supabase
       .from('tasks')
       .select('*')
       .eq('is_deleted', false)
       .order('created_at', { ascending: false });
+    if (organizationId) query = query.eq('organization_id', organizationId);
+    const { data, error } = await query;
     if (error) throw error;
     return (data || []).map(mapTask);
   },
@@ -1113,7 +1140,12 @@ export const dbPerformance = {
         // KPI: solo contar si closed_at real existe
         if (task.closed_at && task.end_date) {
           row._real_kpi++;
-          if (task.closed_at.slice(0, 10) <= task.end_date) row._on_time++;
+          // Días hábiles de retraso (excluye fines de semana y festivos de
+          // Colombia) — con 1 día hábil de gracia para no penalizar cierres
+          // inmediatamente posteriores a un festivo (p. ej. tarea cerrada el
+          // martes porque el lunes fue festivo).
+          const lateBusinessDays = countBusinessDaysAfter(task.end_date, task.closed_at.slice(0, 10));
+          if (lateBusinessDays <= 1) row._on_time++;
           else row._late++;
         }
       });

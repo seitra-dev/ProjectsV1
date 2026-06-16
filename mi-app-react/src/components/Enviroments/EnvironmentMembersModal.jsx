@@ -49,7 +49,7 @@ function Avatar({ user, size = 36 }) {
 // ============================================================================
 
 const EnvironmentMembersModal = ({ isOpen, onClose }) => {
-  const { currentEnvironment, currentUser, getUserRoleInEnv, canManageMembers, environments } = useApp();
+  const { currentEnvironment, currentUser, getUserRoleInEnv, canManageMembers, environments, organizationId } = useApp();
   const [activeTab, setActiveTab] = useState('members');
   const [movingMemberId, setMovingMemberId] = useState(null);
   const moveRef = useRef(null);
@@ -114,7 +114,7 @@ const EnvironmentMembersModal = ({ isOpen, onClose }) => {
 
   const loadAllUsers = async () => {
     try {
-      const data = await dbUsers.getAll();
+      const data = await dbUsers.getByOrganization(organizationId);
       setAllUsers(data);
     } catch (e) {
       console.error('[MembersModal] Error cargando usuarios:', e);

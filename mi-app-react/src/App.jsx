@@ -1509,16 +1509,12 @@ useEffect(() => {
       ? dbProjects.getByWorkspace(currentWorkspace.id)
       : currentEnvironment?.id
         ? dbProjects.getByEnvironment(currentEnvironment.id)
-        : dbProjects.getAll();
+        : dbProjects.getAll(appOrgId);
 
-    // Usuarios: siempre cargamos TODOS los del sistema para poder resolver
-    // nombres de asignados independientemente del equipo activo.
-    // El filtro por proyecto/equipo se aplica solo en el dropdown de asignación
-    // (ya lo hace projectMemberUsers en ListView/SortableTaskRow).
     const [projectsResult, tasksResult, usersResult] = await Promise.allSettled([
       projectsPromise,
-      dbTasks.getAll(),
-      dbUsers.getAll(),
+      dbTasks.getAll(appOrgId),
+      appOrgId ? dbUsers.getByOrganization(appOrgId) : dbUsers.getAll(),
     ]);
 
     if (projectsResult.status === 'fulfilled') {
@@ -1622,6 +1618,20 @@ useEffect(() => {
     }
   };
 
+  // El estado del proyecto se recalcula vía trigger en Supabase (ver
+  // migrations/005_project_status_auto.sql) cada vez que cambia una tarea.
+  // Tras mutar una tarea, releemos el proyecto para reflejar ese estado en
+  // el estado local sin esperar a un recargue completo.
+  const refreshProjectStatus = async (projectId) => {
+    if (!projectId) return;
+    try {
+      const fresh = await dbProjects.getById(projectId);
+      if (!fresh) return;
+      setProjects(prev => prev.map(p => p.id === fresh.id ? fresh : p));
+      if (selectedProject?.id === fresh.id) setSelectedProject(fresh);
+    } catch {}
+  };
+
   // Tareas - CRUD individual
   const createTask = async (taskData) => {
     try {
@@ -1633,6 +1643,7 @@ useEffect(() => {
       const created = await dbTasks.create(enriched);
       setTasks(prev => [created, ...prev]);
       logActivity('task_created', `Tarea creada: ${created.title}`);
+      refreshProjectStatus(created.projectId);
       return created;
     } catch (error) {
       console.error('Error creando tarea:', error);
@@ -1683,6 +1694,11 @@ useEffect(() => {
       }
       // ────────────────────────────────────────────────────────────────────
 
+      refreshProjectStatus(updated.projectId);
+      if (prev_snapshot?.projectId && prev_snapshot.projectId !== updated.projectId) {
+        refreshProjectStatus(prev_snapshot.projectId);
+      }
+
       return updated;
     } catch (error) {
       if (prev_snapshot) {
@@ -1716,6 +1732,7 @@ useEffect(() => {
       await dbTasks.delete(id);
       setTasks(prev => prev.filter(t => t.id !== id));
       logActivity('task_deleted', `Tarea eliminada`);
+      refreshProjectStatus(taskToDelete?.projectId);
     } catch (error) {
       console.error('Error eliminando tarea:', error);
       addToast('Error al eliminar la tarea', 'error');
