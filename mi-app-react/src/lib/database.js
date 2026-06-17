@@ -1057,7 +1057,10 @@ export const dbKpiThresholds = {
 // ============================================================================
 
 export const dbPerformance = {
-  getMetrics: async ({ workspaceId, frente, startDate, endDate } = {}) => {
+  // environmentIds: si se provee (rol 'member'), restringe las tareas a los
+  // workspaces de esos entornos — evita que un miembro vea el desempeño de
+  // colaboradores de entornos a los que no pertenece.
+  getMetrics: async ({ workspaceId, frente, startDate, endDate, environmentIds } = {}) => {
     const start = startDate || '2020-01-01';
     const end   = endDate ? `${endDate}T23:59:59` : '2099-12-31T23:59:59';
 
@@ -1075,8 +1078,20 @@ export const dbPerformance = {
       .gte('closed_at', start)
       .lte('closed_at', end);
 
-    if (workspaceId) q = q.eq('workspace_id', workspaceId);
-    if (frente)      q = q.contains('custom_fields', { _frente: frente });
+    if (workspaceId) {
+      q = q.eq('workspace_id', workspaceId);
+    } else if (Array.isArray(environmentIds) && environmentIds.length > 0) {
+      // Filtrar tareas por project_id (projects.environment_id → task.project_id)
+      // evita depender de workspace_id en tareas (puede ser NULL) o de RLS en workspaces.
+      const { data: projs } = await supabase
+        .from('projects')
+        .select('id')
+        .in('environment_id', environmentIds);
+      const projIds = (projs || []).map(p => p.id);
+      if (projIds.length === 0) return [];
+      q = q.in('project_id', projIds);
+    }
+    if (frente) q = q.contains('custom_fields', { _frente: frente });
 
     const { data: tasks, error: tasksErr } = await q;
     if (tasksErr) throw tasksErr;

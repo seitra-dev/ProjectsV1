@@ -19,6 +19,10 @@ const PERSON_COLORS = [
   '#06b6d4', '#f97316', '#84cc16', '#ec4899', '#14b8a6',
 ];
 
+// Colaboradores que aparecen en la tabla con sus métricas individuales pero
+// quedan excluidos de los cálculos agregados del área (ej. practicantes).
+const EXCLUDED_FROM_AREA_METRICS_EMAILS = ['sergioa.alvarez@corbeta.com.co'];
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const today       = () => new Date().toISOString().slice(0, 10);
@@ -314,7 +318,7 @@ const SkeletonRow = ({ bg = 'white', pl = 0 }) => (
 
 // ─── Nivel 3: Colaborador ─────────────────────────────────────────────────────
 
-const PersonRow = ({ row, weeks, capacities, startDate, endDate }) => {
+const PersonRow = ({ row, weeks, capacities, startDate, endDate, isExcluded = false }) => {
   const trend      = useMemo(() => aggregateTrend(row.trend_data, startDate, endDate), [row.trend_data, startDate, endDate]);
   const isUnassign = !row.assignee_id;
   const capTarget  = isUnassign ? null : (capacities[String(row.assignee_id)] || null);
@@ -322,7 +326,7 @@ const PersonRow = ({ row, weeks, capacities, startDate, endDate }) => {
   const color      = personColor(row.assignee_id);
 
   return (
-    <tr style={{ background: 'white' }}>
+    <tr style={{ background: isExcluded ? '#fafbfd' : 'white', opacity: isExcluded ? 0.85 : 1 }}>
       <TD style={{ maxWidth: 240 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingLeft: 28 }}>
           <AvatarCell name={row.assignee_name} src={row.avatar} size={24} />
@@ -330,6 +334,9 @@ const PersonRow = ({ row, weeks, capacities, startDate, endDate }) => {
             <div style={{ fontWeight: 500, fontSize: 13, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {row.assignee_name}
             </div>
+            {isExcluded && (
+              <span style={{ fontSize: 9, color: '#94a3b8', fontWeight: 500, letterSpacing: '0.3px' }}>Excluido del cálculo</span>
+            )}
           </div>
         </div>
       </TD>
@@ -360,9 +367,10 @@ const PersonRow = ({ row, weeks, capacities, startDate, endDate }) => {
 
 // ─── Nivel 1: Entorno ─────────────────────────────────────────────────────────
 
-const EnvironmentSection = ({ env, weeks, capacities, startDate, endDate }) => {
+const EnvironmentSection = ({ env, weeks, capacities, startDate, endDate, excludedIds = new Set() }) => {
   const [expanded, setExpanded] = useState(true);
-  const a     = useMemo(() => agg(env.rows, weeks), [env.rows, weeks]);
+  const teamEnvRows = useMemo(() => env.rows.filter(r => !excludedIds.has(String(r.assignee_id))), [env.rows, excludedIds]);
+  const a     = useMemo(() => agg(teamEnvRows, weeks), [teamEnvRows, weeks]);
   const trend = useMemo(() => aggregateTrend(a.trend, startDate, endDate), [a.trend, startDate, endDate]);
   const color = env.environment_color || '#6366f1';
 
@@ -392,7 +400,7 @@ const EnvironmentSection = ({ env, weeks, capacities, startDate, endDate }) => {
         </TD>
       </tr>
       {expanded && env.rows.map(r => (
-        <PersonRow key={r.assignee_id} row={r} weeks={weeks} capacities={capacities} startDate={startDate} endDate={endDate} />
+        <PersonRow key={r.assignee_id} row={r} weeks={weeks} capacities={capacities} startDate={startDate} endDate={endDate} isExcluded={excludedIds.has(String(r.assignee_id))} />
       ))}
     </>
   );
@@ -400,9 +408,10 @@ const EnvironmentSection = ({ env, weeks, capacities, startDate, endDate }) => {
 
 // ─── Nivel 0: Resumen General ─────────────────────────────────────────────────
 
-const SummaryRow = ({ rows, weeks, byEnv, capacities, startDate, endDate }) => {
+const SummaryRow = ({ rows, weeks, byEnv, capacities, startDate, endDate, excludedIds = new Set() }) => {
   const [expanded, setExpanded] = useState(true);
-  const a     = useMemo(() => agg(rows, weeks), [rows, weeks]);
+  const teamRows = useMemo(() => rows.filter(r => !excludedIds.has(String(r.assignee_id))), [rows, excludedIds]);
+  const a     = useMemo(() => agg(teamRows, weeks), [teamRows, weeks]);
   const trend = useMemo(() => aggregateTrend(a.trend, startDate, endDate), [a.trend, startDate, endDate]);
 
   return (
@@ -437,6 +446,7 @@ const SummaryRow = ({ rows, weeks, byEnv, capacities, startDate, endDate }) => {
           capacities={capacities}
           startDate={startDate}
           endDate={endDate}
+          excludedIds={excludedIds}
         />
       ))}
     </>
@@ -457,8 +467,12 @@ const FF  = ({ label, children }) => (
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 export default function PerformanceDashboard() {
-  const { currentUser, currentWorkspace, orgRole, isPlatformOwner } = useApp();
-  const canAccess = isPlatformOwner?.(currentUser) || orgRole === 'org_admin';
+  const { currentUser, currentWorkspace, orgRole, isPlatformOwner, membershipMap } = useApp();
+  // Visible para todos los roles. Un 'member' (no org_admin ni platform_owner)
+  // solo ve el desempeño de los colaboradores de sus propios entornos —
+  // ver myEnvIds más abajo y el filtro server-side en dbPerformance.getMetrics.
+  const isRestrictedMember = !isPlatformOwner?.(currentUser) && orgRole !== 'org_admin';
+  const myEnvIds = useMemo(() => Object.keys(membershipMap || {}), [membershipMap]);
 
   const def = { equipo: '', startDate: firstOfYear(), endDate: today() };
   const [filters,     setFilters]     = useState(def);
@@ -469,6 +483,7 @@ export default function PerformanceDashboard() {
   const [chartPerson, setChartPerson] = useState('all');
   const [rangeKpis,   setRangeKpis]   = useState(null);
   const [kpisLoading, setKpisLoading] = useState(true);
+  const [excludedIds, setExcludedIds] = useState(new Set());
 
   const capacities = useMemo(() => {
     try { return JSON.parse(localStorage.getItem('seitra_capacities') || '{}'); }
@@ -492,16 +507,23 @@ export default function PerformanceDashboard() {
     return rows.filter(r => String(r.environment_id) === String(applied.equipo));
   }, [rows, applied.equipo]);
 
+  // Filas del equipo: excluye colaboradores marcados como "excluidos del cálculo"
+  // (ej. practicantes). Se usan para los KPIs de área pero NO para la tabla.
+  const teamRows = useMemo(
+    () => filteredRows.filter(r => !excludedIds.has(String(r.assignee_id))),
+    [filteredRows, excludedIds]
+  );
+
   const velocityPerWeek = useMemo(() => {
-    const total = filteredRows.reduce((s, r) => s + r.total_closed, 0);
+    const total = teamRows.reduce((s, r) => s + r.total_closed, 0);
     return weeks > 0 ? Math.round((total / weeks) * 10) / 10 : 0;
-  }, [filteredRows, weeks]);
+  }, [teamRows, weeks]);
 
   const onTimeRate = useMemo(() => {
-    const valid = filteredRows.filter(r => r.kpi_pct != null);
+    const valid = teamRows.filter(r => r.kpi_pct != null);
     if (valid.length < 3) return null;
     return Math.round(valid.reduce((s, r) => s + r.kpi_pct, 0) / valid.length);
-  }, [filteredRows]);
+  }, [teamRows]);
 
   // Jerarquía: Entorno → Colaborador (sobre filteredRows)
   const byEnv = useMemo(() => {
@@ -523,21 +545,43 @@ export default function PerformanceDashboard() {
   }, [filteredRows]);
 
   const loadAll = async () => {
-    if (!canAccess) return;
     setLoading(true); setKpisLoading(true); setError('');
     try {
       const wsId  = currentWorkspace?.id || null;
       const start = applied.startDate || firstOfYear();
       const end   = applied.endDate   || today();
 
-      // Proyectos activos y bloqueadas (workspace-level)
+      // Resolver IDs de colaboradores excluidos del cálculo de área (ej. practicantes)
+      const { data: excUsers } = await supabase
+        .from('users').select('id').in('email', EXCLUDED_FROM_AREA_METRICS_EMAILS);
+      const excIds = (excUsers || []).map(u => String(u.id));
+      setExcludedIds(new Set(excIds));
+
+      // Para miembros: obtenemos project IDs de sus entornos usando environment_id
+      // directo en projects (más fiable que ir por workspace_id, que puede estar
+      // vacío en tareas o restringido por RLS en workspaces).
+      const memberEnvIds = isRestrictedMember && !wsId ? myEnvIds : null;
+      let memberProjectIds = null;
+      if (memberEnvIds?.length > 0) {
+        const { data: projs } = await supabase
+          .from('projects').select('id').in('environment_id', memberEnvIds);
+        memberProjectIds = (projs || []).map(p => p.id);
+      } else if (memberEnvIds !== null) {
+        memberProjectIds = [];
+      }
+
+      // Proyectos activos (para miembros: filtro directo por environment_id)
       const pq = supabase.from('projects').select('id, end_date')
         .not('status', 'in', '(completed,cancelled,archived)');
       if (wsId) pq.eq('workspace_id', wsId);
+      else if (memberEnvIds) pq.in('environment_id', memberEnvIds.length > 0 ? memberEnvIds : ['__none__']);
 
+      // Tareas bloqueadas y cerradas esta semana (para miembros: filtro por project_id)
       const bq = supabase.from('tasks').select('id', { count: 'exact', head: true })
         .eq('status', 'blocked');
       if (wsId) bq.eq('workspace_id', wsId);
+      else if (memberProjectIds) bq.in('project_id', memberProjectIds.length > 0 ? memberProjectIds : ['__none__']);
+      if (excIds.length > 0) bq.not('assignee_id', 'in', `(${excIds.join(',')})`);
 
       const now = new Date();
       const dow = now.getDay();
@@ -547,10 +591,17 @@ export default function PerformanceDashboard() {
       const twq = supabase.from('tasks').select('id', { count: 'exact', head: true })
         .eq('status', 'completed').gte('closed_at', thisWeekStart).lte('closed_at', today());
       if (wsId) twq.eq('workspace_id', wsId);
+      else if (memberProjectIds) twq.in('project_id', memberProjectIds.length > 0 ? memberProjectIds : ['__none__']);
+      if (excIds.length > 0) twq.not('assignee_id', 'in', `(${excIds.join(',')})`);
 
       const [metricsRows, { data: activeProjects }, { count: blockedCount }, { count: thisWeekCount }] =
         await Promise.all([
-          dbPerformance.getMetrics({ workspaceId: wsId, startDate: start, endDate: end }),
+          dbPerformance.getMetrics({
+            workspaceId: wsId,
+            startDate: start,
+            endDate: end,
+            environmentIds: isRestrictedMember ? myEnvIds : undefined,
+          }),
           pq, bq, twq,
         ]);
 
@@ -572,11 +623,9 @@ export default function PerformanceDashboard() {
     }
   };
 
-  useEffect(() => { loadAll(); }, [applied.startDate, applied.endDate, currentWorkspace?.id]);
+  useEffect(() => { loadAll(); }, [applied.startDate, applied.endDate, currentWorkspace?.id, isRestrictedMember, myEnvIds.join(',')]);
 
   const set = (k, v) => setFilters(f => ({ ...f, [k]: v }));
-
-  if (!canAccess) return null;
 
   const totalColabs = filteredRows.length;
   const progresoPercent = rangeKpis && rangeKpis.totalActiveProjects > 0
@@ -710,6 +759,7 @@ export default function PerformanceDashboard() {
                     capacities={capacities}
                     startDate={applied.startDate}
                     endDate={applied.endDate}
+                    excludedIds={excludedIds}
                   />
                 )}
               </tbody>
