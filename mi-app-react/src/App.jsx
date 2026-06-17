@@ -4110,6 +4110,7 @@ function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTask
       name:        project.name        || '',
       description: project.description || '',
       status:      project.status      || 'backlog',
+      statusAuto:  project.statusAuto !== false,
       priority:    project.priority    || 'medium',
       startDate:   project.startDate   || '',
       endDate:     project.endDate     || '',
@@ -4127,7 +4128,12 @@ function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTask
     if (!editForm.name?.trim()) return;
     setSavingProject(true);
     try {
-      await onProjectUpdate({ ...project, ...editForm, name: editForm.name.trim(), tags: editForm.area ? [editForm.area] : [] });
+      const merged = { ...project, ...editForm, name: editForm.name.trim(), tags: editForm.area ? [editForm.area] : [] };
+      // En modo automático no enviamos `status`: lo recalcula el trigger de
+      // Supabase y no queremos pisarlo con un valor que pudo quedar
+      // desactualizado mientras el panel estaba abierto.
+      if (editForm.statusAuto) delete merged.status;
+      await onProjectUpdate(merged);
       setEditingProject(false);
     } catch (e) {
       // error ya manejado en onProjectUpdate
@@ -4442,8 +4448,19 @@ function ProjectDetailView({ project, tasks, projects = [], onTaskCreate, onTask
                 {/* Fila 2: Estado + Prioridad + Responsable + Área */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '12px', marginBottom: '14px' }}>
                   <div>
-                    <label style={labelStyle}>Estado</label>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <label style={labelStyle}>Estado</label>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.68rem', fontWeight: 600, color: '#64748b', cursor: 'pointer', marginBottom: 4, textTransform: 'none' }}>
+                        <input
+                          type="checkbox"
+                          checked={editForm.statusAuto}
+                          onChange={e => fld('statusAuto', e.target.checked)}
+                        />
+                        Auto
+                      </label>
+                    </div>
                     <SelectDropdown style={{ width: '100%' }} value={editForm.status} onChange={e => fld('status', e.target.value)}
+                      disabled={editForm.statusAuto}
                       options={STATUS_OPTS.map(o => ({ ...o, dot: PROJECT_STATUS_DROPDOWN[o.value]?.color }))} />
                   </div>
                   <div>

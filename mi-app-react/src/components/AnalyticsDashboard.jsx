@@ -8,9 +8,8 @@ import AnalyticsGeneralView from './AnalyticsGeneralView';
 // ============================================================================
 
 export default function AnalyticsDashboard() {
-  const { environments, currentUser, isSuperAdmin, orgRole } = useApp();
+  const { environments, currentUser, isSuperAdmin } = useApp();
   const superAdmin = isSuperAdmin();
-  const canSeePerformance = superAdmin || orgRole === 'org_admin';
 
   const [activeTab, setActiveTab] = useState('general');
 
@@ -45,7 +44,7 @@ export default function AnalyticsDashboard() {
       <div style={{ display: 'flex', gap: '4px', marginBottom: '1.5rem', borderBottom: '1px solid #e8ecf0', paddingBottom: '0' }}>
         {[
           { id: 'general', label: 'General' },
-          ...(canSeePerformance ? [{ id: 'desempeno', label: 'Desempeño' }] : []),
+          { id: 'desempeno', label: 'Desempeño' },
         ].map(tab => (
           <button
             key={tab.id}
