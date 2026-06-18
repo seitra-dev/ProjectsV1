@@ -35,7 +35,12 @@ const calcDays = (start, end) => {
 };
 const fmtDate = (d) => {
   if (!d) return '—';
-  try { return new Date(d).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' }); }
+  try {
+    // Parse as local date — "YYYY-MM-DD" strings interpreted by `new Date()`
+    // are treated as UTC midnight, which shifts to the previous day in UTC-5.
+    const [y, m, day] = String(d).slice(0, 10).split('-');
+    return `${day}/${m}/${y}`;
+  }
   catch { return d; }
 };
 const avatarInitials = (name = '') =>
