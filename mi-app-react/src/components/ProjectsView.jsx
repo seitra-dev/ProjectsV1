@@ -335,6 +335,12 @@ const ProjectRow = ({ project, expanded, onToggle, users, onAddMilestone, onAddT
       </Td>
       <Td><span style={{ fontSize: 12, color: '#6b7280' }}>{fmtDate(startDate)}</span></Td>
       <Td><span style={{ fontSize: 12, color: '#6b7280' }}>{fmtDate(endDate)}</span></Td>
+      <Td>
+        {project._closedAt
+          ? <span style={{ fontSize: 12, color: '#16a34a', fontWeight: 600 }}>{fmtDate(project._closedAt)}</span>
+          : <span style={{ fontSize: 12, color: '#d1d5db' }}>—</span>
+        }
+      </Td>
       <Td style={{ textAlign: 'center' }}><span style={{ fontSize: 12, color: '#6b7280', fontWeight: 600 }}>{calcDays(startDate, endDate)}</span></Td>
       <Td>
         <span style={{ padding: '3px 8px', borderRadius: 4, fontSize: 11, fontWeight: 700, background: pc.bg, color: pc.text }}>{pc.label}</span>
@@ -381,6 +387,7 @@ const MilestoneRow = ({ milestone, expanded, onToggle, users, onAddTask, onDelet
       <Td />
       <Td><span style={{ fontSize: 12, color: '#6b7280' }}>{fmtDate(milestone.startDate)}</span></Td>
       <Td><span style={{ fontSize: 12, color: '#6b7280' }}>{fmtDate(milestone.endDate)}</span></Td>
+      <Td />
       <Td style={{ textAlign: 'center' }}><span style={{ fontSize: 12, color: '#6b7280' }}>{calcDays(milestone.startDate, milestone.endDate)}</span></Td>
       <Td />
       <Td>
@@ -425,6 +432,7 @@ const TaskRow = ({ task, expanded, onToggle, users, hasSubtasks }) => {
       <Td />
       <Td><span style={{ fontSize: 12, color: '#6b7280' }}>{fmtDate(task.start_date)}</span></Td>
       <Td><span style={{ fontSize: 12, color: '#6b7280' }}>{fmtDate(task.end_date)}</span></Td>
+      <Td />
       <Td style={{ textAlign: 'center' }}><span style={{ fontSize: 12, color: '#6b7280' }}>{calcDays(task.start_date, task.end_date)}</span></Td>
       <Td><span style={{ padding: '3px 7px', borderRadius: 4, fontSize: 10, fontWeight: 700, background: pc.bg, color: pc.text }}>{pc.label}</span></Td>
       <Td>
@@ -451,6 +459,7 @@ const SubtaskRow = ({ subtask, users }) => {
       <Td />
       <Td><span style={{ fontSize: 11, color: '#9ca3af' }}>{fmtDate(subtask.start_date)}</span></Td>
       <Td><span style={{ fontSize: 11, color: '#9ca3af' }}>{fmtDate(subtask.end_date)}</span></Td>
+      <Td />
       <Td style={{ textAlign: 'center' }}><span style={{ fontSize: 11, color: '#9ca3af' }}>{calcDays(subtask.start_date, subtask.end_date)}</span></Td>
       <Td />
       <Td>
@@ -471,6 +480,7 @@ const COLUMNS = [
   { label: 'EQUIPO',            key: null },
   { label: 'INICIO',            key: 'startDate' },
   { label: 'FIN',               key: 'endDate' },
+  { label: 'CIERRE',            key: null },
   { label: 'DÍAS',              key: 'days' },
   { label: 'PRIORIDAD',         key: 'priority' },
   { label: 'RESPONSABLE',       key: null },
@@ -634,6 +644,12 @@ export default function ProjectsView({ selectedEnvironment, onRefresh: externalR
       const ws  = project._workspace  || wsMap[project.workspace_id]  || null;
       const env = project._environment || null;
 
+      const closedDates = rootTasks
+        .filter(t => t.closed_at)
+        .map(t => t.closed_at.slice(0, 10))
+        .sort();
+      const _closedAt = closedDates.length > 0 ? closedDates.at(-1) : null;
+
       return {
         ...project,
         _phases:         phases,
@@ -646,6 +662,7 @@ export default function ProjectsView({ selectedEnvironment, onRefresh: externalR
         _area:        (project.tags && project.tags[0]) || ws?.name || '—',
         _workspace:   ws,
         _environment: env,
+        _closedAt,
       };
     });
   }, [rawProjects, rawTasks, wsMap]);
