@@ -1,112 +1,156 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
-  PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
-  BarChart, Bar, XAxis, YAxis, CartesianGrid,
+  LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
+  Tooltip as RechartTooltip, ResponsiveContainer, PieChart, Pie, Cell, LabelList,
 } from 'recharts';
 import {
-  TrendingUp, TrendingDown, Minus,
-  AlertTriangle, Clock, CheckCircle2, Briefcase,
-  ChevronDown, Activity, Target, Zap, ArrowUpRight, Calendar,
+  Filter, X, AlertTriangle, CheckCircle2, Clock,
+  ChevronDown, RefreshCw,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { dbProjects, dbTasks } from '../lib/database';
+import { dbProjects, dbTasks, dbUsers } from '../lib/database';
 
-// ─── Paleta ──────────────────────────────────────────────────────────────────
+// ─── Palette ──────────────────────────────────────────────────────────────────
 const C = {
-  blue:    '#2563eb',
-  blueLight: '#eff6ff',
-  blueMid: '#bfdbfe',
-  emerald: '#059669',
-  amber:   '#d97706',
-  red:     '#dc2626',
-  redLight:'#fef2f2',
-  slate50: '#f8fafc',
-  slate100:'#f1f5f9',
-  slate200:'#e2e8f0',
-  slate400:'#94a3b8',
-  slate500:'#64748b',
-  slate700:'#334155',
-  slate900:'#0f172a',
-  white:   '#ffffff',
+  green:      '#059669', greenLight: '#f0fdf4', greenMid: '#bbf7d0',
+  blue:       '#2563eb', blueLight:  '#eff6ff', blueMid:  '#bfdbfe',
+  amber:      '#d97706', amberLight: '#fffbeb',
+  gray:       '#94a3b8', grayLight:  '#f8fafc',
+  red:        '#dc2626', redLight:   '#fef2f2',
+  slate50:    '#f8fafc', slate100: '#f1f5f9', slate200: '#e2e8f0',
+  slate400:   '#94a3b8', slate500:  '#64748b', slate700: '#334155', slate900: '#0f172a',
+  white:      '#ffffff',
 };
 
-// ─── Ranges ──────────────────────────────────────────────────────────────────
-const RANGES = [
-  { id: '30d',  label: 'Últimos 30 días',  days: 30  },
-  { id: '90d',  label: 'Últimos 90 días',  days: 90  },
-  { id: '180d', label: 'Últimos 6 meses',  days: 180 },
-  { id: 'year', label: 'Este año',          days: 365 },
-];
+// ─── Status categorization ────────────────────────────────────────────────────
+const getProjectCat = (status) => {
+  if (status === 'completed') return 'completed';
+  if (['in_progress', 'active', 'expedite', 'waiting', 'paused', 'blocked'].includes(status)) return 'in_progress';
+  if (status === 'backlog') return 'backlog';
+  if (['pending', 'todo'].includes(status)) return 'pending';
+  return null;
+};
 
-// ─── Priority config ─────────────────────────────────────────────────────────
+const getTaskCat = (status) => {
+  if (status === 'completed') return 'completed';
+  if (['in_progress', 'expedite', 'waiting', 'paused', 'blocked'].includes(status)) return 'in_progress';
+  if (['pending', 'todo'].includes(status)) return 'pending';
+  if (status === 'backlog') return 'backlog';
+  return null;
+};
+
+const PROJ_CATS = {
+  completed:   { label: 'Entregados', color: '#059669' },
+  in_progress: { label: 'En curso',   color: '#2563eb' },
+  backlog:     { label: 'Backlog',    color: '#94a3b8' },
+  pending:     { label: 'Pendientes', color: '#d97706' },
+};
+
+const TASK_CATS = {
+  completed:   { label: 'Completadas', color: '#059669' },
+  in_progress: { label: 'En curso',    color: '#2563eb' },
+  backlog:     { label: 'Backlog',     color: '#94a3b8' },
+  pending:     { label: 'Pendientes',  color: '#d97706' },
+};
+
 const PRIORITY_CFG = {
-  urgent: { label: 'Urgente', color: '#dc2626', bg: '#fef2f2' },
-  high:   { label: 'Alta',    color: '#f97316', bg: '#fff7ed' },
-  medium: { label: 'Media',   color: '#eab308', bg: '#fefce8' },
-  low:    { label: 'Baja',    color: '#22c55e', bg: '#f0fdf4' },
+  urgent: { label: 'Urgente', color: '#dc2626' },
+  high:   { label: 'Alta',    color: '#f97316' },
+  medium: { label: 'Media',   color: '#eab308' },
+  low:    { label: 'Baja',    color: '#22c55e' },
 };
 
-// ─── Sparkline SVG ────────────────────────────────────────────────────────────
-function Sparkline({ data = [], color = C.blue, width = 72, height = 28 }) {
-  if (!data || data.length < 2) return <div style={{ width, height }} />;
-  const max = Math.max(...data, 1);
-  const min = Math.min(...data);
-  const range = max - min || 1;
-  const pts = data.map((v, i) => {
-    const x = (i / (data.length - 1)) * width;
-    const y = height - ((v - min) / range) * (height - 4) - 2;
-    return `${x},${y}`;
-  });
-  return (
-    <svg width={width} height={height} style={{ display: 'block', overflow: 'visible' }}>
-      <polyline
-        points={pts.join(' ')}
-        fill="none"
-        stroke={color}
-        strokeWidth="1.8"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-      />
-      {/* last dot */}
-      <circle
-        cx={parseFloat(pts[pts.length - 1].split(',')[0])}
-        cy={parseFloat(pts[pts.length - 1].split(',')[1])}
-        r="2.5"
-        fill={color}
-      />
-    </svg>
-  );
-}
+const SEVERITY_CFG = {
+  high:   { bg: '#fef2f2', border: '#fecaca', dot: '#dc2626', text: '#dc2626' },
+  medium: { bg: '#fffbeb', border: '#fde68a', dot: '#d97706', text: '#92400e' },
+  low:    { bg: '#f0fdf4', border: '#bbf7d0', dot: '#059669', text: '#065f46' },
+};
 
-// ─── Trend badge ─────────────────────────────────────────────────────────────
-function TrendBadge({ value, inverse = false }) {
-  if (value === null || value === undefined) return null;
-  const pos = inverse ? value < 0 : value > 0;
-  const neg = inverse ? value > 0 : value < 0;
-  const color = pos ? C.emerald : neg ? C.red : C.slate400;
-  const Icon  = pos ? TrendingUp : neg ? TrendingDown : Minus;
-  const abs   = Math.abs(value);
+const MONTH_NAMES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+const todayStr     = () => new Date().toISOString().slice(0, 10);
+const firstOfYear  = () => `${new Date().getFullYear()}-01-01`;
+
+const projectInRange = (p, from, to) => {
+  if (!from && !to) return true;
+  const s = p.startDate?.slice(0, 10);
+  const e = p.endDate?.slice(0, 10);
+  if (!s && !e) return true;
+  const effS = s || e;
+  const effE = e || s;
+  return (!from || effE >= from) && (!to || effS <= to);
+};
+
+const monthsBetween = (from, to) => {
+  if (!from || !to) return [];
+  const months = [];
+  const cur = new Date(from.slice(0, 7) + '-01');
+  const end = new Date(to.slice(0, 7) + '-01');
+  while (cur <= end) {
+    months.push(`${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}`);
+    cur.setMonth(cur.getMonth() + 1);
+  }
+  return months;
+};
+
+// ─── Shared UI styles ─────────────────────────────────────────────────────────
+const SEL = {
+  padding: '7px 10px', border: '1px solid #e2e8f0', borderRadius: 8,
+  fontSize: 12, fontFamily: 'inherit', color: '#334155', background: 'white', outline: 'none',
+};
+const BTN = {
+  display: 'inline-flex', alignItems: 'center', gap: 5,
+  padding: '7px 14px', border: 'none', borderRadius: 8,
+  fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+};
+
+const FF = ({ label, children }) => (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+    <label style={{ fontSize: 11, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+      {label}
+    </label>
+    {children}
+  </div>
+);
+
+// ─── Shared components ────────────────────────────────────────────────────────
+function Card({ children, style = {} }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 3, color, fontSize: 11, fontWeight: 700 }}>
-      <Icon size={11} />
-      {abs > 0 ? `${abs > 999 ? '+∞' : (value > 0 ? '+' : '')}${value}%` : '—'}
+    <div style={{
+      background: C.white, border: `1px solid ${C.slate200}`,
+      borderRadius: 16, boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
+      overflow: 'hidden', ...style,
+    }}>
+      {children}
     </div>
   );
 }
 
-// ─── Tooltip personalizado ────────────────────────────────────────────────────
+function SectionLabel({ top, title }) {
+  return (
+    <div style={{ padding: '16px 20px 0' }}>
+      <p style={{ margin: 0, fontSize: 10, fontWeight: 700, color: C.slate400, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+        {top}
+      </p>
+      <h3 style={{ margin: '2px 0 0', fontSize: 14, fontWeight: 700, color: C.slate900 }}>
+        {title}
+      </h3>
+    </div>
+  );
+}
+
 function ChartTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null;
   return (
     <div style={{
       background: C.white, border: `1px solid ${C.slate200}`,
       borderRadius: 10, padding: '10px 14px',
-      boxShadow: '0 8px 24px rgba(0,0,0,0.08)',
-      fontSize: 12, fontFamily: 'Inter, system-ui, sans-serif',
+      boxShadow: '0 8px 24px rgba(0,0,0,0.08)', fontSize: 12,
     }}>
-      {label && <p style={{ margin: '0 0 5px', fontWeight: 700, color: C.slate900, fontSize: 11 }}>{label}</p>}
+      {label && <p style={{ margin: '0 0 5px', fontWeight: 700, color: C.slate900 }}>{label}</p>}
       {payload.map((p, i) => (
-        <p key={i} style={{ margin: '2px 0', color: p.fill || p.color }}>
+        <p key={i} style={{ margin: '2px 0', color: p.color || p.fill }}>
           {p.name}: <strong>{p.value}</strong>
         </p>
       ))}
@@ -114,354 +158,408 @@ function ChartTooltip({ active, payload, label }) {
   );
 }
 
-// ─── Card shell ───────────────────────────────────────────────────────────────
-function Card({ children, style = {} }) {
+// Label sobre cada punto del gráfico de línea (omite ceros)
+const LineValueLabel = ({ x, y, value }) => {
+  if (!value) return null;
+  return (
+    <text x={x} y={y - 10} textAnchor="middle"
+      fill="#059669" fontSize={12} fontWeight="700"
+      fontFamily="Inter, system-ui, sans-serif">
+      {value}
+    </text>
+  );
+};
+
+// Label de total sobre la barra apilada completa
+const BarTotalLabel = ({ x, y, width, value }) => {
+  if (!value) return null;
+  return (
+    <text x={x + width / 2} y={y - 6} textAnchor="middle"
+      fill="#334155" fontSize={12} fontWeight="700"
+      fontFamily="Inter, system-ui, sans-serif">
+      {value}
+    </text>
+  );
+};
+
+// Label dentro de cada segmento de barra (solo si el segmento es suficientemente alto)
+const SegmentLabel = ({ x, y, width, height, value }) => {
+  if (!value || height < 18) return null;
+  return (
+    <text x={x + width / 2} y={y + height / 2} textAnchor="middle" dominantBaseline="central"
+      fill="white" fontSize={11} fontWeight="700"
+      fontFamily="Inter, system-ui, sans-serif">
+      {value}
+    </text>
+  );
+};
+
+function AvatarCell({ name, src, size = 30 }) {
+  if (src && typeof src === 'string' && src.startsWith('http')) {
+    return <img src={src} alt={name} style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />;
+  }
+  const init = (name || '?').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
+  const pal = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#f97316'];
+  const bg = pal[(name || '').charCodeAt(0) % pal.length];
   return (
     <div style={{
-      background: C.white,
-      border: `1px solid ${C.slate200}`,
-      borderRadius: 16,
-      boxShadow: '0 1px 4px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.03)',
-      overflow: 'hidden',
-      ...style,
+      width: size, height: size, borderRadius: '50%', background: bg, flexShrink: 0,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontSize: size * 0.38, fontWeight: 700, color: 'white',
     }}>
-      {children}
+      {init}
     </div>
   );
 }
 
-function SectionHeader({ title, subtitle }) {
+// ─── KPI Status Card ─────────────────────────────────────────────────────────
+function KpiStatusCard({ sublabel, total, cats, catValues }) {
+  const totalCats = Object.values(catValues).reduce((a, b) => a + b, 0);
+
   return (
-    <div style={{ padding: '18px 22px 0' }}>
-      <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: C.slate400, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-        {subtitle}
-      </p>
-      <h3 style={{ margin: '2px 0 0', fontSize: 15, fontWeight: 700, color: C.slate900 }}>
-        {title}
-      </h3>
-    </div>
+    <Card style={{ padding: '18px 20px' }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: C.slate400, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>
+        {sublabel}
+      </div>
+      <div style={{ fontSize: 34, fontWeight: 800, color: C.slate900, lineHeight: 1, marginBottom: 10 }}>
+        {total}
+      </div>
+
+      {/* Stacked color bar */}
+      {totalCats > 0 && (
+        <div style={{ display: 'flex', height: 5, borderRadius: 4, overflow: 'hidden', gap: 1, marginBottom: 14 }}>
+          {Object.entries(cats).map(([k, cat]) => {
+            const v = catValues[k] || 0;
+            const share = (v / totalCats) * 100;
+            return share > 0 ? (
+              <div key={k} style={{ flex: share, background: cat.color, minWidth: 2 }} />
+            ) : null;
+          })}
+        </div>
+      )}
+
+      {/* Breakdown */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+        {Object.entries(cats).map(([k, cat]) => (
+          <div key={k} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: cat.color, flexShrink: 0, display: 'inline-block' }} />
+              <span style={{ fontSize: 12, color: C.slate500 }}>{cat.label}</span>
+            </div>
+            <span style={{ fontSize: 12, fontWeight: 700, color: C.slate700 }}>{catValues[k] || 0}</span>
+          </div>
+        ))}
+      </div>
+    </Card>
   );
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-const daysSince = (date) => {
-  if (!date) return null;
-  return Math.floor((Date.now() - new Date(date).getTime()) / 86_400_000);
-};
+// ─── Completion Rate Card ─────────────────────────────────────────────────────
+function CompletionRateCard({ rate, completed, total }) {
+  const clamp = Math.min(100, Math.max(0, rate || 0));
+  const color = clamp >= 70 ? C.green : clamp >= 50 ? C.amber : C.red;
+  const r = 38;
+  const circ = 2 * Math.PI * r;
+  const dash = (clamp / 100) * circ;
 
-const pct = (a, b) => (b > 0 ? Math.round((a / b) * 100) : 0);
-
-const trend = (curr, prev) => {
-  if (prev === 0) return curr > 0 ? 100 : 0;
-  return Math.round(((curr - prev) / prev) * 100);
-};
-
-// Genera un array de "semanas" pasadas con recuentos de tareas completadas
-const buildSparkWeeks = (tasks, weeks = 8) => {
-  const now = Date.now();
-  return Array.from({ length: weeks }, (_, i) => {
-    const end = now - i * 7 * 86_400_000;
-    const start = end - 7 * 86_400_000;
-    return tasks.filter(t => {
-      if (t.status !== 'completed' && t.status !== 'done') return false;
-      const ts = t.updatedAt ? new Date(t.updatedAt).getTime() : 0;
-      return ts >= start && ts < end;
-    }).length;
-  }).reverse();
-};
+  return (
+    <Card style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: C.slate400, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12, alignSelf: 'flex-start' }}>
+        TASA DE COMPLETITUD
+      </div>
+      <svg width={96} height={96} viewBox="0 0 96 96">
+        <circle cx="48" cy="48" r={r} fill="none" stroke={C.slate100} strokeWidth="7" />
+        <circle cx="48" cy="48" r={r} fill="none" stroke={color}
+          strokeWidth="7" strokeDasharray={`${dash} ${circ}`}
+          strokeLinecap="round" transform="rotate(-90 48 48)" />
+        <text x="48" y="48" textAnchor="middle" dominantBaseline="central"
+          fontSize="16" fontWeight="800" fill={C.slate900}>{clamp}%</text>
+      </svg>
+      <div style={{ marginTop: 10, textAlign: 'center' }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: C.slate500 }}>
+          {completed} de {total} proyectos
+        </div>
+        <div style={{ fontSize: 10, color: C.slate400, marginTop: 2 }}>entregados</div>
+      </div>
+    </Card>
+  );
+}
 
 // ─── Data loader ──────────────────────────────────────────────────────────────
-async function loadAnalyticsData(environments) {
-  const allProjects = [];
-  const allTasks    = [];
-
-  await Promise.all(environments.map(async (env) => {
-    const projs = await dbProjects.getByEnvironment(env.id).catch(() => []);
-    const taskArrays = await Promise.all(
-      projs.map(p => dbTasks.getByProject(p.id).catch(() => []))
-    );
-    allProjects.push(...projs);
-    allTasks.push(...taskArrays.flat());
-  }));
-
-  return { allProjects, allTasks };
+async function loadAnalyticsData(envList) {
+  const [users, ...envData] = await Promise.all([
+    dbUsers.getAll().catch(() => []),
+    ...envList.map(async (env) => {
+      const projs = await dbProjects.getByEnvironment(env.id).catch(() => []);
+      const taskArrays = await Promise.all(
+        projs.map(p => dbTasks.getByProject(p.id).catch(() => []))
+      );
+      return { projs, tasks: taskArrays.flat() };
+    }),
+  ]);
+  return {
+    allProjects: envData.flatMap(d => d.projs),
+    allTasks:    envData.flatMap(d => d.tasks),
+    users,
+  };
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function AnalyticsGeneralView() {
   const { environments } = useApp();
 
-  const [rangeId, setRangeId] = useState('30d');
-  const [showRangeMenu, setShowRangeMenu] = useState(false);
+  const def = { startDate: firstOfYear(), endDate: todayStr() };
+  const [filters,       setFilters]      = useState(def);
+  const [applied,       setApplied]      = useState(def);
   const [selectedEnvId, setSelectedEnvId] = useState('all');
-  const [showEnvMenu, setShowEnvMenu] = useState(false);
-  const [raw, setRaw] = useState({ allProjects: [], allTasks: [] });
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [showEnvMenu,   setShowEnvMenu]  = useState(false);
+  const [raw,           setRaw]          = useState({ allProjects: [], allTasks: [], users: [] });
+  const [loading,       setLoading]      = useState(true);
+  const [error,         setError]        = useState(null);
 
-  const range = RANGES.find(r => r.id === rangeId) || RANGES[0];
-  const selectedEnv = environments.find(e => e.id === selectedEnvId) || null;
+  const setF = (k, v) => setFilters(f => ({ ...f, [k]: v }));
 
-  // Cargar datos al cambiar entorno o lista de entornos
-  useEffect(() => {
+  const doLoad = useCallback(async () => {
     const envsToLoad = selectedEnvId === 'all'
       ? environments
       : environments.filter(e => e.id === selectedEnvId);
     if (!envsToLoad.length) { setLoading(false); return; }
-    setLoading(true);
-    loadAnalyticsData(envsToLoad)
-      .then(data => { setRaw(data); setError(null); })
-      .catch(e => setError(e.message || 'Error'))
-      .finally(() => setLoading(false));
+    setLoading(true); setError(null);
+    try {
+      const data = await loadAnalyticsData(envsToLoad);
+      setRaw(data);
+    } catch (e) {
+      setError(e.message || 'Error cargando datos');
+    } finally {
+      setLoading(false);
+    }
   }, [environments, selectedEnvId]);
 
-  // ── Métricas derivadas ────────────────────────────────────────────────────
+  useEffect(() => { doLoad(); }, [doLoad]);
+
+  // ── Computed metrics ───────────────────────────────────────────────────────
   const metrics = useMemo(() => {
-    const { allProjects, allTasks } = raw;
-    const now = Date.now();
-    const ms  = range.days * 86_400_000;
-    const cutCurr = now - ms;
-    const cutPrev = cutCurr - ms;
+    const { allProjects, allTasks, users } = raw;
+    const from = applied.startDate;
+    const to   = applied.endDate;
 
-    const inPeriod = (t, from, to) => {
-      const ts = new Date(t.createdAt || t.updatedAt || 0).getTime();
-      return ts >= from && ts < to;
-    };
+    const userMap = {};
+    (users || []).forEach(u => { userMap[String(u.id)] = u; });
 
-    const currTasks = allTasks.filter(t => inPeriod(t, cutCurr, now));
-    const prevTasks = allTasks.filter(t => inPeriod(t, cutPrev, cutCurr));
+    // ── Projects ──
+    const filteredProjects = allProjects.filter(p => {
+      if (['cancelled', 'archived'].includes(p.status)) return false;
+      return projectInRange(p, from, to);
+    });
 
-    const currCompleted = currTasks.filter(t => t.status === 'completed' || t.status === 'done').length;
-    const prevCompleted = prevTasks.filter(t => t.status === 'completed' || t.status === 'done').length;
+    const projCatValues = { completed: 0, in_progress: 0, backlog: 0, pending: 0 };
+    filteredProjects.forEach(p => {
+      const cat = getProjectCat(p.status);
+      if (cat) projCatValues[cat]++;
+    });
+    const totalProjects    = filteredProjects.length;
+    const completedProjects = projCatValues.completed;
+    const completionRate   = totalProjects > 0
+      ? Math.round((completedProjects / totalProjects) * 100) : 0;
 
-    const today = new Date().toISOString().split('T')[0];
-    const overdueCurr = currTasks.filter(t => t.endDate && t.endDate < today && t.status !== 'completed' && t.status !== 'done').length;
-    const overduePrev = prevTasks.filter(t => t.endDate && t.endDate < today && t.status !== 'completed' && t.status !== 'done').length;
+    // ── Milestones (roadmap.phases) ──
+    const allPhases = filteredProjects.flatMap(p => p.roadmap?.phases || []);
+    const phaseCatValues = { completed: 0, in_progress: 0, backlog: 0, pending: 0 };
+    allPhases.forEach(ph => {
+      const cat = getProjectCat(ph.status || 'pending');
+      if (cat) phaseCatValues[cat]++;
+    });
 
-    // Lead time: días entre startDate y updatedAt para tareas completadas en el período
-    const closedWithDates = currTasks.filter(t =>
-      (t.status === 'completed' || t.status === 'done') &&
-      t.startDate && t.updatedAt
-    );
-    const leadTimes = closedWithDates.map(t =>
-      Math.max(0, Math.floor((new Date(t.updatedAt) - new Date(t.startDate)) / 86_400_000))
-    );
-    const avgLeadTime = leadTimes.length
-      ? Math.round(leadTimes.reduce((a, b) => a + b, 0) / leadTimes.length)
-      : null;
+    // ── Tasks ──
+    const projSet = new Set(filteredProjects.map(p => p.id));
+    const filteredTasks = allTasks.filter(t => projSet.has(t.projectId));
 
-    // Distribución por prioridad (en el período)
-    const priorityDist = ['urgent', 'high', 'medium', 'low'].map(p => ({
-      name: PRIORITY_CFG[p]?.label ?? p,
-      value: currTasks.filter(t => t.priority === p).length,
-      color: PRIORITY_CFG[p]?.color ?? '#94a3b8',
-    })).filter(d => d.value > 0);
+    const taskCatValues = { completed: 0, in_progress: 0, backlog: 0, pending: 0 };
+    filteredTasks.forEach(t => {
+      const cat = getTaskCat(t.status);
+      if (cat) taskCatValues[cat]++;
+    });
 
-    // Distribución por estado (en el período)
-    const statusDist = [
-      { key: 'completed', label: 'Completado', color: '#059669' },
-      { key: 'in_progress', label: 'En curso',  color: '#2563eb' },
-      { key: 'pending',    label: 'Pendiente', color: '#eab308' },
-      { key: 'blocked',   label: 'Bloqueado', color: '#dc2626' },
-    ].map(s => ({
-      ...s,
-      value: currTasks.filter(t => t.status === s.key || (s.key === 'completed' && t.status === 'done')).length,
-    })).filter(d => d.value > 0);
+    // ── Projects over time (line chart) ──
+    const monthlyCompleted = {};
+    filteredProjects
+      .filter(p => p.status === 'completed' && p.endDate)
+      .forEach(p => {
+        const k = p.endDate.slice(0, 7);
+        monthlyCompleted[k] = (monthlyCompleted[k] || 0) + 1;
+      });
 
-    // Sparklines: adaptar semanas al rango seleccionado
-    const numWeeks = Math.min(Math.ceil(range.days / 7), 13);
-    const sparkCompleted = buildSparkWeeks(allTasks, numWeeks);
-    const sparkOverdue   = buildSparkWeeks(
-      allTasks.filter(t => t.endDate && t.endDate < today), numWeeks
-    );
+    const months = monthsBetween(from, to);
+    const projectsOverTime = months.map(k => ({
+      label: `${MONTH_NAMES[parseInt(k.slice(5)) - 1]} ${k.slice(2, 4)}`,
+      entregados: monthlyCompleted[k] || 0,
+    }));
 
-    // Proyectos activos
-    const activeProjects = allProjects.filter(p =>
-      ['active', 'in_progress', 'pending', 'backlog'].includes(p.status)
-    );
-    const prevActiveProjects = allProjects.filter(p =>
-      ['active', 'in_progress', 'pending', 'backlog'].includes(p.status)
-    ); // sin datos históricos → mismos
+    // ── By area (stacked bar) ──
+    const envProjectMap = {};
+    filteredProjects.forEach(p => {
+      const eid = p.environmentId || '__none__';
+      if (!envProjectMap[eid]) envProjectMap[eid] = { completed: 0, in_progress: 0, backlog: 0, pending: 0 };
+      const cat = getProjectCat(p.status);
+      if (cat) envProjectMap[eid][cat]++;
+    });
 
-    // Lead time por proyecto (top 6, tareas del período)
-    const leadByProject = allProjects
-      .map(p => {
-        const pTasks = closedWithDates.filter(t => t.projectId === p.id);
-        if (!pTasks.length) return null;
-        const avg = Math.round(
-          pTasks.map(t => Math.max(0, Math.floor((new Date(t.updatedAt) - new Date(t.startDate)) / 86_400_000)))
-            .reduce((a, b) => a + b, 0) / pTasks.length
-        );
-        return { name: p.name.length > 20 ? p.name.slice(0, 18) + '…' : p.name, days: avg, color: p.color || C.blue };
+    const byArea = Object.entries(envProjectMap).map(([eid, vals]) => {
+      const env = environments.find(e => e.id === eid);
+      const total = vals.completed + vals.in_progress + vals.backlog + vals.pending;
+      return {
+        label: env
+          ? (env.name.length > 14 ? env.name.slice(0, 12) + '…' : env.name)
+          : 'Sin equipo',
+        color: env?.color || C.gray,
+        total, ...vals,
+      };
+    }).sort((a, b) => b.total - a.total);
+
+    // ── Workload per person ──
+    const personMap = {};
+    filteredTasks.forEach(t => {
+      if (!t.assigneeId) return;
+      const uid = String(t.assigneeId);
+      if (!personMap[uid]) personMap[uid] = { completed: 0, in_progress: 0, pending: 0, total: 0 };
+      personMap[uid].total++;
+      const cat = getTaskCat(t.status);
+      if (cat === 'completed')   personMap[uid].completed++;
+      else if (cat === 'in_progress') personMap[uid].in_progress++;
+      else                            personMap[uid].pending++;
+    });
+
+    const workload = Object.entries(personMap)
+      .map(([uid, data]) => {
+        const u = userMap[uid];
+        return { uid, name: u?.name || 'Usuario', avatar: u?.avatar || null, ...data };
       })
-      .filter(Boolean)
-      .sort((a, b) => b.days - a.days)
-      .slice(0, 6);
+      .filter(p => p.total > 0)
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 8);
 
-    // Riesgos (tareas del período)
-    const risks = allProjects
+    // ── Priority distribution ──
+    const priorityDist = ['urgent', 'high', 'medium', 'low']
+      .map(pri => ({
+        name:  PRIORITY_CFG[pri].label,
+        value: filteredTasks.filter(t => t.priority === pri).length,
+        color: PRIORITY_CFG[pri].color,
+      }))
+      .filter(d => d.value > 0);
+
+    // ── Risks ──
+    const todayS = todayStr();
+    const risks = filteredProjects
       .map(p => {
-        const pTasks = currTasks.filter(t => t.projectId === p.id);
+        const pTasks = filteredTasks.filter(t => t.projectId === p.id);
         if (!pTasks.length) return null;
-
         const overdue = pTasks.filter(t =>
-          t.endDate && t.endDate < today && t.status !== 'completed' && t.status !== 'done'
+          t.endDate && t.endDate.slice(0, 10) < todayS && t.status !== 'completed'
         ).length;
         const blocked = pTasks.filter(t => t.status === 'blocked').length;
-        const totalActive = pTasks.filter(t => t.status !== 'completed' && t.status !== 'done').length;
-        const completionRate = pct(pTasks.filter(t => t.status === 'completed' || t.status === 'done').length, pTasks.length);
-
-        const severity =
-          overdue > 5 || blocked > 3 ? 'high'
-          : overdue > 2 || blocked > 1 ? 'medium'
-          : overdue > 0 || blocked > 0 ? 'low'
-          : null;
-
-        if (!severity) return null;
-        return { id: p.id, name: p.name, color: p.color, severity, overdue, blocked, totalActive, completionRate };
+        if (overdue === 0 && blocked === 0) return null;
+        const compRate = Math.round(
+          pTasks.filter(t => t.status === 'completed').length / pTasks.length * 100
+        );
+        const severity = overdue > 5 || blocked > 3 ? 'high'
+          : overdue > 2  || blocked > 1 ? 'medium' : 'low';
+        return { id: p.id, name: p.name, color: p.color, severity, overdue, blocked, completionRate: compRate };
       })
       .filter(Boolean)
-      .sort((a, b) => {
-        const ord = { high: 0, medium: 1, low: 2 };
-        return ord[a.severity] - ord[b.severity];
-      })
+      .sort((a, b) => ({ high: 0, medium: 1, low: 2 }[a.severity] - { high: 0, medium: 1, low: 2 }[b.severity]))
       .slice(0, 6);
 
-    return {
-      // KPIs
-      totalProjects:    allProjects.length,
-      activeProjects:   activeProjects.length,
-      totalTasks:       allTasks.length,
-      currTasksTotal:   currTasks.length,
-      completedTasks:   allTasks.filter(t => t.status === 'completed' || t.status === 'done').length,
-      overdueTotal:     overdueCurr,
-      currCompleted, prevCompleted,
-      overdueCurr, overduePrev,
-      completionRate:   pct(currCompleted, currTasks.length || 1),
-      prevRate:         pct(prevCompleted, prevTasks.length || 1),
-      avgLeadTime,
-      // Charts
-      priorityDist,
-      statusDist,
-      leadByProject,
-      sparkCompleted,
-      sparkOverdue,
-      // Risks
-      risks,
-    };
-  }, [raw, range]);
+    const riskEnvIds = new Set(
+      risks
+        .map(r => filteredProjects.find(p => p.id === r.id)?.environmentId)
+        .filter(Boolean)
+    );
+    const teamsAtRisk = riskEnvIds.size;
 
-  // ── Render ────────────────────────────────────────────────────────────────
+    return {
+      totalProjects, completedProjects, completionRate,
+      projCatValues, phaseCatValues, totalPhases: allPhases.length,
+      taskCatValues, totalTasks: filteredTasks.length,
+      projectsOverTime, byArea, workload,
+      priorityDist, risks, teamsAtRisk,
+    };
+  }, [raw, applied, environments]);
+
+  // ── Render helpers ─────────────────────────────────────────────────────────
+  const selectedEnv  = environments.find(e => e.id === selectedEnvId);
+  const visibleEnvs  = selectedEnvId === 'all' ? environments : environments.filter(e => e.id === selectedEnvId);
+
   if (loading) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 300, gap: 12, color: C.slate500 }}>
-        <div style={{
-          width: 24, height: 24, border: `2px solid ${C.slate200}`, borderTopColor: C.blue,
-          borderRadius: '50%', animation: 'spin .8s linear infinite',
-        }} />
+        <div style={{ width: 22, height: 22, border: `2px solid ${C.slate200}`, borderTopColor: C.blue, borderRadius: '50%', animation: 'spin .8s linear infinite' }} />
         <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
         Cargando analítica…
       </div>
     );
   }
+
   if (error) {
     return (
-      <div style={{ padding: '16px 20px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 12, color: C.red, fontSize: 13 }}>
+      <div style={{ padding: '16px 20px', background: C.redLight, border: '1px solid #fecaca', borderRadius: 12, color: C.red, fontSize: 13 }}>
         {error}
       </div>
     );
   }
 
-  const trendCompleted = trend(metrics.currCompleted, metrics.prevCompleted);
-  const trendOverdue   = trend(metrics.overdueCurr, metrics.overduePrev);
-  const trendRate      = metrics.completionRate - metrics.prevRate;
-
-  const SEVERITY = {
-    high:   { label: 'Alto riesgo',  bg: '#fef2f2', border: '#fecaca', dot: '#dc2626', text: C.red },
-    medium: { label: 'Riesgo medio', bg: '#fffbeb', border: '#fde68a', dot: '#d97706', text: '#92400e' },
-    low:    { label: 'Bajo riesgo',  bg: '#f0fdf4', border: '#bbf7d0', dot: '#059669', text: '#065f46' },
-  };
-
   return (
     <div style={{ fontFamily: 'Inter, system-ui, sans-serif', color: C.slate900 }}>
 
-      {/* ── TOOLBAR ──────────────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, gap: 12, flexWrap: 'wrap' }}>
+      {/* ── TOOLBAR ─────────────────────────────────────────────────────────── */}
+      <div style={{
+        display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap',
+        background: 'white', padding: '14px 16px', borderRadius: 12,
+        border: '1px solid #e2e8f0', marginBottom: 20,
+        boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+      }}>
 
-        {/* Selector de equipo */}
+        {/* Team selector */}
         <div style={{ position: 'relative' }}>
           <button
-            onClick={() => { setShowEnvMenu(v => !v); setShowRangeMenu(false); }}
+            onClick={() => setShowEnvMenu(v => !v)}
             style={{
               display: 'flex', alignItems: 'center', gap: 8,
-              padding: '8px 14px', background: selectedEnvId !== 'all' ? C.blueLight : C.white,
-              border: `1px solid ${selectedEnvId !== 'all' ? C.blueMid : C.slate200}`, borderRadius: 10,
-              cursor: 'pointer', fontSize: 13, fontWeight: 600,
+              padding: '7px 12px', fontFamily: 'inherit', cursor: 'pointer',
+              background: selectedEnvId !== 'all' ? C.blueLight : 'white',
+              border: `1px solid ${selectedEnvId !== 'all' ? C.blueMid : '#e2e8f0'}`,
+              borderRadius: 8, fontSize: 12, fontWeight: 600,
               color: selectedEnvId !== 'all' ? C.blue : C.slate700,
-              boxShadow: '0 1px 3px rgba(0,0,0,0.06)', transition: 'all .15s',
             }}
           >
-            <span style={{ fontSize: 15 }}>
-              {selectedEnv ? (selectedEnv.icon || '📊') : '🌐'}
-            </span>
-            <span style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {selectedEnv ? selectedEnv.name : 'Todos los equipos'}
-            </span>
-            <ChevronDown size={13} color={selectedEnvId !== 'all' ? C.blue : C.slate400}
-              style={{ transform: showEnvMenu ? 'rotate(180deg)' : 'none', transition: '.2s', flexShrink: 0 }} />
+            <span style={{ fontSize: 14 }}>{selectedEnv ? (selectedEnv.icon || '📊') : '🌐'}</span>
+            {selectedEnv ? selectedEnv.name : 'Todos los equipos'}
+            <ChevronDown size={12} color={C.slate400} style={{ transform: showEnvMenu ? 'rotate(180deg)' : 'none', transition: '.2s', flexShrink: 0 }} />
           </button>
+
           {showEnvMenu && (
             <>
               <div style={{ position: 'fixed', inset: 0, zIndex: 89 }} onClick={() => setShowEnvMenu(false)} />
               <div style={{
-                position: 'absolute', top: 'calc(100% + 6px)', left: 0,
+                position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 90,
                 background: C.white, border: `1px solid ${C.slate200}`,
                 borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
-                padding: 6, minWidth: 220, maxHeight: 280, overflowY: 'auto', zIndex: 90,
+                padding: 6, minWidth: 220, maxHeight: 280, overflowY: 'auto',
               }}>
-                {/* Opción "Todos" */}
                 <button
                   onClick={() => { setSelectedEnvId('all'); setShowEnvMenu(false); }}
-                  style={{
-                    width: '100%', textAlign: 'left', padding: '9px 12px',
-                    border: 'none', borderRadius: 8, cursor: 'pointer',
-                    fontSize: 13, fontWeight: selectedEnvId === 'all' ? 700 : 500,
-                    background: selectedEnvId === 'all' ? C.blueLight : 'none',
-                    color: selectedEnvId === 'all' ? C.blue : C.slate700,
-                    display: 'flex', alignItems: 'center', gap: 8,
-                  }}
-                  onMouseEnter={e => { if (selectedEnvId !== 'all') e.currentTarget.style.background = C.slate50; }}
-                  onMouseLeave={e => { if (selectedEnvId !== 'all') e.currentTarget.style.background = 'none'; }}
+                  style={{ width: '100%', textAlign: 'left', padding: '9px 12px', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontFamily: 'inherit', fontWeight: selectedEnvId === 'all' ? 700 : 500, background: selectedEnvId === 'all' ? C.blueLight : 'none', color: selectedEnvId === 'all' ? C.blue : C.slate700, display: 'flex', alignItems: 'center', gap: 8 }}
                 >
-                  <span>🌐</span>
-                  Todos los equipos
+                  <span>🌐</span> Todos los equipos
                 </button>
-                {/* Separador */}
-                {environments.length > 0 && (
-                  <div style={{ height: 1, background: C.slate100, margin: '4px 0' }} />
-                )}
+                {environments.length > 0 && <div style={{ height: 1, background: C.slate100, margin: '4px 0' }} />}
                 {environments.map(env => (
                   <button
                     key={env.id}
                     onClick={() => { setSelectedEnvId(env.id); setShowEnvMenu(false); }}
-                    style={{
-                      width: '100%', textAlign: 'left', padding: '9px 12px',
-                      border: 'none', borderRadius: 8, cursor: 'pointer',
-                      fontSize: 13, fontWeight: selectedEnvId === env.id ? 700 : 500,
-                      background: selectedEnvId === env.id ? C.blueLight : 'none',
-                      color: selectedEnvId === env.id ? C.blue : C.slate700,
-                      display: 'flex', alignItems: 'center', gap: 8,
-                    }}
-                    onMouseEnter={e => { if (selectedEnvId !== env.id) e.currentTarget.style.background = C.slate50; }}
-                    onMouseLeave={e => { if (selectedEnvId !== env.id) e.currentTarget.style.background = 'none'; }}
+                    style={{ width: '100%', textAlign: 'left', padding: '9px 12px', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontFamily: 'inherit', fontWeight: selectedEnvId === env.id ? 700 : 500, background: selectedEnvId === env.id ? C.blueLight : 'none', color: selectedEnvId === env.id ? C.blue : C.slate700, display: 'flex', alignItems: 'center', gap: 8 }}
                   >
-                    <span style={{
-                      width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
-                      background: env.color || C.blue, display: 'inline-block',
-                    }} />
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {env.name}
-                    </span>
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: env.color || C.blue, display: 'inline-block', flexShrink: 0 }} />
+                    {env.name}
                   </button>
                 ))}
               </div>
@@ -469,196 +567,245 @@ export default function AnalyticsGeneralView() {
           )}
         </div>
 
-        {/* Selector de rango de fecha */}
-        <div style={{ position: 'relative' }}>
-          <button
-            onClick={() => { setShowRangeMenu(v => !v); setShowEnvMenu(false); }}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 8,
-              padding: '8px 14px', background: C.white,
-              border: `1px solid ${C.slate200}`, borderRadius: 10,
-              cursor: 'pointer', fontSize: 13, fontWeight: 600, color: C.slate700,
-              boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-            }}
-          >
-            <Calendar size={14} color={C.blue} />
-            {range.label}
-            <ChevronDown size={13} color={C.slate400} style={{ transform: showRangeMenu ? 'rotate(180deg)' : 'none', transition: '.2s' }} />
+        {/* Date range */}
+        <FF label="Ini.">
+          <input type="date" value={filters.startDate} onChange={e => setF('startDate', e.target.value)} style={SEL} />
+        </FF>
+        <FF label="Fin">
+          <input type="date" value={filters.endDate} onChange={e => setF('endDate', e.target.value)} style={SEL} />
+        </FF>
+
+        <div style={{ display: 'flex', gap: 6, alignSelf: 'flex-end' }}>
+          <button onClick={() => setApplied({ ...filters })} style={{ ...BTN, background: '#1e293b', color: 'white' }}>
+            <Filter size={13} /> Filtrar
           </button>
-          {showRangeMenu && (
-            <>
-              <div style={{ position: 'fixed', inset: 0, zIndex: 89 }} onClick={() => setShowRangeMenu(false)} />
-              <div style={{
-                position: 'absolute', top: 'calc(100% + 6px)', right: 0,
-                background: C.white, border: `1px solid ${C.slate200}`,
-                borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,0.1)',
-                padding: 6, minWidth: 190, zIndex: 90,
-              }}>
-                {RANGES.map(r => (
-                  <button
-                    key={r.id}
-                    onClick={() => { setRangeId(r.id); setShowRangeMenu(false); }}
-                    style={{
-                      width: '100%', textAlign: 'left', padding: '9px 12px',
-                      border: 'none', borderRadius: 8, cursor: 'pointer',
-                      fontSize: 13, fontWeight: rangeId === r.id ? 700 : 500,
-                      background: rangeId === r.id ? C.blueLight : 'none',
-                      color: rangeId === r.id ? C.blue : C.slate700,
-                    }}
-                    onMouseEnter={e => { if (rangeId !== r.id) e.currentTarget.style.background = C.slate50; }}
-                    onMouseLeave={e => { if (rangeId !== r.id) e.currentTarget.style.background = 'none'; }}
-                  >
-                    {r.label}
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
+          <button onClick={() => { setFilters(def); setApplied(def); }} style={{ ...BTN, background: C.slate100, color: C.slate500 }}>
+            <X size={13} /> Limpiar
+          </button>
+          <button onClick={doLoad} style={{ ...BTN, background: C.slate100, color: C.slate500 }}>
+            <RefreshCw size={13} /> Actualizar
+          </button>
         </div>
       </div>
 
-      {/* ── KPI CARDS ────────────────────────────────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 24 }}>
-
-        {/* Proyectos activos */}
-        <Card>
-          <div style={{ padding: '20px 22px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <div style={{ width: 40, height: 40, borderRadius: 10, background: C.blueLight, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Briefcase size={18} color={C.blue} />
-              </div>
-              <Sparkline data={[3,4,4,5,metrics.activeProjects-1,metrics.activeProjects]} color={C.blue} />
-            </div>
-            <div style={{ marginTop: 16 }}>
-              <div style={{ fontSize: 30, fontWeight: 800, color: C.slate900, lineHeight: 1 }}>
-                {metrics.activeProjects}
-              </div>
-              <div style={{ fontSize: 12, fontWeight: 600, color: C.slate500, marginTop: 4 }}>
-                Proyectos activos
-              </div>
-              <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ fontSize: 11, color: C.slate400 }}>de {metrics.totalProjects} totales</span>
-              </div>
-            </div>
+      {/* ── OVERVIEW STRIP ──────────────────────────────────────────────────── */}
+      <div style={{
+        background: 'white', border: '1px solid #e2e8f0', borderRadius: 12,
+        padding: '14px 20px', marginBottom: 20,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        flexWrap: 'wrap', gap: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{
+              width: 10, height: 10, borderRadius: '50%', display: 'inline-block',
+              background: metrics.teamsAtRisk > 0 ? '#f59e0b' : '#10b981',
+            }} />
+            <span style={{ fontWeight: 700, fontSize: 14, color: C.slate900 }}>
+              {selectedEnv ? selectedEnv.name : 'Todos los equipos'}
+            </span>
           </div>
-        </Card>
-
-        {/* Tareas completadas */}
-        <Card>
-          <div style={{ padding: '20px 22px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <div style={{ width: 40, height: 40, borderRadius: 10, background: '#f0fdf4', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <CheckCircle2 size={18} color={C.emerald} />
-              </div>
-              <Sparkline data={metrics.sparkCompleted} color={C.emerald} />
-            </div>
-            <div style={{ marginTop: 16 }}>
-              <div style={{ fontSize: 30, fontWeight: 800, color: C.slate900, lineHeight: 1 }}>
-                {metrics.currCompleted}
-              </div>
-              <div style={{ fontSize: 12, fontWeight: 600, color: C.slate500, marginTop: 4 }}>
-                Completadas en el período
-              </div>
-              <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-                <TrendBadge value={trendCompleted} />
-                <span style={{ fontSize: 11, color: C.slate400 }}>vs período anterior</span>
-              </div>
-            </div>
+          {metrics.teamsAtRisk > 0 && (
+            <span style={{ fontSize: 12, color: '#92400e', background: '#fef3c7', padding: '3px 10px', borderRadius: 99, fontWeight: 600 }}>
+              {metrics.teamsAtRisk} equipo{metrics.teamsAtRisk > 1 ? 's' : ''} requiere{metrics.teamsAtRisk === 1 ? '' : 'n'} atención
+            </span>
+          )}
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            {visibleEnvs.map(env => (
+              <span key={env.id} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: C.slate500 }}>
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: env.color || C.blue, display: 'inline-block' }} />
+                {env.name}
+              </span>
+            ))}
           </div>
-        </Card>
-
-        {/* Tasa de completitud */}
-        <Card>
-          <div style={{ padding: '20px 22px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <div style={{ width: 40, height: 40, borderRadius: 10, background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Target size={18} color={C.blue} />
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
-                {/* mini donut estático */}
-                <svg width={32} height={32} viewBox="0 0 32 32">
-                  <circle cx="16" cy="16" r="12" fill="none" stroke={C.slate100} strokeWidth="4" />
-                  <circle cx="16" cy="16" r="12" fill="none" stroke={C.blue}
-                    strokeWidth="4" strokeDasharray={`${(metrics.completionRate / 100) * 75.4} 75.4`}
-                    strokeLinecap="round" transform="rotate(-90 16 16)" />
-                </svg>
-              </div>
-            </div>
-            <div style={{ marginTop: 16 }}>
-              <div style={{ fontSize: 30, fontWeight: 800, color: C.slate900, lineHeight: 1 }}>
-                {metrics.completionRate}<span style={{ fontSize: 18, fontWeight: 600, color: C.slate400 }}>%</span>
-              </div>
-              <div style={{ fontSize: 12, fontWeight: 600, color: C.slate500, marginTop: 4 }}>
-                Tasa de completitud
-              </div>
-              <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-                <TrendBadge value={trendRate} />
-                <span style={{ fontSize: 11, color: C.slate400 }}>vs período anterior</span>
-              </div>
-            </div>
-          </div>
-        </Card>
-
-        {/* Tareas vencidas */}
-        <Card>
-          <div style={{ padding: '20px 22px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <div style={{ width: 40, height: 40, borderRadius: 10, background: C.redLight, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <AlertTriangle size={18} color={C.red} />
-              </div>
-              <Sparkline data={metrics.sparkOverdue} color={C.red} />
-            </div>
-            <div style={{ marginTop: 16 }}>
-              <div style={{ fontSize: 30, fontWeight: 800, color: C.slate900, lineHeight: 1 }}>
-                {metrics.overdueTotal}
-              </div>
-              <div style={{ fontSize: 12, fontWeight: 600, color: C.slate500, marginTop: 4 }}>
-                Tareas vencidas
-              </div>
-              <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-                <TrendBadge value={trendOverdue} inverse />
-                <span style={{ fontSize: 11, color: C.slate400 }}>vs período anterior</span>
-              </div>
-            </div>
-          </div>
-        </Card>
-
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <span style={{
+            fontSize: 24, fontWeight: 800,
+            color: metrics.completionRate >= 70 ? '#059669' : metrics.completionRate >= 50 ? '#d97706' : '#dc2626',
+          }}>
+            {metrics.completionRate}%
+          </span>
+          <span style={{ fontSize: 12, fontWeight: 500, color: C.slate400, marginLeft: 6 }}>tasa de completitud</span>
+        </div>
       </div>
 
-      {/* ── FILA CENTRAL ─────────────────────────────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 24 }}>
+      {/* ── KPI CARDS ───────────────────────────────────────────────────────── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 20 }}>
+        <KpiStatusCard
+          sublabel="PROYECTOS"
+          total={metrics.totalProjects}
+          cats={PROJ_CATS}
+          catValues={metrics.projCatValues}
+        />
+        <KpiStatusCard
+          sublabel="HITOS"
+          total={metrics.totalPhases}
+          cats={PROJ_CATS}
+          catValues={metrics.phaseCatValues}
+        />
+        <KpiStatusCard
+          sublabel="TAREAS"
+          total={metrics.totalTasks}
+          cats={TASK_CATS}
+          catValues={metrics.taskCatValues}
+        />
+        <CompletionRateCard
+          rate={metrics.completionRate}
+          completed={metrics.completedProjects}
+          total={metrics.totalProjects}
+        />
+      </div>
 
-        {/* Distribución por prioridad */}
+      {/* ── PROYECTOS EN EL TIEMPO + POR ÁREA ──────────────────────────────── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
+
+        {/* Proyectos entregados por mes — LINE CHART */}
         <Card>
-          <SectionHeader title="Distribución por prioridad" subtitle="Carga de trabajo" />
-          <div style={{ padding: '16px 22px 20px' }}>
+          <SectionLabel top="PROYECTOS EN EL TIEMPO" title="Proyectos entregados por mes" />
+          <div style={{ padding: '16px 20px 20px' }}>
+            {metrics.projectsOverTime.length === 0 || metrics.projectsOverTime.every(d => d.entregados === 0) ? (
+              <div style={{ textAlign: 'center', color: C.slate400, fontSize: 13, padding: '36px 0' }}>
+                Sin proyectos completados en el período
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={210}>
+                <LineChart data={metrics.projectsOverTime} margin={{ top: 26, right: 20, left: -10, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={C.slate100} vertical={false} />
+                  <XAxis dataKey="label" tick={{ fontSize: 10, fill: C.slate400 }} axisLine={false} tickLine={false} interval={metrics.projectsOverTime.length > 12 ? Math.floor(metrics.projectsOverTime.length / 10) : 0} />
+                  <YAxis tick={{ fontSize: 10, fill: C.slate400 }} axisLine={false} tickLine={false} allowDecimals={false} width={24} />
+                  <RechartTooltip content={<ChartTooltip />} />
+                  <Line
+                    type="monotone" dataKey="entregados" name="Entregados"
+                    stroke="#059669" strokeWidth={2.5}
+                    dot={{ r: 4, fill: '#059669', strokeWidth: 0 }}
+                    activeDot={{ r: 6, fill: '#059669' }}
+                    label={<LineValueLabel />}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </Card>
+
+        {/* Proyectos por equipo — STACKED BAR */}
+        <Card>
+          <SectionLabel top="POR ÁREA" title="Proyectos por equipo" />
+          <div style={{ padding: '16px 20px 20px' }}>
+            {metrics.byArea.length === 0 ? (
+              <div style={{ textAlign: 'center', color: C.slate400, fontSize: 13, padding: '36px 0' }}>Sin datos</div>
+            ) : (
+              <>
+                <ResponsiveContainer width="100%" height={190}>
+                  <BarChart data={metrics.byArea} margin={{ top: 26, right: 8, left: -10, bottom: 0 }} barSize={32}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={C.slate100} vertical={false} />
+                    <XAxis dataKey="label" tick={{ fontSize: 10, fill: C.slate400 }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 10, fill: C.slate400 }} axisLine={false} tickLine={false} allowDecimals={false} width={24} />
+                    <RechartTooltip content={<ChartTooltip />} />
+                    <Bar dataKey="completed"   name="Entregados" stackId="a" fill="#059669" radius={[0,0,0,0]}>
+                      <LabelList content={<SegmentLabel />} dataKey="completed" />
+                    </Bar>
+                    <Bar dataKey="in_progress" name="En curso"   stackId="a" fill="#2563eb" radius={[0,0,0,0]}>
+                      <LabelList content={<SegmentLabel />} dataKey="in_progress" />
+                    </Bar>
+                    <Bar dataKey="backlog"     name="Backlog"    stackId="a" fill="#94a3b8" radius={[0,0,0,0]}>
+                      <LabelList content={<SegmentLabel />} dataKey="backlog" />
+                    </Bar>
+                    <Bar dataKey="pending"     name="Pendientes" stackId="a" fill="#d97706" radius={[4,4,0,0]}>
+                      <LabelList content={<SegmentLabel />} dataKey="pending" />
+                      <LabelList content={<BarTotalLabel />} dataKey="total" />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+                {/* Legend */}
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 8 }}>
+                  {[
+                    { label: 'Entregados', color: '#059669' },
+                    { label: 'En curso',   color: '#2563eb' },
+                    { label: 'Backlog',    color: '#94a3b8' },
+                    { label: 'Pendientes', color: '#d97706' },
+                  ].map(({ label, color }) => (
+                    <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: C.slate500 }}>
+                      <span style={{ width: 8, height: 8, background: color, borderRadius: 2, display: 'inline-block' }} />
+                      {label}
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </Card>
+      </div>
+
+      {/* ── CARGA DE TRABAJO ────────────────────────────────────────────────── */}
+      {metrics.workload.length > 0 && (
+        <Card style={{ marginBottom: 20 }}>
+          <SectionLabel top="CARGA DE TRABAJO" title="Tareas por persona" />
+          <div style={{
+            padding: '16px 20px 20px',
+            display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14,
+          }}>
+            {metrics.workload.map((p) => {
+              const pct = p.total > 0 ? Math.round((p.completed / p.total) * 100) : 0;
+              const barColor = pct >= 80 ? '#059669' : pct >= 50 ? '#2563eb' : '#d97706';
+              return (
+                <div key={p.uid} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <AvatarCell name={p.name} src={p.avatar} size={32} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: C.slate700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {p.name}
+                      </span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: C.slate900, flexShrink: 0, marginLeft: 8 }}>
+                        {p.completed}/{p.total}
+                      </span>
+                    </div>
+                    <div style={{ height: 5, background: C.slate100, borderRadius: 4, overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${pct}%`, background: barColor, borderRadius: 4, transition: 'width .4s' }} />
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, marginTop: 3 }}>
+                      <span style={{ fontSize: 10, color: '#059669' }}>✓ {p.completed}</span>
+                      <span style={{ fontSize: 10, color: '#2563eb' }}>⟳ {p.in_progress}</span>
+                      <span style={{ fontSize: 10, color: '#d97706' }}>○ {p.pending}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
+      {/* ── PRIORIDAD + RIESGOS ─────────────────────────────────────────────── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+
+        {/* Priority distribution */}
+        <Card>
+          <SectionLabel top="CARGA DE TRABAJO" title="Distribución por prioridad" />
+          <div style={{ padding: '16px 20px 20px' }}>
             {metrics.priorityDist.length === 0 ? (
               <div style={{ textAlign: 'center', color: C.slate400, fontSize: 13, padding: '32px 0' }}>Sin datos</div>
             ) : (
               <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
-                <div style={{ flex: '0 0 140px', height: 140 }}>
-                  <ResponsiveContainer width="100%" height={140}>
+                <div style={{ flex: '0 0 130px', height: 130 }}>
+                  <ResponsiveContainer width="100%" height={130}>
                     <PieChart>
                       <Pie
                         data={metrics.priorityDist}
                         cx="50%" cy="50%"
-                        innerRadius={42} outerRadius={62}
-                        paddingAngle={3}
-                        dataKey="value"
-                        strokeWidth={0}
+                        innerRadius={38} outerRadius={58}
+                        paddingAngle={3} dataKey="value" strokeWidth={0}
                       >
-                        {metrics.priorityDist.map((entry, i) => (
-                          <Cell key={i} fill={entry.color} />
-                        ))}
+                        {metrics.priorityDist.map((entry, i) => <Cell key={i} fill={entry.color} />)}
                       </Pie>
-                      <Tooltip content={<ChartTooltip />} />
+                      <RechartTooltip content={<ChartTooltip />} />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 9 }}>
                   {metrics.priorityDist.map((item, i) => {
-                    const total = metrics.priorityDist.reduce((a, b) => a + b.value, 0);
-                    const share = pct(item.value, total);
+                    const tot = metrics.priorityDist.reduce((a, b) => a + b.value, 0);
+                    const share = tot > 0 ? Math.round((item.value / tot) * 100) : 0;
                     return (
                       <div key={i}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
@@ -666,10 +813,12 @@ export default function AnalyticsGeneralView() {
                             <span style={{ width: 8, height: 8, borderRadius: 2, background: item.color, display: 'inline-block' }} />
                             <span style={{ fontSize: 12, fontWeight: 600, color: C.slate700 }}>{item.name}</span>
                           </div>
-                          <span style={{ fontSize: 12, fontWeight: 700, color: C.slate500 }}>{item.value} <span style={{ color: C.slate400, fontWeight: 400 }}>({share}%)</span></span>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: C.slate500 }}>
+                            {item.value} <span style={{ color: C.slate400, fontWeight: 400 }}>({share}%)</span>
+                          </span>
                         </div>
                         <div style={{ height: 4, background: C.slate100, borderRadius: 4, overflow: 'hidden' }}>
-                          <div style={{ width: `${share}%`, height: '100%', background: item.color, borderRadius: 4, transition: 'width .4s ease' }} />
+                          <div style={{ width: `${share}%`, height: '100%', background: item.color, borderRadius: 4, transition: 'width .4s' }} />
                         </div>
                       </div>
                     );
@@ -680,138 +829,35 @@ export default function AnalyticsGeneralView() {
           </div>
         </Card>
 
-        {/* Distribución por estado */}
+        {/* Risks */}
         <Card>
-          <SectionHeader title="Estado de tareas" subtitle="Visión general" />
-          <div style={{ padding: '16px 22px 20px' }}>
-            {metrics.statusDist.length === 0 ? (
-              <div style={{ textAlign: 'center', color: C.slate400, fontSize: 13, padding: '32px 0' }}>Sin datos</div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {metrics.statusDist.map((s, i) => {
-                  const total = metrics.currTasksTotal || 1;
-                  const share = pct(s.value, total);
-                  return (
-                    <div key={i}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span style={{
-                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                            width: 20, height: 20, borderRadius: 6, background: `${s.color}18`,
-                          }}>
-                            <span style={{ width: 7, height: 7, borderRadius: 2, background: s.color, display: 'block' }} />
-                          </span>
-                          <span style={{ fontSize: 12, fontWeight: 600, color: C.slate700 }}>{s.label}</span>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span style={{ fontSize: 11, color: C.slate400 }}>{share}%</span>
-                          <span style={{ fontSize: 13, fontWeight: 700, color: C.slate900, minWidth: 28, textAlign: 'right' }}>{s.value}</span>
-                        </div>
-                      </div>
-                      <div style={{ height: 6, background: C.slate100, borderRadius: 6, overflow: 'hidden' }}>
-                        <div style={{ width: `${share}%`, height: '100%', background: s.color, borderRadius: 6, transition: 'width .4s ease' }} />
-                      </div>
-                    </div>
-                  );
-                })}
-                <div style={{ marginTop: 8, paddingTop: 12, borderTop: `1px solid ${C.slate100}`, display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: 11, color: C.slate400 }}>Tareas en el período</span>
-                  <span style={{ fontSize: 13, fontWeight: 800, color: C.slate900 }}>{metrics.currTasksTotal}</span>
-                </div>
-              </div>
-            )}
-          </div>
-        </Card>
-      </div>
-
-      {/* ── LEAD TIME + RIESGOS ──────────────────────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 24 }}>
-
-        {/* Lead time por proyecto */}
-        <Card>
-          <div style={{ padding: '18px 22px', borderBottom: `1px solid ${C.slate100}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ padding: '16px 20px', borderBottom: `1px solid ${C.slate100}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
-              <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: C.slate400, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Velocidad</p>
-              <h3 style={{ margin: '2px 0 0', fontSize: 15, fontWeight: 700, color: C.slate900 }}>Lead Time promedio</h3>
-            </div>
-            {metrics.avgLeadTime !== null && (
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ fontSize: 28, fontWeight: 800, color: C.blue, lineHeight: 1 }}>
-                  {metrics.avgLeadTime}
-                </div>
-                <div style={{ fontSize: 11, color: C.slate400, fontWeight: 600 }}>días promedio</div>
-              </div>
-            )}
-          </div>
-          <div style={{ padding: '16px 22px 20px' }}>
-            {metrics.leadByProject.length === 0 ? (
-              <div style={{ textAlign: 'center', color: C.slate400, fontSize: 13, padding: '24px 0' }}>
-                <Clock size={28} color={C.slate200} style={{ margin: '0 auto 8px', display: 'block' }} />
-                Sin suficientes datos de fechas
-              </div>
-            ) : (
-              <ResponsiveContainer width="100%" height={metrics.leadByProject.length * 38 + 20}>
-                <BarChart
-                  data={metrics.leadByProject}
-                  layout="vertical"
-                  margin={{ top: 0, right: 8, left: 0, bottom: 0 }}
-                  barSize={14}
-                >
-                  <CartesianGrid strokeDasharray="2 4" stroke={C.slate100} horizontal={false} />
-                  <XAxis type="number" tick={{ fontSize: 10, fill: C.slate400 }} unit="d" axisLine={false} tickLine={false} />
-                  <YAxis type="category" dataKey="name" width={110} tick={{ fontSize: 11, fill: C.slate500, fontWeight: 500 }} axisLine={false} tickLine={false} />
-                  <Tooltip content={<ChartTooltip />} cursor={{ fill: C.slate50 }} />
-                  <Bar dataKey="days" name="Días" radius={[0, 6, 6, 0]}>
-                    {metrics.leadByProject.map((entry, i) => (
-                      <Cell key={i} fill={entry.color || C.blue} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </div>
-        </Card>
-
-        {/* Riesgos potenciales */}
-        <Card>
-          <div style={{ padding: '18px 22px', borderBottom: `1px solid ${C.slate100}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: C.slate400, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Alertas</p>
-              <h3 style={{ margin: '2px 0 0', fontSize: 15, fontWeight: 700, color: C.slate900 }}>Riesgos potenciales</h3>
+              <p style={{ margin: 0, fontSize: 10, fontWeight: 700, color: C.slate400, textTransform: 'uppercase', letterSpacing: '0.08em' }}>ALERTAS</p>
+              <h3 style={{ margin: '2px 0 0', fontSize: 14, fontWeight: 700, color: C.slate900 }}>Riesgos potenciales</h3>
             </div>
             {metrics.risks.length > 0 && (
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 5,
-                padding: '4px 10px', borderRadius: 20,
-                background: C.redLight, color: C.red,
-                fontSize: 12, fontWeight: 700,
-              }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 20, background: C.redLight, color: C.red, fontSize: 12, fontWeight: 700 }}>
                 <AlertTriangle size={12} />
                 {metrics.risks.length} proyecto{metrics.risks.length > 1 ? 's' : ''}
               </div>
             )}
           </div>
-          <div style={{ padding: '12px 22px 20px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ padding: '12px 20px 20px', display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 340, overflowY: 'auto' }}>
             {metrics.risks.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '28px 0', color: C.slate400 }}>
                 <CheckCircle2 size={28} color="#bbf7d0" style={{ margin: '0 auto 8px', display: 'block' }} />
-                <div style={{ fontSize: 13, fontWeight: 600, color: C.emerald }}>Sin riesgos detectados</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: C.green }}>Sin riesgos detectados</div>
                 <div style={{ fontSize: 11, marginTop: 2 }}>Todos los proyectos están saludables</div>
               </div>
             ) : metrics.risks.map((risk, i) => {
-              const sv = SEVERITY[risk.severity];
+              const sv = SEVERITY_CFG[risk.severity];
               return (
-                <div key={i} style={{
-                  padding: '10px 14px',
-                  background: sv.bg,
-                  border: `1px solid ${sv.border}`,
-                  borderLeft: `3px solid ${sv.dot}`,
-                  borderRadius: 10,
-                }}>
+                <div key={i} style={{ padding: '10px 14px', background: sv.bg, border: `1px solid ${sv.border}`, borderLeft: `3px solid ${sv.dot}`, borderRadius: 10 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                        <span style={{ width: 7, height: 7, borderRadius: '50%', background: risk.color || sv.dot, flexShrink: 0, display: 'inline-block' }} />
+                        <span style={{ width: 7, height: 7, borderRadius: '50%', background: risk.color || sv.dot, display: 'inline-block', flexShrink: 0 }} />
                         <span style={{ fontSize: 12, fontWeight: 700, color: C.slate900, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {risk.name}
                         </span>
@@ -819,26 +865,23 @@ export default function AnalyticsGeneralView() {
                       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                         {risk.overdue > 0 && (
                           <span style={{ fontSize: 11, color: sv.text, display: 'flex', alignItems: 'center', gap: 3 }}>
-                            <Clock size={10} />
-                            {risk.overdue} vencida{risk.overdue > 1 ? 's' : ''}
+                            <Clock size={10} /> {risk.overdue} vencida{risk.overdue > 1 ? 's' : ''}
                           </span>
                         )}
                         {risk.blocked > 0 && (
                           <span style={{ fontSize: 11, color: sv.text, display: 'flex', alignItems: 'center', gap: 3 }}>
-                            <AlertTriangle size={10} />
-                            {risk.blocked} bloqueada{risk.blocked > 1 ? 's' : ''}
+                            <AlertTriangle size={10} /> {risk.blocked} bloqueada{risk.blocked > 1 ? 's' : ''}
                           </span>
                         )}
                       </div>
                     </div>
                     <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                      <div style={{ fontSize: 11, color: sv.text, fontWeight: 700 }}>{risk.completionRate}%</div>
+                      <div style={{ fontSize: 12, color: sv.text, fontWeight: 700 }}>{risk.completionRate}%</div>
                       <div style={{ fontSize: 10, color: C.slate400 }}>completado</div>
                     </div>
                   </div>
-                  {/* Mini progress */}
-                  <div style={{ marginTop: 8, height: 3, background: `${sv.border}`, borderRadius: 3, overflow: 'hidden' }}>
-                    <div style={{ width: `${risk.completionRate}%`, height: '100%', background: sv.dot, borderRadius: 3, transition: 'width .4s' }} />
+                  <div style={{ marginTop: 8, height: 3, background: sv.border, borderRadius: 3, overflow: 'hidden' }}>
+                    <div style={{ width: `${risk.completionRate}%`, height: '100%', background: sv.dot, borderRadius: 3 }} />
                   </div>
                 </div>
               );
@@ -846,43 +889,6 @@ export default function AnalyticsGeneralView() {
           </div>
         </Card>
       </div>
-
-      {/* ── ACTIVIDAD SEMANAL ─────────────────────────────────────────────── */}
-      <Card style={{ marginBottom: 8 }}>
-        <SectionHeader title="Tareas completadas por semana" subtitle="Tendencia de actividad" />
-        <div style={{ padding: '16px 22px 20px' }}>
-          {metrics.sparkCompleted.every(v => v === 0) ? (
-            <div style={{ textAlign: 'center', color: C.slate400, fontSize: 13, padding: '20px 0' }}>
-              <Activity size={24} color={C.slate200} style={{ display: 'block', margin: '0 auto 8px' }} />
-              Sin actividad registrada en el período
-            </div>
-          ) : (
-            <ResponsiveContainer width="100%" height={140}>
-              <BarChart
-                data={metrics.sparkCompleted.map((v, i) => ({
-                  semana: `S${i + 1}`,
-                  completadas: v,
-                }))}
-                margin={{ top: 4, right: 4, left: -20, bottom: 0 }}
-                barSize={28}
-              >
-                <CartesianGrid strokeDasharray="2 4" stroke={C.slate100} vertical={false} />
-                <XAxis dataKey="semana" tick={{ fontSize: 11, fill: C.slate400 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 10, fill: C.slate400 }} axisLine={false} tickLine={false} allowDecimals={false} />
-                <Tooltip content={<ChartTooltip />} cursor={{ fill: C.slate50 }} />
-                <Bar dataKey="completadas" name="Completadas" fill={C.blue} radius={[5, 5, 0, 0]}>
-                  {metrics.sparkCompleted.map((v, i) => (
-                    <Cell key={i} fill={
-                      i === metrics.sparkCompleted.length - 1 ? C.blue
-                        : `${C.blue}70`
-                    } />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-      </Card>
 
     </div>
   );
