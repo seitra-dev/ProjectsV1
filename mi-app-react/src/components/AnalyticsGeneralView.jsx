@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
-  Tooltip as RechartTooltip, ResponsiveContainer, PieChart, Pie, Cell,
+  Tooltip as RechartTooltip, ResponsiveContainer, PieChart, Pie, Cell, LabelList,
 } from 'recharts';
 import {
   Filter, X, AlertTriangle, CheckCircle2, Clock,
@@ -157,6 +157,42 @@ function ChartTooltip({ active, payload, label }) {
     </div>
   );
 }
+
+// Label sobre cada punto del gráfico de línea (omite ceros)
+const LineValueLabel = ({ x, y, value }) => {
+  if (!value) return null;
+  return (
+    <text x={x} y={y - 10} textAnchor="middle"
+      fill="#059669" fontSize={12} fontWeight="700"
+      fontFamily="Inter, system-ui, sans-serif">
+      {value}
+    </text>
+  );
+};
+
+// Label de total sobre la barra apilada completa
+const BarTotalLabel = ({ x, y, width, value }) => {
+  if (!value) return null;
+  return (
+    <text x={x + width / 2} y={y - 6} textAnchor="middle"
+      fill="#334155" fontSize={12} fontWeight="700"
+      fontFamily="Inter, system-ui, sans-serif">
+      {value}
+    </text>
+  );
+};
+
+// Label dentro de cada segmento de barra (solo si el segmento es suficientemente alto)
+const SegmentLabel = ({ x, y, width, height, value }) => {
+  if (!value || height < 18) return null;
+  return (
+    <text x={x + width / 2} y={y + height / 2} textAnchor="middle" dominantBaseline="central"
+      fill="white" fontSize={11} fontWeight="700"
+      fontFamily="Inter, system-ui, sans-serif">
+      {value}
+    </text>
+  );
+};
 
 function AvatarCell({ name, src, size = 30 }) {
   if (src && typeof src === 'string' && src.startsWith('http')) {
@@ -634,7 +670,7 @@ export default function AnalyticsGeneralView() {
               </div>
             ) : (
               <ResponsiveContainer width="100%" height={210}>
-                <LineChart data={metrics.projectsOverTime} margin={{ top: 8, right: 20, left: -10, bottom: 0 }}>
+                <LineChart data={metrics.projectsOverTime} margin={{ top: 26, right: 20, left: -10, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke={C.slate100} vertical={false} />
                   <XAxis dataKey="label" tick={{ fontSize: 10, fill: C.slate400 }} axisLine={false} tickLine={false} interval={metrics.projectsOverTime.length > 12 ? Math.floor(metrics.projectsOverTime.length / 10) : 0} />
                   <YAxis tick={{ fontSize: 10, fill: C.slate400 }} axisLine={false} tickLine={false} allowDecimals={false} width={24} />
@@ -644,6 +680,7 @@ export default function AnalyticsGeneralView() {
                     stroke="#059669" strokeWidth={2.5}
                     dot={{ r: 4, fill: '#059669', strokeWidth: 0 }}
                     activeDot={{ r: 6, fill: '#059669' }}
+                    label={<LineValueLabel />}
                   />
                 </LineChart>
               </ResponsiveContainer>
@@ -660,15 +697,24 @@ export default function AnalyticsGeneralView() {
             ) : (
               <>
                 <ResponsiveContainer width="100%" height={190}>
-                  <BarChart data={metrics.byArea} margin={{ top: 4, right: 8, left: -10, bottom: 0 }} barSize={28}>
+                  <BarChart data={metrics.byArea} margin={{ top: 26, right: 8, left: -10, bottom: 0 }} barSize={32}>
                     <CartesianGrid strokeDasharray="3 3" stroke={C.slate100} vertical={false} />
                     <XAxis dataKey="label" tick={{ fontSize: 10, fill: C.slate400 }} axisLine={false} tickLine={false} />
                     <YAxis tick={{ fontSize: 10, fill: C.slate400 }} axisLine={false} tickLine={false} allowDecimals={false} width={24} />
                     <RechartTooltip content={<ChartTooltip />} />
-                    <Bar dataKey="completed"   name="Entregados" stackId="a" fill="#059669" radius={[0,0,0,0]} />
-                    <Bar dataKey="in_progress" name="En curso"   stackId="a" fill="#2563eb" radius={[0,0,0,0]} />
-                    <Bar dataKey="backlog"     name="Backlog"    stackId="a" fill="#94a3b8" radius={[0,0,0,0]} />
-                    <Bar dataKey="pending"     name="Pendientes" stackId="a" fill="#d97706" radius={[4,4,0,0]} />
+                    <Bar dataKey="completed"   name="Entregados" stackId="a" fill="#059669" radius={[0,0,0,0]}>
+                      <LabelList content={<SegmentLabel />} dataKey="completed" />
+                    </Bar>
+                    <Bar dataKey="in_progress" name="En curso"   stackId="a" fill="#2563eb" radius={[0,0,0,0]}>
+                      <LabelList content={<SegmentLabel />} dataKey="in_progress" />
+                    </Bar>
+                    <Bar dataKey="backlog"     name="Backlog"    stackId="a" fill="#94a3b8" radius={[0,0,0,0]}>
+                      <LabelList content={<SegmentLabel />} dataKey="backlog" />
+                    </Bar>
+                    <Bar dataKey="pending"     name="Pendientes" stackId="a" fill="#d97706" radius={[4,4,0,0]}>
+                      <LabelList content={<SegmentLabel />} dataKey="pending" />
+                      <LabelList content={<BarTotalLabel />} dataKey="total" />
+                    </Bar>
                   </BarChart>
                 </ResponsiveContainer>
                 {/* Legend */}
