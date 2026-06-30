@@ -117,8 +117,9 @@ const aggregateTrend = (items, startDate = null, endDate = null) => {
 };
 
 const weeksInPeriod = (s, e) => {
-  const ms = new Date(e || today()) - new Date(s || firstOfYear());
-  return Math.max(1, Math.ceil(ms / (7 * 24 * 3600 * 1000)));
+  // Días inclusive (startDate y endDate ambos incluidos) divididos entre 7
+  const days = (new Date(e || today()) - new Date(s || firstOfYear())) / 86400000 + 1;
+  return Math.max(1, Math.round((days / 7) * 10) / 10);
 };
 
 // Agrega N filas en una sola fila resumen
@@ -127,7 +128,7 @@ const agg = (rows, weeks) => {
   const late  = rows.reduce((s, r) => s + (r.late_count || 0), 0);
   const valid = rows.filter(r => r.kpi_pct != null);
   const kpi   = valid.length ? Math.round(valid.reduce((s, r) => s + r.kpi_pct, 0) / valid.length) : null;
-  const capR  = weeks > 0 ? Math.round((total / weeks) * 10) / 10 : 0;
+  const capR  = weeks > 0 ? Math.round(total / weeks) : 0;
   const trend = rows.flatMap(r => r.trend_data || []);
   return { total, late, kpi, capR, trend };
 };
@@ -322,7 +323,7 @@ const PersonRow = ({ row, weeks, capacities, startDate, endDate, isExcluded = fa
   const trend      = useMemo(() => aggregateTrend(row.trend_data, startDate, endDate), [row.trend_data, startDate, endDate]);
   const isUnassign = !row.assignee_id;
   const capTarget  = isUnassign ? null : (capacities[String(row.assignee_id)] || null);
-  const capReal    = Math.round((row.total_closed / weeks) * 10) / 10;
+  const capReal    = Math.round(row.total_closed / weeks);
   const color      = personColor(row.assignee_id);
 
   return (
@@ -342,9 +343,6 @@ const PersonRow = ({ row, weeks, capacities, startDate, endDate, isExcluded = fa
       </TD>
       <TD style={{ textAlign: 'center' }}>
         <span style={{ fontWeight: 700, fontSize: 14, color: '#0f172a' }}>{row.total_closed}</span>
-        {!isUnassign && row.late_count > 0 && (
-          <div style={{ fontSize: 10, color: '#f97316', marginTop: 1 }}>{row.late_count} tarde</div>
-        )}
       </TD>
       <TD><Sparkline data={trend} color={color} /></TD>
       <TD>{isUnassign ? <span style={{ color: '#94a3b8', fontSize: 12 }}>—</span> : <KpiBadge pct={row.kpi_pct} />}</TD>
@@ -390,7 +388,6 @@ const EnvironmentSection = ({ env, weeks, capacities, startDate, endDate, exclud
         </TD>
         <TD style={{ textAlign: 'center' }}>
           <span style={{ fontWeight: 800, fontSize: 14, color: '#0f172a' }}>{a.total}</span>
-          {a.late > 0 && <div style={{ fontSize: 10, color: '#f97316', marginTop: 1 }}>{a.late} tarde</div>}
         </TD>
         <TD><Sparkline data={trend} color={color} /></TD>
         <TD><KpiBadge pct={a.kpi} /></TD>
@@ -429,7 +426,6 @@ const SummaryRow = ({ rows, weeks, byEnv, capacities, startDate, endDate, exclud
         </TD>
         <TD style={{ textAlign: 'center' }}>
           <span style={{ fontWeight: 800, fontSize: 15, color: '#0f172a' }}>{a.total}</span>
-          {a.late > 0 && <div style={{ fontSize: 10, color: '#f97316', marginTop: 1 }}>{a.late} tarde</div>}
         </TD>
         <TD><Sparkline data={trend} color="#0f172a" /></TD>
         <TD><KpiBadge pct={a.kpi} /></TD>
@@ -516,7 +512,7 @@ export default function PerformanceDashboard() {
 
   const velocityPerWeek = useMemo(() => {
     const total = teamRows.reduce((s, r) => s + r.total_closed, 0);
-    return weeks > 0 ? Math.round((total / weeks) * 10) / 10 : 0;
+    return weeks > 0 ? Math.round(total / weeks) : 0;
   }, [teamRows, weeks]);
 
   const onTimeRate = useMemo(() => {

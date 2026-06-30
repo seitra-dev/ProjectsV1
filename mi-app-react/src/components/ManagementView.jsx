@@ -933,7 +933,7 @@ function ManagementRoadmap({ selectedEnv = 'all' }) {
 // MAIN VIEW
 // ============================================================================
 export default function ManagementView() {
-  const { currentUser, environments, currentEnvironment, orgRole, isPlatformOwner } = useApp();
+  const { currentUser, environments, currentEnvironment, orgRole, isPlatformOwner, organizationId } = useApp();
 
   const isPO = isPlatformOwner?.();
 
@@ -971,20 +971,26 @@ export default function ManagementView() {
   });
   const [showCapModal, setShowCapModal] = useState(false);
 
-  // ── Entornos visibles ─────────────────────────────────────────────────────
-  // El contexto ya filtra por membresía para usuarios normales,
-  // así que visibleEnvs siempre contiene solo los entornos accesibles.
-  const visibleEnvs = useMemo(() => environments, [environments]);
+  // ── Entornos visibles — solo de la organización del usuario ─────────────
+  const visibleEnvs = useMemo(() =>
+    organizationId
+      ? environments.filter(e => !e.organization_id || e.organization_id === organizationId)
+      : environments,
+    [environments, organizationId]
+  );
 
-  // Si el estado aún es 'all' cuando carga el entorno activo, aplicar el default correcto:
-  // - PO: su currentEnvironment (puede cambiar a 'all' manualmente)
-  // - No-PO: su primer entorno accesible (nunca puede elegir 'all')
+  // Inicialización del entorno seleccionado: se aplica UNA sola vez al montar.
+  // Usar un ref para no sobrescribir selecciones manuales del usuario.
+  const envInitializedRef = useRef(false);
   useEffect(() => {
-    if (selectedEnv !== 'all') return;
+    if (envInitializedRef.current) return;
+    if (selectedEnv !== 'all') { envInitializedRef.current = true; return; }
     if (currentEnvironment?.id) {
       setSelectedEnv(currentEnvironment.id);
+      envInitializedRef.current = true;
     } else if (!isPO && visibleEnvs.length > 0) {
       setSelectedEnv(visibleEnvs[0].id);
+      envInitializedRef.current = true;
     }
   }, [isPO, currentEnvironment?.id, visibleEnvs, selectedEnv]);
 

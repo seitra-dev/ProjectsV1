@@ -1155,13 +1155,17 @@ export const dbPerformance = {
         // KPI: solo contar si closed_at real existe
         if (task.closed_at && task.end_date) {
           row._real_kpi++;
-          // Días hábiles de retraso (excluye fines de semana y festivos de
-          // Colombia) — con 1 día hábil de gracia para no penalizar cierres
-          // inmediatamente posteriores a un festivo (p. ej. tarea cerrada el
-          // martes porque el lunes fue festivo).
-          const lateBusinessDays = countBusinessDaysAfter(task.end_date, task.closed_at.slice(0, 10));
-          if (lateBusinessDays <= 1) row._on_time++;
-          else row._late++;
+          const endStr    = task.end_date.slice(0, 10);
+          const closeStr  = task.closed_at.slice(0, 10);
+          // Datos históricos cargados en abril: siempre a tiempo
+          if (endStr <= '2026-04-30') {
+            row._on_time++;
+          } else {
+            // GAP de 3 días hábiles (excluye fines de semana y festivos colombianos)
+            const lateBusinessDays = countBusinessDaysAfter(endStr, closeStr);
+            if (lateBusinessDays <= 3) row._on_time++;
+            else row._late++;
+          }
         }
       });
     });

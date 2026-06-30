@@ -3,7 +3,7 @@ import {
   Briefcase, Flag, CheckSquare, GitBranch,
   ChevronRight, ChevronDown, Plus, Trash2,
   ListChecks, CheckCircle2, Clock, AlertTriangle,
-  RefreshCw, Search, Globe, Globe2,
+  RefreshCw, Search, Globe, Globe2, Calendar, X,
 } from 'lucide-react';
 import { dbUsers, dbProjects } from '../lib/database';
 import AppSelect from './shared/AppSelect';
@@ -208,6 +208,104 @@ const KpiCard = ({ label, value, icon, colorIdx = 0, loading }) => {
   );
 };
 
+// ============================================================================
+// SUMMARY STRIP (reemplaza los 7 KPI cards)
+// ============================================================================
+const STRIP_CHIPS = [
+  { key: 'completed',  label: 'Completados', color: '#16a34a', bg: '#f0fdf4' },
+  { key: 'inProgress', label: 'En Curso',    color: '#6366f1', bg: '#eef2ff' },
+  { key: 'backlog',    label: 'Backlog',      color: '#64748b', bg: '#f8fafc' },
+  { key: 'pending',    label: 'Pendientes',   color: '#d97706', bg: '#fffbeb' },
+];
+
+const SummaryLine = ({ icon, label, data, loading, isLast }) => {
+  const total = data.total;
+  const pct   = total > 0 ? Math.round((data.completed / total) * 100) : 0;
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 16, padding: '12px 16px',
+      borderBottom: isLast ? 'none' : '1px solid #f1f5f9',
+    }}>
+      {/* Cabecera */}
+      <div style={{ width: 155, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ color: '#6366f1', flexShrink: 0, display: 'flex', alignItems: 'center' }}>{icon}</div>
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap' }}>{label}</div>
+          <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 500 }}>
+            {loading ? '—' : `${total} totales`}
+          </div>
+        </div>
+      </div>
+
+      {/* Chips de estado */}
+      <div style={{ flex: 1, display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+        {STRIP_CHIPS.map(chip => (
+          <div key={chip.key} style={{
+            display: 'flex', alignItems: 'center', gap: 5,
+            padding: '3px 10px', borderRadius: 20,
+            background: chip.bg, border: `1px solid ${chip.color}30`,
+          }}>
+            <div style={{ width: 6, height: 6, borderRadius: '50%', background: chip.color, flexShrink: 0 }} />
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#0f172a' }}>
+              {loading ? '—' : (data[chip.key] ?? 0)}
+            </span>
+            <span style={{ fontSize: 11, color: '#64748b', fontWeight: 500 }}>{chip.label}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Barra de progreso */}
+      <div style={{ width: 135, flexShrink: 0 }}>
+        <div style={{ height: 6, borderRadius: 6, background: '#f1f5f9', overflow: 'hidden', display: 'flex', marginBottom: 4 }}>
+          {!loading && total > 0 && STRIP_CHIPS.map(chip => {
+            const w = ((data[chip.key] ?? 0) / total) * 100;
+            return w > 0
+              ? <div key={chip.key} style={{ width: `${w}%`, background: chip.color, height: '100%', flexShrink: 0 }} />
+              : null;
+          })}
+        </div>
+        <div style={{ fontSize: 11, color: '#64748b', fontWeight: 500 }}>
+          {loading ? '—' : `${pct}% completado`}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const SummaryStrip = ({ stats, loading }) => {
+  const [expanded, setExpanded] = React.useState(false);
+  return (
+    <div style={{
+      background: 'white', borderRadius: 12, border: '1px solid #e6e9f0',
+      boxShadow: '0 1px 3px rgba(0,0,0,0.06)', marginBottom: 16, overflow: 'hidden',
+    }}>
+      <SummaryLine icon={<Briefcase size={15} />} label="Proyectos" data={stats.projects} loading={loading} isLast={!expanded} />
+
+      {expanded && (
+        <>
+          <SummaryLine icon={<Flag size={15} />}       label="Hitos"  data={stats.milestones} loading={loading} />
+          <SummaryLine icon={<ListChecks size={15} />} label="Tareas" data={stats.tasks}      loading={loading} isLast />
+        </>
+      )}
+
+      <button
+        onClick={() => setExpanded(v => !v)}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+          padding: '5px 0', border: 'none', borderTop: '1px solid #f1f5f9',
+          background: 'transparent', cursor: 'pointer', color: '#94a3b8',
+          fontSize: 11, fontWeight: 600, fontFamily: 'inherit',
+          transition: 'color 0.15s',
+        }}
+        onMouseEnter={e => e.currentTarget.style.color = '#6366f1'}
+        onMouseLeave={e => e.currentTarget.style.color = '#94a3b8'}
+      >
+        {expanded ? <><ChevronDown size={12} style={{ transform: 'rotate(180deg)' }} /> Ocultar detalle</> : <><ChevronDown size={12} /> Ver Hitos y Tareas</>}
+      </button>
+    </div>
+  );
+};
+
 // FILAS DE TABLA
 // ============================================================================
 const ProjectRow = ({ project, expanded, onToggle, users, onAddMilestone, onAddTask, onDelete }) => {
@@ -408,10 +506,16 @@ export default function ProjectsView({ selectedEnvironment, onRefresh: externalR
     try { return localStorage.getItem('seitra_fp_mgmt') || 'all'; } catch { return 'all'; }
   });
   const [searchText,     setSearchText]     = useState('');
+  const [filterDateFrom, setFilterDateFrom] = useState('');
+  const [filterDateTo,   setFilterDateTo]   = useState('');
 
   // ── Dropdown persona ──────────────────────────────────────────────────────
   const [showPersonDD, setShowPersonDD] = useState(false);
   const personDDRef = useRef(null);
+
+  // ── Dropdown fechas ───────────────────────────────────────────────────────
+  const [showDateDD, setShowDateDD] = useState(false);
+  const dateDDRef = useRef(null);
 
   // ── Ordenamiento ──────────────────────────────────────────────────────────
   const [sortKey, setSortKey] = useState(null);
@@ -473,6 +577,15 @@ export default function ProjectsView({ selectedEnvironment, onRefresh: externalR
     document.addEventListener('mousedown', close);
     return () => document.removeEventListener('mousedown', close);
   }, [showPersonDD]);
+
+  useEffect(() => {
+    if (!showDateDD) return;
+    const close = (e) => {
+      if (dateDDRef.current && !dateDDRef.current.contains(e.target)) setShowDateDD(false);
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [showDateDD]);
 
   const handleRefresh = () => { loadData(); externalRefresh?.(); };
 
@@ -562,6 +675,18 @@ export default function ProjectsView({ selectedEnvironment, onRefresh: externalR
     ? projectPersons.find(u => String(u.id) === filterPerson) || null
     : null;
 
+  // ── Fechas dinámicas disponibles (min/max de las tareas) ─────────────────
+  const taskDateRange = useMemo(() => {
+    const starts = rawTasks.map(t => t.start_date).filter(Boolean).sort();
+    const ends   = rawTasks.map(t => t.end_date).filter(Boolean).sort();
+    return {
+      min: starts[0] || '',
+      max: ends[ends.length - 1] || '',
+    };
+  }, [rawTasks]);
+
+  const dateFilterActive = filterDateFrom || filterDateTo;
+
   // ── Filtros aplicados ─────────────────────────────────────────────────────
   const filtered = useMemo(() => {
     let list = hierarchy;
@@ -577,12 +702,41 @@ export default function ProjectsView({ selectedEnvironment, onRefresh: externalR
       const isMember = Array.isArray(p.members) && p.members.some(m => String(m) === filterPerson);
       return uid === filterPerson || isMember;
     });
+    if (filterDateFrom || filterDateTo) {
+      const from = filterDateFrom || '';
+      const to   = filterDateTo   || '';
+      const inPeriod = (d) => d && (!from || d >= from) && (!to || d <= to);
+      const taskOverlap = (ts, te) => {
+        const s = ts?.slice(0, 10);
+        const e = te?.slice(0, 10);
+        if (!s && !e) return false;
+        const effS = s || e, effE = e || s;
+        return (!from || effE >= from) && (!to || effS <= to);
+      };
+      list = list.filter(p => {
+        const allTasks = [
+          ...p._phases.flatMap(ph => ph._tasks || []),
+          ...(p._unphasedTasks || []),
+        ];
+        const isCompleted = p.status === 'completed' || p.status === 'done';
+        if (isCompleted) {
+          // mismo criterio que el resumen: max(closed_at) de tareas raíz en el período
+          const lastClose = allTasks
+            .filter(t => t.closed_at)
+            .map(t => t.closed_at.slice(0, 10))
+            .sort().at(-1);
+          return inPeriod(lastClose);
+        }
+        // no completado: alguna tarea con start_date/end_date solapando el período
+        return allTasks.some(t => taskOverlap(t.start_date, t.end_date || t.dueDate));
+      });
+    }
     if (searchText.trim()) {
       const q = searchText.toLowerCase();
       list = list.filter(p => p.name?.toLowerCase().includes(q));
     }
     return list;
-  }, [hierarchy, filterStatus, filterPriority, filterEnv, filterPerson, searchText]);
+  }, [hierarchy, filterStatus, filterPriority, filterEnv, filterPerson, filterDateFrom, filterDateTo, searchText]);
 
   // ── Ordenamiento local ────────────────────────────────────────────────────
   const PRIORITY_ORDER = { urgent: 0, high: 1, medium: 2, low: 3 };
@@ -618,8 +772,39 @@ export default function ProjectsView({ selectedEnvironment, onRefresh: externalR
     });
   }, [filtered, sortKey, sortDir]);
 
-  // KPIs calculados del entorno seleccionado (+ generales); ignora status/priority/search
-  const envKpis = useMemo(() => {
+  // Resumen de 3 líneas — excluye cancelados, respeta filtro de entorno
+  const summaryStats = useMemo(() => {
+    const classify = (s) => {
+      if (!s || s === 'cancelled') return 'cancelled';
+      if (s === 'completed' || s === 'done') return 'completed';
+      if (s === 'in_progress' || s === 'active') return 'inProgress';
+      if (s === 'backlog') return 'backlog';
+      return 'pending';
+    };
+
+    const hasPeriod = filterDateFrom || filterDateTo;
+
+    // ¿Una fecha puntual cae dentro del período?
+    const inPeriod = (dateStr) => {
+      if (!dateStr) return false;
+      const d = dateStr.slice(0, 10);
+      if (filterDateFrom && d < filterDateFrom) return false;
+      if (filterDateTo   && d > filterDateTo)   return false;
+      return true;
+    };
+
+    // ¿Un rango [s, e] se solapa con el período?
+    const overlaps = (startStr, endStr) => {
+      const s = startStr?.slice(0, 10);
+      const e = endStr?.slice(0, 10);
+      if (!s && !e) return false;
+      const effS = s || e;
+      const effE = e || s;
+      if (filterDateFrom && effE < filterDateFrom) return false;
+      if (filterDateTo   && effS > filterDateTo)   return false;
+      return true;
+    };
+
     let projs = hierarchy;
     if (filterEnv !== 'all') {
       projs = projs.filter(p => {
@@ -628,18 +813,81 @@ export default function ProjectsView({ selectedEnvironment, onRefresh: externalR
         return envId === filterEnv || wsEnvId === filterEnv || isGeneral(p);
       });
     }
+    if (filterPerson !== 'all') {
+      projs = projs.filter(p => {
+        const uid = String(p.owner_id || p.leaderId || '');
+        const isMember = Array.isArray(p.members) && p.members.some(m => String(m) === filterPerson);
+        return uid === filterPerson || isMember;
+      });
+    }
+
+    // Proyectos
+    // completado → max(closed_at) de sus tareas raíz | otros → rango start-end se solapa
+    const pBuckets = { completed: 0, inProgress: 0, backlog: 0, pending: 0 };
+    for (const p of projs) {
+      const c = classify(p.status || 'active');
+      if (c === 'cancelled') continue;
+      if (hasPeriod) {
+        if (c === 'completed') {
+          const lastClose = rawTasks
+            .filter(t => t.project_id === p.id && !t.is_deleted && !t.parent_id && t.closed_at)
+            .map(t => t.closed_at.slice(0, 10))
+            .sort()
+            .at(-1);
+          if (!inPeriod(lastClose)) continue;
+        } else {
+          // mismo criterio que la tabla: alguna tarea raíz con fechas solapando el período
+          const projTasks = rawTasks.filter(t => t.project_id === p.id && !t.is_deleted && !t.parent_id);
+          if (!projTasks.some(t => overlaps(t.start_date, t.end_date))) continue;
+        }
+      }
+      pBuckets[c]++;
+    }
+
+    // Hitos
+    // completado → endDate (derivado de tareas) dentro del período | otros → startDate-endDate se solapa
+    const mBuckets = { completed: 0, inProgress: 0, backlog: 0, pending: 0 };
+    for (const p of projs) {
+      for (const ph of (p._phases || [])) {
+        let s = ph.status;
+        if (!s) {
+          if ((ph._progress || 0) === 100) s = 'completed';
+          else if ((ph._progress || 0) > 0)  s = 'in_progress';
+          else                                 s = 'backlog';
+        }
+        const c = classify(s);
+        if (c === 'cancelled') continue;
+        if (hasPeriod) {
+          if (c === 'completed' ? !inPeriod(ph.endDate) : !overlaps(ph.startDate, ph.endDate)) continue;
+        }
+        mBuckets[c]++;
+      }
+    }
+
+    // Tareas raíz
+    // completadas → closed_at dentro del período | otras → start_date-end_date se solapa
     const projIds = new Set(projs.map(p => p.id));
-    const tasks = rawTasks.filter(t => projIds.has(t.project_id) && !t.is_deleted && !t.parent_id);
+    const tBuckets = { completed: 0, inProgress: 0, backlog: 0, pending: 0 };
+    for (const t of rawTasks) {
+      if (!projIds.has(t.project_id) || t.is_deleted || t.parent_id) continue;
+      const c = classify(t.status || 'pending');
+      if (c === 'cancelled') continue;
+      if (hasPeriod) {
+        if (c === 'completed'
+          ? !inPeriod(t.closed_at || t.end_date)
+          : !overlaps(t.start_date, t.end_date)
+        ) continue;
+      }
+      tBuckets[c]++;
+    }
+
+    const total = (b) => b.completed + b.inProgress + b.backlog + b.pending;
     return {
-      totalProjects:  projs.length,
-      totalMilestones: projs.reduce((sum, p) => sum + (p._phases?.length || 0), 0),
-      totalTasks:     tasks.length,
-      completed:      tasks.filter(t => t.status === 'completed').length,
-      inProgress:     tasks.filter(t => t.status === 'in_progress').length,
-      highPriority:   tasks.filter(t => t.priority === 'high' || t.priority === 'urgent').length,
-      backlog:        projs.filter(p => (p.status || '') === 'backlog').length,
+      projects:   { ...pBuckets, total: total(pBuckets) },
+      milestones: { ...mBuckets, total: total(mBuckets) },
+      tasks:      { ...tBuckets, total: total(tBuckets) },
     };
-  }, [hierarchy, rawTasks, filterEnv]);
+  }, [hierarchy, rawTasks, filterEnv, filterPerson, filterDateFrom, filterDateTo]);
 
   // ── Toggle helpers ────────────────────────────────────────────────────────
   const toggle = (set, id) => {
@@ -685,16 +933,8 @@ export default function ProjectsView({ selectedEnvironment, onRefresh: externalR
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div>
-      {/* KPI CARDS */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 8, marginBottom: 16 }}>
-        <KpiCard label="Proyectos"      value={envKpis.totalProjects}   icon={<Briefcase size={16} />}     colorIdx={0} loading={loading} />
-        <KpiCard label="Hitos"          value={envKpis.totalMilestones} icon={<Flag size={16} />}           colorIdx={1} loading={loading} />
-        <KpiCard label="Tareas"         value={envKpis.totalTasks}      icon={<ListChecks size={16} />}     colorIdx={2} loading={loading} />
-        <KpiCard label="Completadas"    value={envKpis.completed}       icon={<CheckCircle2 size={16} />}   colorIdx={3} loading={loading} />
-        <KpiCard label="En Progreso"    value={envKpis.inProgress}      icon={<Clock size={16} />}          colorIdx={4} loading={loading} />
-        <KpiCard label="Alta Prioridad" value={envKpis.highPriority}    icon={<AlertTriangle size={16} />}  colorIdx={5} loading={loading} />
-        <KpiCard label="Backlog"        value={envKpis.backlog}         icon={<ListChecks size={16} />}     colorIdx={6} loading={loading} />
-      </div>
+      {/* RESUMEN EN 3 LÍNEAS */}
+      <SummaryStrip stats={summaryStats} loading={loading} />
 
 
       {/* BARRA DE ACCIONES */}
@@ -814,6 +1054,83 @@ export default function ProjectsView({ selectedEnvironment, onRefresh: externalR
                 )}
               </div>
             )}
+
+            {/* Filtro de fechas */}
+            <div ref={dateDDRef} style={{ position: 'relative' }}>
+              <button
+                onClick={() => setShowDateDD(v => !v)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 5,
+                  padding: dateFilterActive ? '3px 8px 3px 8px' : '5px 12px',
+                  borderRadius: 20, border: '1px solid',
+                  borderColor: dateFilterActive ? '#0ea5e9' : '#e2e8f0',
+                  background: dateFilterActive ? '#e0f2fe' : 'white',
+                  color: dateFilterActive ? '#0369a1' : '#475569',
+                  fontSize: 12, fontWeight: dateFilterActive ? 700 : 500,
+                  fontFamily: 'inherit', cursor: 'pointer', outline: 'none',
+                  transition: 'all 0.15s',
+                }}
+              >
+                <Calendar size={12} />
+                {dateFilterActive
+                  ? `${filterDateFrom ? filterDateFrom.slice(5) : '…'} – ${filterDateTo ? filterDateTo.slice(5) : '…'}`
+                  : <>Período <ChevronDown size={11} /></>
+                }
+                {dateFilterActive && (
+                  <span
+                    onClick={e => { e.stopPropagation(); setFilterDateFrom(''); setFilterDateTo(''); }}
+                    style={{ cursor: 'pointer', fontWeight: 400, fontSize: 14, lineHeight: 1, marginLeft: 1 }}
+                  >
+                    ×
+                  </span>
+                )}
+              </button>
+
+              {showDateDD && (
+                <div style={{
+                  position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 300,
+                  background: 'white', borderRadius: 14, border: '1px solid #e8edf3',
+                  boxShadow: '0 8px 24px rgba(15,23,42,0.12)', padding: '14px 16px',
+                  minWidth: 260,
+                }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12 }}>
+                    Filtrar por período de tareas
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: '#64748b' }}>Desde</span>
+                      <input
+                        type="date"
+                        value={filterDateFrom}
+                        min={taskDateRange.min || undefined}
+                        max={filterDateTo || taskDateRange.max || undefined}
+                        onChange={e => setFilterDateFrom(e.target.value)}
+                        style={{ padding: '5px 10px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 12, color: '#334155', fontFamily: 'inherit', outline: 'none', cursor: 'pointer' }}
+                      />
+                    </label>
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: '#64748b' }}>Hasta</span>
+                      <input
+                        type="date"
+                        value={filterDateTo}
+                        min={filterDateFrom || taskDateRange.min || undefined}
+                        max={taskDateRange.max || undefined}
+                        onChange={e => setFilterDateTo(e.target.value)}
+                        style={{ padding: '5px 10px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 12, color: '#334155', fontFamily: 'inherit', outline: 'none', cursor: 'pointer' }}
+                      />
+                    </label>
+                  </div>
+                  {dateFilterActive && (
+                    <button
+                      onClick={() => { setFilterDateFrom(''); setFilterDateTo(''); setShowDateDD(false); }}
+                      style={{ marginTop: 12, width: '100%', padding: '5px', border: 'none', borderRadius: 8, background: '#f1f5f9', color: '#64748b', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}
+                    >
+                      <X size={11} /> Limpiar filtro
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
 
             <button
               onClick={handleRefresh}
